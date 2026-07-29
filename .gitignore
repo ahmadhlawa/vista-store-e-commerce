@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Frontend builds
+dist/
+build/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# IDE and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+*.pid
+
+# Local uploads and backups
+uploads/
+backups/
