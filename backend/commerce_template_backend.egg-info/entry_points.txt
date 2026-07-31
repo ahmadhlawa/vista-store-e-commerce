@@ -1,0 +1,3 @@
+[console_scripts]
+commerce-admin = app.initial_data:main
+commerce-seed = scripts.seed:main
