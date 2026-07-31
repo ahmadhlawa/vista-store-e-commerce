@@ -1,4 +1,5 @@
 import sx from "../sx.js";
+import A from "../utils/A.jsx";
 import ProductCard from "./ProductCard.jsx";
 
 export default function ListingPage({ v }) {
@@ -6,7 +7,7 @@ export default function ListingPage({ v }) {
     <>
       <section style={sx`background:#fff;border-bottom:1px solid #E9E3DA`}>
         <div style={sx`max-width:1360px;margin:0 auto;padding:22px var(--pad) 26px`}>
-          <nav aria-label="مسار التصفح" style={sx`display:flex;align-items:center;gap:8px;font-size:12.5px;color:#9C958A;margin-bottom:10px`}><a href="#/" style={sx`color:#7C766D`}>الرئيسية</a><span>›</span><span style={sx`color:#1E1B18;font-weight:600`}>{v.listTitle}</span></nav>
+          <nav aria-label="مسار التصفح" style={sx`display:flex;align-items:center;gap:8px;font-size:12.5px;color:#9C958A;margin-bottom:10px`}><A href="/" style={sx`color:#7C766D`}>الرئيسية</A><span>›</span><span style={sx`color:#1E1B18;font-weight:600`}>{v.listTitle}</span></nav>
           <h1 style={sx`margin:0 0 6px;font-size:var(--h1);font-weight:800`}>{v.listTitle}</h1>
           <p style={sx`margin:0;font-size:14px;color:#7C766D`}>{v.listSubtitle}</p>
         </div>
@@ -22,7 +23,7 @@ export default function ListingPage({ v }) {
           </div>
           <div style={sx`border-top:1px solid #F0EBE3;margin-top:16px;padding-top:14px;display:flex;flex-direction:column;gap:10px`}>
             <span style={sx`font-size:13px;font-weight:700`}>السعر الأقصى</span>
-            <input type="range" min="30" max="400" step="10" value={v.fMax} onChange={v.onMax} aria-label="السعر الأقصى" style={sx`width:100%;accent-color:#1F4E4A;cursor:pointer`} />
+            <input type="range" min="10" max="1000" step="10" value={v.fMax} onChange={v.onMax} aria-label="السعر الأقصى" style={sx`width:100%;accent-color:#1F4E4A;cursor:pointer`} />
             <span style={sx`font-size:12.5px;color:#7C766D`}>حتى <strong style={sx`color:#1F4E4A`}>{v.fMaxText}</strong></span>
           </div>
           <div style={sx`border-top:1px solid #F0EBE3;margin-top:16px;padding-top:14px;display:flex;flex-direction:column;gap:10px`}>
@@ -42,7 +43,7 @@ export default function ListingPage({ v }) {
                 <option value="newest">الأحدث</option>
                 <option value="price-asc">السعر: الأقل أولاً</option>
                 <option value="price-desc">السعر: الأعلى أولاً</option>
-                <option value="rating">الأعلى تقييماً</option>
+                <option value="name">الاسم</option>
               </select>
             </label>
           </div>
@@ -56,6 +57,10 @@ export default function ListingPage({ v }) {
                 </div>
               ))}
             </div>
+          )}
+
+          {v.listError && (
+            <div role="alert" style={sx`background:#FBF1EF;border:1px solid #E7CFC9;border-radius:14px;padding:28px 24px;text-align:center;color:#8C2F22;font-size:14px`}>{v.listError}</div>
           )}
 
           {v.listEmpty && (
