@@ -1,4 +1,4 @@
-import sx from "../sx.js";
+import sx from "../sx";
 
 // Ported from ProductCard.dc.html — expects a decorated product (see deco() in App.jsx).
 export default function ProductCard({ p }) {

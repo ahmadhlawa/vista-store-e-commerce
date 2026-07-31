@@ -1,7 +1,9 @@
-import sx from "../sx.js";
-import ProductCard from "./ProductCard.jsx";
+import sx from "../sx";
+import type App from "../App";
+type View = ReturnType<App["renderVals"]>;
+import ProductCard from "./ProductCard";
 
-export function HomeTop({ v }) {
+export function HomeTop({ v }: { v: View }) {
   return (
     <>
       <section style={sx`max-width:1360px;margin:0 auto;padding:20px var(--pad) 0;display:grid;grid-template-columns:var(--heroG);gap:16px`}>
@@ -171,7 +173,7 @@ export function HomeTop({ v }) {
   );
 }
 
-export function TrustStrip({ v }) {
+export function TrustStrip({ v }: { v: View }) {
   return (
     <section style={sx`max-width:1360px;margin:0 auto;padding:var(--sec) var(--pad) 0`}>
       <div style={sx`display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;background:#fff;border:1px solid #E9E3DA;border-radius:16px;padding:22px`}>
@@ -186,7 +188,7 @@ export function TrustStrip({ v }) {
   );
 }
 
-export function HomeBottom({ v }) {
+export function HomeBottom({ v }: { v: View }) {
   return (
     <>
       <section style={sx`max-width:1360px;margin:0 auto;padding:var(--sec) var(--pad) 0`}>

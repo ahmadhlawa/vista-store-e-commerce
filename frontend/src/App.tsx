@@ -1,22 +1,45 @@
 import React from "react";
-import * as S from "./store.js";
-import sx from "./sx.js";
-import Header from "./components/Header.jsx";
-import Footer from "./components/Footer.jsx";
-import { HomeTop, HomeBottom, TrustStrip } from "./components/Home.jsx";
-import ListingPage from "./components/Listing.jsx";
-import { ProductPage, ViewedSection } from "./components/Product.jsx";
-import { CartPage, CheckoutPage } from "./components/CartCheckout.jsx";
-import { AuthPage, AccountPage, TrackPage, BlogPage, ArticlePage, StaticPage, ContactPage, CalculatorPage } from "./components/Pages.jsx";
-import Overlays from "./components/Overlays.jsx";
+import * as S from "./store";
+import sx from "./sx";
+import Header from "./components/Header";
+import Footer from "./components/Footer";
+import { HomeTop, HomeBottom, TrustStrip } from "./components/Home";
+import ListingPage from "./components/Listing";
+import { ProductPage, ViewedSection } from "./components/Product";
+import { CartPage, CheckoutPage } from "./components/CartCheckout";
+import { AuthPage, AccountPage, TrackPage, BlogPage, ArticlePage, StaticPage, ContactPage, CalculatorPage } from "./components/Pages";
+import Overlays from "./components/Overlays";
+import { readArray, writeArray } from "./storage/safeStorage";
+import type { NavigateFunction } from "react-router-dom";
+import type { Article, CartItem, Category, CheckoutData, Order, Product, SearchSuggestion, SortKey, StaticPage as StaticPageContent, TrackResult } from "./types/commerce";
 
 const CUR = " ₪";
-const money = (n) => Math.round(n) + CUR;
+const money = (n: number) => Math.round(n) + CUR;
 
-export default class App extends React.Component {
+// Sort keys arrive from a <select> value, so they are validated before use.
+const SORT_KEYS: Record<SortKey, true> = { featured: true, newest: true, "price-asc": true, "price-desc": true, rating: true };
+const isSortKey = (value: string): value is SortKey => Object.prototype.hasOwnProperty.call(SORT_KEYS, value);
+
+const isNumber = (value: unknown): value is number => typeof value === "number";
+const isString = (value: unknown): value is string => typeof value === "string";
+
+type AppProps = { pathname: string; navigate: NavigateFunction };
+type Route = { name: string; param: string };
+type AppState = {
+  ready: boolean; route: Route; scrolled: boolean; announce: boolean; cart: CartItem[]; cartOpen: boolean; navOpen: boolean; navOpenCat: string | null; searchOpen: boolean; filtersOpen: boolean; mega: boolean;
+  q: string; sug: SearchSuggestion; sugTried: boolean; recent: string[]; searchFocused: boolean; hero: number; heroPaused: boolean; bump: number;
+  listItems: Product[]; listLoading: boolean; shown: number; fCats: string[]; fMax: number; fOffers: boolean; fStock: boolean; sort: SortKey;
+  product: Product | null; pImg: number; pQty: number; pVar: string; pTab: string; related: Product[]; viewedIds: number[]; quick: Product | null; qQty: number; toast: string | null;
+  coupon: string; couponApplied: string; couponMsg: string; couponOk: boolean; ck: CheckoutData; ckErrors: Partial<Record<"name" | "phone" | "address" | "terms", string>>; placing: boolean; order: Order | null;
+  auth: { name: string; id: string; pass: string }; authTab: string; authError: string; contact: { name: string; phone: string; msg: string }; news: string;
+  trackId: string; trackRes: TrackResult | null; trackLoading: boolean; calc: { shape: string; dia: number | string; side: number | string; height: number | string; layers: number | string };
+  homeKits: Product[]; homeNew: Product[]; homeBest: Product[]; homeTab: string; sc: [Product[], Product[]]; article: Article | null; page: StaticPageContent | null;
+};
+
+export default class App extends React.Component<AppProps, AppState> {
   S = S;
 
-  state = {
+  state: AppState = {
     ready: false, route: { name: "home", param: "" }, scrolled: false, announce: true,
     cart: [], cartOpen: false, navOpen: false, navOpenCat: null, searchOpen: false, filtersOpen: false, mega: false,
     q: "", sug: { products: [], cats: [] }, sugTried: false, recent: [], searchFocused: false,
@@ -36,19 +59,20 @@ export default class App extends React.Component {
     article: null, page: null,
   };
 
-  rows = {};
+  timer: ReturnType<typeof setInterval> | undefined;
+  sugTimer: ReturnType<typeof setTimeout> | undefined;
+  toastTimer: ReturnType<typeof setTimeout> | undefined;
+  lastFocus: HTMLElement | null = null;
+  _focused = false;
 
   componentDidMount() {
-    this.onHash = this.onHash.bind(this);
     this.onScroll = this.onScroll.bind(this);
     this.onKey = this.onKey.bind(this);
-    window.addEventListener("hashchange", this.onHash);
     window.addEventListener("scroll", this.onScroll, { passive: true });
     window.addEventListener("keydown", this.onKey);
-    let viewedIds = [], recent = [];
-    try { viewedIds = JSON.parse(localStorage.getItem("test_store_viewed") || "[]"); } catch (e) {}
-    try { recent = JSON.parse(localStorage.getItem("test_store_searches") || "[]"); } catch (e) {}
-    this.setState({ ready: true, cart: S.cartService.load(), viewedIds, recent }, () => this.onHash());
+    const viewedIds = readArray("test_store_viewed", isNumber);
+    const recent = readArray("test_store_searches", isString);
+    this.setState({ ready: true, cart: S.cartService.load(), viewedIds, recent }, () => this.onRoute());
     this.timer = setInterval(() => {
       if (this.state.route.name === "home" && !this.state.heroPaused && !document.hidden) {
         this.setState((s) => ({ hero: (s.hero + 1) % S.heroSlides.length }));
@@ -58,7 +82,6 @@ export default class App extends React.Component {
 
   componentWillUnmount() {
     clearInterval(this.timer); clearTimeout(this.sugTimer); clearTimeout(this.toastTimer);
-    window.removeEventListener("hashchange", this.onHash);
     window.removeEventListener("scroll", this.onScroll);
     window.removeEventListener("keydown", this.onKey);
   }
@@ -68,7 +91,7 @@ export default class App extends React.Component {
     if (s !== this.state.scrolled) this.setState({ scrolled: s });
   }
 
-  onKey(e) {
+  onKey(e: KeyboardEvent) {
     if (e.key === "Escape") this.closeAll();
   }
 
@@ -77,11 +100,15 @@ export default class App extends React.Component {
     if (this.lastFocus && this.lastFocus.focus) { try { this.lastFocus.focus(); } catch (e) {} this.lastFocus = null; }
   };
   closeAllH = () => { this.setState({ cartOpen: false, navOpen: false, searchOpen: false, filtersOpen: false, mega: false, quick: null, searchFocused: false }); };
-  remember() { this.lastFocus = document.activeElement; }
+  remember() { this.lastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null; }
 
   // ── routing ────────────────────────────────────────────────
-  onHash() {
-    const raw = (location.hash || "#/").replace(/^#/, "");
+  componentDidUpdate(previousProps: AppProps) {
+    if (previousProps.pathname !== this.props.pathname) this.onRoute();
+  }
+
+  onRoute() {
+    const raw = this.props.pathname || "/";
     const parts = raw.split("/").filter(Boolean);
     const name = parts[0] || "home";
     const param = parts[1] || "";
@@ -92,7 +119,7 @@ export default class App extends React.Component {
     });
   }
 
-  async loadRoute(r) {
+  async loadRoute(r: Route) {
     if (r.name === "home") {
       const blocks = S.showcaseBlocks;
       const [kits, nw, best, sc0, sc1] = await Promise.all([
@@ -109,7 +136,7 @@ export default class App extends React.Component {
       if (!p) { this.setState({ product: null }); return; }
       const related = await S.productsService.related(p, 4);
       const viewedIds = [p.id].concat((this.state.viewedIds || []).filter((i) => i !== p.id)).slice(0, 8);
-      try { localStorage.setItem("test_store_viewed", JSON.stringify(viewedIds)); } catch (e) {}
+      writeArray("test_store_viewed", viewedIds);
       this.setState({ product: p, related, pImg: 0, pQty: 1, pTab: "desc", pVar: p.variation ? p.variation.options[0] : "", viewedIds });
     } else if (r.name === "blog" && r.param) {
       this.setState({ article: await S.contentService.article(r.param) });
@@ -130,9 +157,9 @@ export default class App extends React.Component {
   refresh = () => { this.setState({ listLoading: true, shown: 8 }, () => this.runQuery()); };
 
   // ── cart ───────────────────────────────────────────────────
-  persist(cart) { S.cartService.save(cart); }
+  persist(cart: CartItem[]) { S.cartService.save(cart); }
 
-  add = (p, qty, variation) => {
+  add = (p: Product, qty: number, variation: string) => {
     const unit = p.sale || p.price;
     const key = p.id + "|" + (variation || "");
     const cart = this.state.cart.slice();
@@ -144,27 +171,27 @@ export default class App extends React.Component {
     this.toast("تمت إضافة «" + (p.name.length > 34 ? p.name.slice(0, 34) + "…" : p.name) + "» إلى العربة");
   };
 
-  setQty(key, delta) {
+  setQty(key: string, delta: number) {
     let cart = this.state.cart.map((x) => (x.key === key ? Object.assign({}, x, { qty: Math.max(1, x.qty + delta) }) : x));
     this.persist(cart); this.setState({ cart });
   }
-  removeItem(key) {
+  removeItem(key: string) {
     const cart = this.state.cart.filter((x) => x.key !== key);
     this.persist(cart); this.setState({ cart });
   }
-  toast(msg) {
+  toast(msg: string) {
     clearTimeout(this.toastTimer);
     this.setState({ toast: msg });
     this.toastTimer = setTimeout(() => this.setState({ toast: null }), 3600);
   }
 
   totals() {
-    const area = (S.deliveryAreas.find((a) => a.id === Number(this.state.ck.city)) || {}).price;
+    const area = S.deliveryAreas.find((a) => a.id === Number(this.state.ck.city))?.price;
     return S.cartService.totals(this.state.cart, this.state.couponApplied, area);
   }
 
   // ── search ─────────────────────────────────────────────────
-  onQ = (e) => {
+  onQ = (e: React.ChangeEvent<HTMLInputElement>) => {
     const q = e.target.value;
     this.setState({ q, sugTried: false });
     clearTimeout(this.sugTimer);
@@ -175,21 +202,21 @@ export default class App extends React.Component {
     }, 260);
   };
 
-  submitSearch = (e) => {
+  submitSearch = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const q = this.state.q.trim();
     if (!q) return;
     const recent = [q].concat(this.state.recent.filter((r) => r !== q)).slice(0, 5);
-    try { localStorage.setItem("test_store_searches", JSON.stringify(recent)); } catch (er) {}
+    writeArray("test_store_searches", recent);
     this.setState({ recent, searchOpen: false, searchFocused: false }, () => {
-      location.hash = "#/search";
+      this.props.navigate("/search");
       this.setState({ listLoading: true }, () => this.runQuery());
     });
   };
 
   // ── checkout ───────────────────────────────────────────────
   validate() {
-    const c = this.state.ck, e = {};
+    const c = this.state.ck, e: AppState["ckErrors"] = {};
     if (!c.name || c.name.trim().length < 3) e.name = "الرجاء إدخال الاسم الكامل";
     if (!/^0?5\d{8}$|^\d{9,10}$/.test(String(c.phone).replace(/[\s-]/g, ""))) e.phone = "رقم هاتف غير صالح — مثال 0591234567";
     if (!c.address || c.address.trim().length < 6) e.address = "الرجاء إدخال عنوان واضح";
@@ -197,7 +224,7 @@ export default class App extends React.Component {
     return e;
   }
 
-  placeOrder = async (e) => {
+  placeOrder = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const errs = this.validate();
     this.setState({ ckErrors: errs });
@@ -210,11 +237,12 @@ export default class App extends React.Component {
 
   applyCoupon = () => {
     const code = this.state.coupon.trim().toUpperCase();
-    if (S.coupons[code]) this.setState({ couponApplied: code, couponMsg: "تم تطبيق " + S.coupons[code].label, couponOk: true });
+    const coupon = S.coupons[code];
+    if (coupon) this.setState({ couponApplied: code, couponMsg: "تم تطبيق " + coupon.label, couponOk: true });
     else this.setState({ couponApplied: "", couponMsg: "الكود غير صالح أو منتهي الصلاحية", couponOk: false });
   };
 
-  doTrack = async (e) => {
+  doTrack = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     this.setState({ trackLoading: true, trackRes: null });
     const res = await S.ordersService.track(this.state.trackId);
@@ -222,22 +250,21 @@ export default class App extends React.Component {
   };
 
   // ── decorate ───────────────────────────────────────────────
-  deco = (p) => {
-    if (!p) return null;
-    const sale = !!p.sale, eff = sale ? p.sale : p.price, out = p.stock === 0;
+  decorate = (p: Product) => {
+    const salePrice = p.sale, eff = salePrice ?? p.price, out = p.stock === 0;
     return {
       ...p,
       href: "#/product/" + p.slug,
       go: () => this.closeAllH(),
-      hasSale: sale, priceText: money(eff), oldText: money(p.price),
-      discountText: sale ? "خصم " + Math.round((1 - p.sale / p.price) * 100) + "٪" : "",
-      savedText: sale ? money(p.price - p.sale) : "",
+      hasSale: salePrice !== null, priceText: money(eff), oldText: money(p.price),
+      discountText: salePrice !== null ? "خصم " + Math.round((1 - salePrice / p.price) * 100) + "٪" : "",
+      savedText: salePrice !== null ? money(p.price - salePrice) : "",
       ratingText: p.rating.toFixed(1), reviewsText: "(" + p.reviews + ")",
       reviewsFull: p.reviews + " تقييماً",
       soldOut: out,
       add: () => { if (!out) this.add(p, 1, p.variation ? p.variation.options[0] : ""); },
       quick: () => { this.remember(); this.setState({ quick: p, qQty: 1 }); },
-      wish: (e) => { e.preventDefault(); e.stopPropagation(); this.toast("أُضيف «" + p.name.slice(0, 24) + "…» إلى المفضلة"); },
+      wish: (e: React.MouseEvent<HTMLButtonElement>) => { e.preventDefault(); e.stopPropagation(); this.toast("أُضيف «" + p.name.slice(0, 24) + "…» إلى المفضلة"); },
       btnBg: out ? "#F4F1EC" : "#ffffff",
       btnColor: out ? "#A39C90" : "#1F4E4A",
       btnBorder: out ? "#E9E3DA" : "#1F4E4A",
@@ -245,6 +272,34 @@ export default class App extends React.Component {
       btnHover: out ? "" : "background:#1F4E4A;color:#ffffff",
       btnLabel: out ? "غير متوفر" : "أضف إلى العربة",
       btnIcon: out ? "✕" : "+",
+    };
+  };
+
+  // The product page needs the card fields plus gallery/variation/tab state.
+  detail = (p: Product) => {
+    const s = this.state;
+    const base = this.decorate(p);
+    return {
+      ...base,
+      catHref: "#/category/" + p.category,
+      activeImg: p.gallery[s.pImg] || p.bg,
+      thumbs: p.gallery.map((g, i) => ({ bg: g, border: i === s.pImg ? "#1F4E4A" : "#E9E3DA", label: "صورة " + (i + 1), pick: () => this.setState({ pImg: i }) })),
+      stockText: base.soldOut ? "غير متوفر" : p.stock < 5 ? "متبقٍ " + p.stock + " قطع فقط" : "متوفر في المخزون",
+      stockColor: base.soldOut ? "#C0392B" : p.stock < 5 ? "#B8860B" : "#2E7D5B",
+      hasVariation: p.variation !== null,
+      varLabel: p.variation ? p.variation.label : "",
+      varOptions: (p.variation?.options ?? []).map((o) => ({
+        label: o, border: s.pVar === o ? "#1F4E4A" : "#E1DACE", bg: s.pVar === o ? "#1F4E4A" : "#fff", color: s.pVar === o ? "#fff" : "#4A453E",
+        pick: () => this.setState({ pVar: o }),
+      })),
+      specs: p.specs.map((x) => ({ k: x[0], v: x[1] })),
+      mainBtnBg: base.soldOut ? "#B7B1A7" : "#1F4E4A",
+      mainBtnHover: base.soldOut ? "" : "background:#163A37",
+      mainBtnLabel: base.soldOut ? "غير متوفر حالياً" : "أضف إلى العربة — " + money((p.sale || p.price) * s.pQty),
+      reviewList: [
+        { initial: "س", name: "سارة م.", stars: "★★★★★", date: "قبل ٦ أيام", text: "جودة ممتازة والتغليف كان محكماً. النتيجة صافية تماماً من أول محاولة والدعم ساعدني في اختيار الكمية." },
+        { initial: "خ", name: "خالد ع.", stars: "★★★★☆", date: "قبل أسبوعين", text: "المنتج ممتاز، التوصيل تأخر يوماً واحداً عن الموعد لكن خدمة العملاء تابعت الموضوع باستمرار." },
+      ],
     };
   };
 
@@ -342,7 +397,7 @@ export default class App extends React.Component {
       sugCats: (s.sug.cats || []).map((c) => ({ ...c, href: "#/category/" + c.slug })),
       sugEmpty: s.sugTried && !(s.sug.products || []).length && !(s.sug.cats || []).length,
       showRecent: s.q.trim().length < 2 && s.recent.length > 0,
-      recentSearches: s.recent.map((text) => ({ text, run: () => this.setState({ q: text }, () => { location.hash = "#/search"; this.setState({ listLoading: true }, () => this.runQuery()); }) })),
+      recentSearches: s.recent.map((text) => ({ text, run: () => this.setState({ q: text }, () => { this.props.navigate("/search"); this.setState({ listLoading: true }, () => this.runQuery()); }) })),
 
       // routes
       isHome: r.name === "home", isListing, isProduct: r.name === "product" && !!pd,
@@ -452,7 +507,7 @@ export default class App extends React.Component {
         if (!s.auth.id.trim() || s.auth.pass.length < 6) { this.setState({ authError: "أدخل رقم هاتف صحيح وكلمة مرور من ٦ أحرف على الأقل" }); return; }
         this.setState({ authError: "" });
         this.toast(s.authTab === "login" ? "تم تسجيل الدخول (واجهة تجريبية)" : "تم إنشاء الحساب (واجهة تجريبية)");
-        location.hash = "#/account";
+        this.props.navigate("/account");
       },
 
       // contact / newsletter

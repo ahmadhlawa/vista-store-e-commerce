@@ -1,6 +1,8 @@
-import sx from "../sx.js";
+import sx from "../sx";
+import type App from "../App";
+type View = ReturnType<App["renderVals"]>;
 
-export function CartPage({ v }) {
+export function CartPage({ v }: { v: View }) {
   return (
     <section style={sx`max-width:1360px;margin:0 auto;padding:26px var(--pad) 60px`}>
       <h1 style={sx`margin:0 0 4px;font-size:var(--h1);font-weight:800`}>عربة التسوّق</h1>
@@ -55,7 +57,7 @@ export function CartPage({ v }) {
   );
 }
 
-export function CheckoutPage({ v }) {
+export function CheckoutPage({ v }: { v: View }) {
   return (
     <section style={sx`max-width:1100px;margin:0 auto;padding:26px var(--pad) 60px`}>
       {v.orderDone && (

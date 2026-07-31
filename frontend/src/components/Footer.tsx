@@ -1,6 +1,8 @@
-import sx from "../sx.js";
+import sx from "../sx";
+import type App from "../App";
+type View = ReturnType<App["renderVals"]>;
 
-export default function Footer({ v }) {
+export default function Footer({ v }: { v: View }) {
   return (
     <footer style={sx`margin-top:var(--sec);background:#1A1815;color:#C9C3B9`}>
       <div style={sx`max-width:1360px;margin:0 auto;padding:46px var(--pad) 30px;display:grid;grid-template-columns:var(--foot);gap:28px`}>

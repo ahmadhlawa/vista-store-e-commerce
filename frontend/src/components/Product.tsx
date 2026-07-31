@@ -1,7 +1,9 @@
-import sx from "../sx.js";
-import ProductCard from "./ProductCard.jsx";
+import sx from "../sx";
+import type App from "../App";
+type View = ReturnType<App["renderVals"]>;
+import ProductCard from "./ProductCard";
 
-export function ProductPage({ v }) {
+export function ProductPage({ v }: { v: View }) {
   const pd = v.pd;
   return (
     <>
@@ -110,7 +112,7 @@ export function ProductPage({ v }) {
   );
 }
 
-export function ViewedSection({ v }) {
+export function ViewedSection({ v }: { v: View }) {
   return (
     <section style={sx`max-width:1360px;margin:0 auto;padding:var(--sec) var(--pad) 0`}>
       <h2 style={sx`margin:0 0 20px;font-size:var(--h2);font-weight:800`}>شاهدت مؤخراً</h2>

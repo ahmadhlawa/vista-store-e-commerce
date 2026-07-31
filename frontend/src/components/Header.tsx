@@ -1,6 +1,8 @@
-import sx from "../sx.js";
+import sx from "../sx";
+import type App from "../App";
+type View = ReturnType<App["renderVals"]>;
 
-export default function Header({ v }) {
+export default function Header({ v }: { v: View }) {
   return (
     <>
       {v.announce && (

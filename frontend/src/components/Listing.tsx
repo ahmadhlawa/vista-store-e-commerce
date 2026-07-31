@@ -1,7 +1,9 @@
-import sx from "../sx.js";
-import ProductCard from "./ProductCard.jsx";
+import sx from "../sx";
+import type App from "../App";
+type View = ReturnType<App["renderVals"]>;
+import ProductCard from "./ProductCard";
 
-export default function ListingPage({ v }) {
+export default function ListingPage({ v }: { v: View }) {
   return (
     <>
       <section style={sx`background:#fff;border-bottom:1px solid #E9E3DA`}>

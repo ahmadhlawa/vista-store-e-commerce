@@ -1,6 +1,8 @@
-import sx from "../sx.js";
+import sx from "../sx";
+import type App from "../App";
+type View = ReturnType<App["renderVals"]>;
 
-export function AuthPage({ v }) {
+export function AuthPage({ v }: { v: View }) {
   return (
     <section style={sx`max-width:520px;margin:0 auto;padding:40px var(--pad) 70px`}>
       <div style={sx`background:#fff;border:1px solid #E9E3DA;border-radius:16px;padding:28px`}>
@@ -23,7 +25,7 @@ export function AuthPage({ v }) {
   );
 }
 
-export function AccountPage({ v }) {
+export function AccountPage({ v }: { v: View }) {
   return (
     <section style={sx`max-width:1100px;margin:0 auto;padding:30px var(--pad) 70px`}>
       <h1 style={sx`margin:0 0 20px;font-size:var(--h1);font-weight:800`}>حسابي</h1>
@@ -37,7 +39,7 @@ export function AccountPage({ v }) {
   );
 }
 
-export function TrackPage({ v }) {
+export function TrackPage({ v }: { v: View }) {
   return (
     <section style={sx`max-width:720px;margin:0 auto;padding:40px var(--pad) 70px`}>
       <h1 style={sx`margin:0 0 8px;font-size:var(--h1);font-weight:800`}>تتبّع الطلب</h1>
@@ -62,7 +64,7 @@ export function TrackPage({ v }) {
   );
 }
 
-export function BlogPage({ v }) {
+export function BlogPage({ v }: { v: View }) {
   return (
     <section style={sx`max-width:1360px;margin:0 auto;padding:30px var(--pad) 70px`}>
       <h1 style={sx`margin:0 0 8px;font-size:var(--h1);font-weight:800`}>المدونة</h1>
@@ -84,7 +86,7 @@ export function BlogPage({ v }) {
   );
 }
 
-export function ArticlePage({ v }) {
+export function ArticlePage({ v }: { v: View }) {
   return (
     <section style={sx`max-width:760px;margin:0 auto;padding:30px var(--pad) 70px`}>
       <nav style={sx`display:flex;gap:8px;font-size:12.5px;color:#9C958A;margin-bottom:14px`}><a href="#/blog" style={sx`color:#7C766D`}>المدونة</a><span>›</span><span style={sx`color:#1E1B18`}>{v.art.cat}</span></nav>
@@ -103,7 +105,7 @@ export function ArticlePage({ v }) {
   );
 }
 
-export function StaticPage({ v }) {
+export function StaticPage({ v }: { v: View }) {
   return (
     <section style={sx`max-width:820px;margin:0 auto;padding:36px var(--pad) 70px`}>
       <h1 style={sx`margin:0 0 10px;font-size:var(--h1);font-weight:800`}>{v.page.title}</h1>
@@ -117,7 +119,7 @@ export function StaticPage({ v }) {
   );
 }
 
-export function ContactPage({ v }) {
+export function ContactPage({ v }: { v: View }) {
   return (
     <section style={sx`max-width:1100px;margin:0 auto;padding:36px var(--pad) 70px`}>
       <h1 style={sx`margin:0 0 10px;font-size:var(--h1);font-weight:800`}>اتصل بنا</h1>
@@ -143,7 +145,7 @@ export function ContactPage({ v }) {
   );
 }
 
-export function CalculatorPage({ v }) {
+export function CalculatorPage({ v }: { v: View }) {
   return (
     <section style={sx`max-width:900px;margin:0 auto;padding:36px var(--pad) 70px`}>
       <h1 style={sx`margin:0 0 10px;font-size:var(--h1);font-weight:800`}>حاسبة كمية الريزن</h1>

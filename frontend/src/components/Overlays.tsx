@@ -1,6 +1,8 @@
-import sx from "../sx.js";
+import sx from "../sx";
+import type App from "../App";
+type View = ReturnType<App["renderVals"]>;
 
-export default function Overlays({ v }) {
+export default function Overlays({ v }: { v: View }) {
   return (
     <>
       {v.anyOverlay && (
