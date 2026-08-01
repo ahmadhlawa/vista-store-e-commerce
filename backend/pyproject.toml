@@ -29,6 +29,10 @@ dev = [
     "pytest-cov>=6.0",
     "httpx>=0.27",
 ]
+# MySQL 8 defaults to caching_sha2_password, which PyMySQL can only complete with
+# the `rsa` extra. Needed by the CI gate and by any MySQL deployment; never by the
+# SQLite development runtime.
+mysql = ["PyMySQL[rsa]>=1.1.1"]
 
 [project.scripts]
 commerce-admin = "app.initial_data:main"
