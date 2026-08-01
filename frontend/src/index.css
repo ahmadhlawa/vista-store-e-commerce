@@ -11,10 +11,10 @@ input::placeholder, textarea::placeholder { color: #A39C90 }
 ::-webkit-scrollbar { height: 8px; width: 8px }
 ::-webkit-scrollbar-thumb { background: #E1DACE; border-radius: 8px }
 
-:root { --pad: 28px; --cols: 4; --catcols: 5; --kits: 4; --heroG: minmax(0, 1.62fr) minmax(0, .86fr); --scG: minmax(300px, .62fr) minmax(0, 1.38fr); --herohGap: 460px; --h1: 44px; --h2: 27px; --desk: flex; --deskb: block; --mob: none; --nav: flex; --shop: 250px minmax(0, 1fr); --pdp: 1.05fr 1fr; --foot: 1.6fr 1fr 1fr 1.2fr; --sec: 64px; --art: 4; --wide: flex }
+:root { --pad: 28px; --cols: 4; --catcols: 5; --kits: 4; --heroG: minmax(0, 1.62fr) minmax(0, .86fr); --scG: minmax(300px, .62fr) minmax(0, 1.38fr); --herohGap: 460px; --h1: 44px; --h2: 27px; --desk: flex; --deskb: block; --mob: none; --nav: flex; --shop: 250px minmax(0, 1fr); --pdp: 1.05fr 1fr; --foot: 1.6fr 1fr 1fr 1.2fr; --sec: 64px; --art: 4; --wide: flex; --adminG: 230px minmax(0, 1fr); --adminNav: block }
 @media (max-width: 1240px) { :root { --catcols: 4; --wide: none; --pad: 22px; --scG: minmax(260px, .7fr) minmax(0, 1.3fr) } }
 @media (max-width: 1080px) { :root { --cols: 3; --art: 3; --catcols: 3; --kits: 3; --heroG: 1fr; --scG: 1fr; --h1: 36px; --h2: 24px; --shop: 220px minmax(0, 1fr); --foot: 1.4fr 1fr 1fr } }
-@media (max-width: 900px) { :root { --desk: none; --deskb: none; --mob: flex; --nav: none; --cols: 2; --art: 2; --catcols: 2; --kits: 2; --h1: 29px; --h2: 21px; --pad: 16px; --herohGap: 400px; --shop: 1fr; --pdp: 1fr; --foot: 1fr 1fr; --sec: 44px } }
+@media (max-width: 900px) { :root { --desk: none; --deskb: none; --mob: flex; --nav: none; --cols: 2; --art: 2; --catcols: 2; --kits: 2; --h1: 29px; --h2: 21px; --pad: 16px; --herohGap: 400px; --shop: 1fr; --pdp: 1fr; --foot: 1fr 1fr; --sec: 44px; --adminG: 1fr; --adminNav: none } }
 @media (max-width: 560px) { :root { --catcols: 2; --kits: 1; --art: 1; --h1: 25px; --h2: 19px; --herohGap: 340px; --foot: 1fr; --pad: 14px } }
 
 @keyframes fadeUp { from { opacity: 0; transform: translateY(14px) } to { opacity: 1; transform: none } }

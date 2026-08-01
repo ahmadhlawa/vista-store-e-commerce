@@ -9,9 +9,21 @@ build/
 __pycache__/
 *.py[cod]
 .venv/
+venv/
+*.egg-info/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# Test coverage
+.coverage
+coverage.xml
+htmlcov/
+
+# Local databases
+*.db
+*.db-journal
+*.sqlite3
 
 # Environment and secrets
 .env
@@ -29,6 +41,9 @@ Thumbs.db
 *.tmp
 *.pid
 
-# Local uploads and backups
-uploads/
+# Local uploads and backups.
+# The uploads directory is tracked only through its .gitkeep; a parent-level
+# `uploads/` rule would make that re-inclusion impossible, so it is not used.
+backend/data/uploads/*
+!backend/data/uploads/.gitkeep
 backups/
