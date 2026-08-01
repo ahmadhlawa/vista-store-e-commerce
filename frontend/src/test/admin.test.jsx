@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { page, renderApp, respond, stubApi } from "./utils.jsx";
 import { authStorage } from "../storage/authStorage.js";
@@ -165,7 +165,10 @@ describe("admin workspace", () => {
 
     expect(await screen.findByRole("heading", { name: "الطلبات" })).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "ORD-260731-1234" })).toBeInTheDocument();
-    expect(screen.getByText("بانتظار المراجعة")).toBeInTheDocument();
+
+    // The label also exists as an <option> in the status filter, so scope the assertion
+    // to the order row's status badge inside the table.
+    expect(within(screen.getByRole("table")).getByText("بانتظار المراجعة")).toBeInTheDocument();
   });
 
   it("hides super-admin-only navigation from a normal admin", async () => {

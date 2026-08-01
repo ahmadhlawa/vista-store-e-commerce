@@ -124,7 +124,19 @@ describe("public storefront", () => {
 
     expect(await screen.findByRole("heading", { name: "عربة التسوّق", level: 1 })).toBeInTheDocument();
     expect(screen.getByText("2 منتجاً في عربتك")).toBeInTheDocument();
-    expect(screen.getByText("200 ₪")).toBeInTheDocument();
+
+    // 2 × 100 ₪ appears twice by design: once as the cart line total and once as the
+    // order-summary subtotal. Assert each in its own scope instead of ambiguously.
+    const line = screen.getByRole("button", { name: "إزالة المنتج" }).closest("div");
+    expect(within(line).getByText("200 ₪")).toBeInTheDocument();
+
+    // In the summary it is both the subtotal and the total, since delivery is only
+    // priced at checkout. Assert each labelled row separately.
+    const summary = screen.getByRole("complementary");
+    const subtotalRow = within(summary).getByText("المجموع الفرعي").closest("div");
+    expect(within(subtotalRow).getByText("200 ₪")).toBeInTheDocument();
+    const totalRow = within(summary).getByText("الإجمالي").closest("div");
+    expect(within(totalRow).getByText("200 ₪")).toBeInTheDocument();
   });
 
   it("blocks checkout until the customer fields are valid", async () => {
