@@ -52,9 +52,26 @@ def validate_image_upload(data: bytes, max_bytes: int) -> tuple[str, str]:
     return content_type, ALLOWED_IMAGE_TYPES[content_type]
 
 
-def build_stored_key(extension: str) -> str:
+def normalize_prefix(prefix: str | None) -> str:
+    """Return a safe, trailing-slashed object prefix, or `""`.
+
+    A prefix decides which objects a delete is allowed to touch, so it must never be
+    absolute and never contain a traversal segment.
+    """
+    if not prefix:
+        return ""
+    cleaned = prefix.strip().strip("/")
+    if not cleaned:
+        return ""
+    segments = [segment for segment in cleaned.split("/") if segment]
+    if any(segment in (".", "..") for segment in segments):
+        raise ValueError(f"Refusing to use an object prefix containing a traversal: {prefix!r}")
+    return "/".join(segments) + "/"
+
+
+def build_stored_key(extension: str, prefix: str | None = None) -> str:
     """Collision-resistant and traversal-proof: the caller's name is never reused."""
-    return f"{uuid.uuid4().hex}{extension}"
+    return f"{normalize_prefix(prefix)}{uuid.uuid4().hex}{extension}"
 
 
 @dataclass(slots=True)
@@ -69,7 +86,16 @@ class StorageProvider(ABC):
     name: str
 
     @abstractmethod
-    def save(self, data: bytes, *, content_type: str, extension: str) -> StoredFile: ...
+    def save(
+        self, data: bytes, *, content_type: str, extension: str, prefix: str | None = None
+    ) -> StoredFile:
+        """Store `data` and return its metadata.
+
+        `prefix` groups an upload into a namespace inside the provider — used by the
+        preview importer so its objects can later be found and removed as a set. It is
+        additional to any provider-wide prefix.
+        """
+        ...
 
     @abstractmethod
     def delete(self, key: str) -> None: ...

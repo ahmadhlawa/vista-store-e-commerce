@@ -33,12 +33,16 @@ dev = [
 # the `rsa` extra. Needed by the CI gate and by any MySQL deployment; never by the
 # SQLite development runtime.
 mysql = ["PyMySQL[rsa]>=1.1.1"]
+# Only needed when STORAGE_PROVIDER=r2. Local media storage needs no S3 client, so a
+# default installation stays free of boto3 and its transitive dependencies.
+r2 = ["boto3>=1.35"]
 
 [project.scripts]
 commerce-admin = "app.initial_data:main"
 commerce-seed = "scripts.seed:main"
 commerce-instance = "scripts.instance_cli:main"
 commerce-mysql-check = "scripts.mysql_compat:main"
+vista-preview = "scripts.preview_cli:main"
 
 [tool.setuptools]
 packages = ["app", "scripts"]

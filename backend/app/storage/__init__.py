@@ -29,6 +29,7 @@ def build_storage(config: Settings) -> StorageProvider:
             secret_access_key=config.R2_SECRET_ACCESS_KEY,
             bucket_name=config.R2_BUCKET_NAME,
             public_base_url=config.R2_PUBLIC_BASE_URL,
+            object_prefix=config.R2_OBJECT_PREFIX,
         )
     return LocalStorageProvider(config.media_root, config.LOCAL_MEDIA_BASE_URL)
 

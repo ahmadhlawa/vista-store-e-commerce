@@ -22,8 +22,10 @@ class LocalStorageProvider(StorageProvider):
             raise ValueError("Refusing to operate outside the media root")
         return path
 
-    def save(self, data: bytes, *, content_type: str, extension: str) -> StoredFile:
-        key = build_stored_key(extension)
+    def save(
+        self, data: bytes, *, content_type: str, extension: str, prefix: str | None = None
+    ) -> StoredFile:
+        key = build_stored_key(extension, prefix)
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)

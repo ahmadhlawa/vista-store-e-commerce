@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     R2_SECRET_ACCESS_KEY: str = ""
     R2_BUCKET_NAME: str = ""
     R2_PUBLIC_BASE_URL: str = ""
+    # Every object this application writes lives under this prefix, and it will not
+    # delete anything outside it. Leave empty only for a bucket used by nothing else.
+    R2_OBJECT_PREFIX: str = ""
 
     # Only used by the initial-admin command and the seed script. Never defaulted
     # to a usable credential, so an unconfigured instance has no admin at all.
