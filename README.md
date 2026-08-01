@@ -63,10 +63,13 @@ Full walkthrough, including troubleshooting: [docs/local-setup.md](docs/local-se
 ## Layout
 
 ```
+VERSION       the Golden Template version — one authoritative source
+CHANGELOG.md  template releases
+instance/     validated, non-secret instance profiles
 backend/      FastAPI application, Alembic migrations, seed script, tests
   app/        api/ core/ db/ models/ schemas/ services/ storage/
-  alembic/    schema of record — one revision, 0001_initial
-  scripts/    seed.py (idempotent demo data)
+  alembic/    schema of record — 0001_initial, 0002_instance_metadata
+  scripts/    seed.py (demo data), instance_cli.py, mysql_compat.py
   tests/      pytest suite
 frontend/     React storefront and admin workspace
   src/        api/ app/ components/ hooks/ layouts/ pages/ admin/
@@ -82,16 +85,23 @@ cd backend  ; .venv\Scripts\python.exe -m pytest --cov=app
 cd frontend ; npx vitest run
 ```
 
-Current state: backend **74 passed, 88 % coverage**; frontend **24 passed**.
+Current state: backend **134 passed**; frontend **24 passed**.
+
+Offline MySQL portability check (connects to nothing):
+
+```powershell
+cd backend ; .venv\Scripts\python.exe -m scripts.mysql_compat --verbose
+```
 
 ## Documentation
 
 | Document | Contents |
 | --- | --- |
 | [local-setup.md](docs/local-setup.md) | Prerequisites, first run, daily workflow, troubleshooting |
+| [client-lifecycle.md](docs/client-lifecycle.md) | Create, operate, upgrade and back up a client instance |
 | [backend-architecture.md](docs/backend-architecture.md) | Layers, request flow, error shape, auth, pricing rules |
 | [frontend-architecture.md](docs/frontend-architecture.md) | Routing, the `v` view-model, state, API access, admin shell |
-| [database-model.md](docs/database-model.md) | All 23 tables, relationships, conventions, constraints |
+| [database-model.md](docs/database-model.md) | All 24 tables, relationships, conventions, constraints |
 | [api-modules.md](docs/api-modules.md) | Every one of the 62 endpoints, grouped by module |
 | [admin-capabilities.md](docs/admin-capabilities.md) | What an administrator can actually do, screen by screen |
 | [sqlite-workflow.md](docs/sqlite-workflow.md) | Migrations, seeding, resetting, inspecting the local database |

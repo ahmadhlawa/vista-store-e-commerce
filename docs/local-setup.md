@@ -59,7 +59,20 @@ A JSON array works too.
 .venv\Scripts\python.exe -m scripts.seed
 ```
 
-`alembic upgrade head` creates all 23 tables from revision `0001_initial`.
+`alembic upgrade head` creates all 24 tables from revisions `0001_initial` and
+`0002_instance_metadata`.
+
+> **Two initialization workflows, deliberately separate.** `scripts.seed` is the **demo
+> seed** — sample products, orders and coupons for development and demonstration. A real
+> client instance instead gets **client bootstrap**, which creates store identity and
+> structural defaults only:
+>
+> ```powershell
+> .venv\Scripts\python.exe -m scripts.instance_cli apply --profile ..\instance\demo-profile.yaml
+> ```
+>
+> Never run the demo seed against a client store. See
+> [client-lifecycle.md](client-lifecycle.md).
 
 `scripts.seed` fills the store with demo content and is **idempotent** — every record is
 matched on its natural key, so running it twice changes nothing. It writes real gradient
@@ -137,6 +150,27 @@ npm run test:watch                                 # watch mode
 Backend tests build their own throwaway SQLite database and never touch
 `commerce_dev.db`. Frontend tests run under jsdom with `fetch` stubbed; they never reach a
 real server.
+
+## Instance tooling
+
+Four commands manage an instance's identity. All are local and touch no server.
+
+```powershell
+cd D:\Project\commerce-template\backend
+.venv\Scripts\python.exe -m scripts.instance_cli validate --profile ..\instance\demo-profile.yaml
+.venv\Scripts\python.exe -m scripts.instance_cli plan     --profile ..\instance\demo-profile.yaml
+.venv\Scripts\python.exe -m scripts.instance_cli apply    --profile ..\instance\demo-profile.yaml
+.venv\Scripts\python.exe -m scripts.instance_cli manifest
+```
+
+`validate` needs no database; `plan` writes nothing; `apply` is idempotent and never
+overwrites content edited through Admin.
+
+The offline MySQL portability check connects to nothing:
+
+```powershell
+.venv\Scripts\python.exe -m scripts.mysql_compat --verbose
+```
 
 ## Production build check
 

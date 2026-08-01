@@ -1,8 +1,7 @@
 # Database model
 
-**23 tables**, all created by a single Alembic revision, `0001_initial`
-(`backend/alembic/versions/0001_initial_initial_commerce_schema.py`). Models live in
-`backend/app/models/`.
+**24 tables**, created by two Alembic revisions — `0001_initial` (the commerce schema) and
+`0002_instance_metadata` (instance provenance). Models live in `backend/app/models/`.
 
 ## Conventions
 
@@ -11,7 +10,7 @@
 | Money | `Numeric(12, 2)` in the database, `Decimal` in Python — never float |
 | Enum-like values | `String(32)` validated by Pydantic enums, not native database ENUMs, so MySQL needs no ENUM migrations |
 | Timestamps | Naive UTC `DateTime`, serialised with a `Z` suffix |
-| JSON | Only `home_sections.config` and `audit_logs.meta` |
+| JSON | Only `home_sections.config`, `audit_logs.meta` and `instance_metadata.enabled_features` |
 | Primary keys | Integer surrogate keys throughout |
 | Slugs | Unique, generated from the name, collision-suffixed; Arabic names produce Arabic slugs |
 | Deletes | Real deletes; there is no soft-delete column. Orders are never deleted by the app |
@@ -107,6 +106,16 @@ nullable foreign keys mean a deleted product does not destroy the record.
 **`order_status_history`** (7) — `order_id`, `admin_user_id`, `old_status`, `new_status`,
 an optional note and a timestamp. Every status change is attributable.
 
+### Instance provenance
+
+**`instance_metadata`** (10 columns) — a single row recording `instance_slug`,
+`template_version` at initialization, `profile_schema_version`, `profile_hash`,
+`enabled_features` (JSON), `initialized_at` and `last_bootstrap_at`. Written by
+`commerce-instance apply` and reported by `commerce-instance manifest`.
+
+This is **not** a tenancy mechanism: there is no `tenant_id`, and no other table
+references it. One running application is still exactly one store.
+
 ### Media
 
 **`media_assets`** (9) — `uploaded_by_id` → `admin_users.id`, stored filename, original
@@ -126,7 +135,7 @@ Not left to application code:
 
 ## Migrations
 
-One revision today. Adding a model means adding a migration:
+Two revisions today. Adding a model means adding a migration:
 
 ```powershell
 cd D:\Project\commerce-template\backend
