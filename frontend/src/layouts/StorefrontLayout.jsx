@@ -5,6 +5,7 @@ import Header from "../components/Header.jsx";
 import Footer from "../components/Footer.jsx";
 import Overlays from "../components/Overlays.jsx";
 import MaintenanceScreen from "../components/Maintenance.jsx";
+import PreviewNotice from "../components/PreviewNotice.jsx";
 import { TrustStrip } from "../components/Home.jsx";
 import { useShellView } from "../hooks/useShellView.js";
 import { useStore } from "../app/StoreProvider.jsx";
@@ -52,6 +53,7 @@ export default function StorefrontLayout() {
 
   return (
     <div style={sx`direction:rtl;background:#FBF9F6;min-height:100vh;display:flex;flex-direction:column`}>
+      <PreviewNotice />
       <Header v={v} />
       <main style={sx`flex:1`}>
         {store.loadError && (
