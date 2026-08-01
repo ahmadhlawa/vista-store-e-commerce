@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationError, field_validator
 
 from app.core.enums import HomeSectionType
 
@@ -68,7 +68,10 @@ class DomainProfile(_Strict):
 class ContactProfile(_Strict):
     phone: str | None = Field(default=None, max_length=40)
     whatsapp: str | None = Field(default=None, max_length=40)
-    email: str | None = Field(default=None, max_length=255)
+    # The same EmailStr the API's StoreSettings projection uses. Anything looser lets a
+    # profile validate and apply cleanly, then write an address that `/store/settings`
+    # cannot serialise — a 500 that takes the whole storefront down on first load.
+    email: EmailStr | None = Field(default=None, max_length=255)
     address: str | None = Field(default=None, max_length=300)
     working_hours: str | None = Field(default=None, max_length=200)
     instagram_url: str | None = Field(default=None, max_length=500)

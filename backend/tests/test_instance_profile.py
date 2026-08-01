@@ -68,6 +68,29 @@ def test_invalid_slugs_are_rejected(bad_slug: str) -> None:
         parse_profile(minimal(client_slug=bad_slug))
 
 
+@pytest.mark.parametrize(
+    "bad_email",
+    [
+        "not-an-email",
+        "owner@",
+        "owner@localhost",
+        # Reserved and special-use domains: the API's EmailStr refuses to serialise
+        # them, so a profile carrying one would apply cleanly and then 500 the
+        # storefront on `/store/settings`. Caught here instead.
+        "owner@acceptance.example.test",
+        "owner@shop.invalid",
+    ],
+)
+def test_unusable_contact_emails_are_rejected(bad_email: str) -> None:
+    with pytest.raises(ProfileError, match="contact.email"):
+        parse_profile(minimal(contact={"email": bad_email}))
+
+
+def test_a_usable_contact_email_is_accepted() -> None:
+    profile = parse_profile(minimal(contact={"email": "owner@acme-store.com"}))
+    assert profile.contact.email == "owner@acme-store.com"
+
+
 def test_unsupported_schema_version_is_rejected() -> None:
     with pytest.raises(ProfileError, match="profile_schema_version"):
         parse_profile(minimal(profile_schema_version=99))
