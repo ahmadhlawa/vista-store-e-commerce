@@ -109,6 +109,14 @@ export function CheckoutPage({ v }) {
                   <span style={sx`display:flex;flex-direction:column;gap:2px`}><strong style={sx`font-size:14px`}>{p.label}</strong><span style={sx`font-size:12.5px;color:#7C766D`}>{p.desc}</span></span>
                 </label>
               ))}
+              {v.manualInstructions && (
+                <div style={sx`background:#F7F5F1;border:1px solid #E9E3DA;border-radius:11px;padding:13px;font-size:12.5px;color:#4A453E;line-height:1.9;white-space:pre-line`}>
+                  {v.manualInstructions}
+                </div>
+              )}
+              <p style={sx`margin:0;font-size:12px;color:#9C958A;line-height:1.8`}>
+                لا يتم تحصيل أي مبلغ الآن، ولا يطلب المتجر بيانات بطاقات بنكية.
+              </p>
               <label style={sx`display:flex;align-items:flex-start;gap:10px;font-size:13px;color:#4A453E;cursor:pointer;margin-top:4px`}><input type="checkbox" checked={v.ck.terms} onChange={v.setTerms} style={sx`width:17px;height:17px;accent-color:#1F4E4A;margin-top:2px;cursor:pointer`} /><span>أوافق على <A href="/page/terms">الشروط والأحكام</A> و<A href="/page/return-policy">سياسة الإرجاع</A></span></label>
               {v.err.terms && <span style={sx`font-size:12px;color:#C0392B;font-weight:600`}>{v.err.terms}</span>}
             </div>

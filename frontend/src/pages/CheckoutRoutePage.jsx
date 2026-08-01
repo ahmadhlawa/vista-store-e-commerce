@@ -126,6 +126,9 @@ export default function CheckoutRoutePage() {
       bg: form.payment === method.key ? "#F3F7F6" : "#fff",
       pick: () => update({ payment: method.key }),
     })),
+    // Only for the manual method, and only when the owner has actually supplied them.
+    manualInstructions:
+      form.payment === "manual" ? store.settings.manualPaymentInstructions || "" : "",
     placeOrder,
     placing,
     placingOpacity: placing ? 0.75 : 1,

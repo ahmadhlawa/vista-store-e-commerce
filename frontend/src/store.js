@@ -70,6 +70,16 @@ export const paymentMethods = [
   },
 ];
 
+export const paymentMethodLabels = {
+  cash_on_delivery: "الدفع عند الاستلام",
+  manual: "تحويل بنكي / يدوي",
+};
+
+export const invoiceStatusLabels = {
+  issued: "صادرة",
+  cancelled: "ملغاة",
+};
+
 export const orderStatusLabels = {
   pending: "بانتظار المراجعة",
   confirmed: "تم التأكيد",

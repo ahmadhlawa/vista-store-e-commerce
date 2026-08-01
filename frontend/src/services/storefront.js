@@ -16,7 +16,10 @@ export function normalizeSettings(raw) {
   const settings = { ...FALLBACK_SETTINGS, ...(raw || {}) };
   return {
     raw: settings,
-    storeName: settings.store_name,
+    // The storefront is Arabic and RTL, so the Arabic name wins wherever the owner has
+    // set one; the latin name stays the fallback.
+    storeName: settings.store_name_ar || settings.store_name,
+    storeNameLatin: settings.store_name,
     tagline: settings.store_tagline || "",
     logoUrl: settings.logo_url || null,
     faviconUrl: settings.favicon_url || null,
@@ -39,6 +42,9 @@ export function normalizeSettings(raw) {
     seoTitle: settings.seo_title || settings.store_name,
     seoDescription: settings.seo_description || "",
     maintenanceMode: !!settings.maintenance_mode,
+    // Blank until the owner supplies real account details. The checkout shows nothing
+    // rather than inventing transfer instructions.
+    manualPaymentInstructions: settings.manual_payment_instructions || "",
   };
 }
 
