@@ -65,7 +65,11 @@ contact:
   email: null
   address: null
   working_hours: null
-  instagram_url: null
+  # CONFIRMED — the profile supplied by the client, read publicly on 2026-08-02.
+  # See docs/client/social-source-audit.md. The address and phone number visible on
+  # that profile are deliberately NOT copied here: they are owner contact details and
+  # must come from the owner, not from a social post.
+  instagram_url: "https://www.instagram.com/vistastore.ps"
   # CONFIRMED — the page supplied by the client.
   facebook_url: "https://www.facebook.com/people/Vista-Store-%D9%85%D8%AA%D8%AC%D8%B1-%D9%81%D9%8A%D8%B3%D8%AA%D8%A7/61582596333597/"
 
