@@ -1,7 +1,38 @@
 # Known limitations
 
-An honest list of what this template does not do, does only partly, or has not proven.
-Read it before promising anything to a client.
+An honest list of what this application does not do, does only partly, or has not proven.
+Read it before promising anything to the client.
+
+## Vista Store — specific to this instance
+
+- **The store cannot take a real order.** No delivery area exists, and checkout requires
+  one. No catalog, no phone number, no address. All of it is waiting on the owner —
+  `docs/client/data-needed-from-owner.md`.
+- **Business data is unverified except the name.** The supplied Facebook page is
+  login-walled; only "Vista Store / متجر فيستا" is confirmed. Currency, colours and
+  timezone are template defaults carried over, not Vista Store values.
+- **No visual QA has been done.** No browser tooling was available. Every screen renders
+  in jsdom and the print CSS is asserted, but nothing has been *looked at* — including the
+  printed A4 invoice and the cancelled watermark. See `docs/client/local-acceptance.md`.
+- **No deployment target is confirmed.** Whether a FastAPI app runs on the client's cPanel
+  account is unanswered. See `docs/deployment/cpanel-capability-checklist.md`.
+
+## Invoicing — what it does not do
+
+- **No server-side PDF.** Printing is the browser's, via `window.print()` and Save-as-PDF.
+  Nothing generates or emails a PDF file, because the hosting environment's capabilities
+  are unknown.
+- **No reissue and no credit note.** An invoice is issued once and either stands or is
+  cancelled. A cancelled order cannot be reconfirmed, so it never produces a second
+  invoice. Correcting an invoice means cancelling the order and placing a new one.
+- **No backfill.** Orders confirmed before migration `0003` have no invoice, and none is
+  created retroactively — an invoice snapshots the store as it was on the issue date, and
+  that state no longer exists.
+- **Tax is a single flat rate** on the order total, applied to goods and delivery
+  together. There are no per-product tax classes and no exemptions. It is off by default,
+  and the instance is **not** a tax invoice issuer until the owner says so in writing.
+- **Numbering is one global series per prefix.** No per-year reset, no per-branch series.
+  Changing the prefix after invoices exist leaves two series in the same ledger.
 
 ## Deliberately out of scope
 

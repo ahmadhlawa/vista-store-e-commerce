@@ -1,4 +1,71 @@
-# Implementation status — full-stack commerce MVP
+# Implementation status
+
+## Vista Store client instance — 2026-08-02
+
+**Branch:** `feat/vista-store-initial-release` · **Not merged, not pushed.**
+
+Built from the Golden Commerce Template at `dba6a67` (v0.3.0-rc.1) — see
+[template-origin.md](template-origin.md). Everything below the horizontal rule is the
+template's own history and is left as written.
+
+| Phase | State |
+| --- | --- |
+| 1. Clone and provenance | **Done** — independent repo, history preserved, `template-upstream` remote, no `origin` |
+| 2. Facebook source audit | **Done** — page login-walled; only the bilingual name confirmed; gaps documented |
+| 3. Client identity | **Done** — `instance/vista-store.yaml`, verified values only |
+| 4. Catalog data | **Done, and empty by design** — no product was verifiable, so none was invented |
+| 5. Payments | **Done** — COD + manual only; card/online rejected with 422; no card UI anywhere |
+| 6. Invoices | **Done** — models, migration `0003`, service, admin API, admin screens, print layout |
+| 7. Local storage | **Done** — Vista media root, Git-ignored; seed brand assets kept separate |
+| 8. Local instance | **Done** — 26/26 live checks on a clean SQLite instance |
+| 9. Visual QA | **NOT DONE** — no browser tooling available. Manual checklist in [client/local-acceptance.md](client/local-acceptance.md) |
+| 10. cPanel readiness | **Done as documentation** — checklist, handoff, env template, release script. No deployment performed |
+
+### Verification
+
+- Backend `pytest --cov=app`: **193 passed**, 91% coverage (baseline 134)
+- Frontend `vitest run`: **47 passed** (baseline 24)
+- `npm run build`: clean — 87 modules, 405 kB JS / 111 kB gzip
+- `python -m scripts.mysql_compat --verbose`: 8 checks, 0 failures, 0 warnings
+- Live acceptance against a running server: 26/26
+
+No existing test was weakened or skipped.
+
+### Commits
+
+```
+c5dace2  feat(vista): client identity, local instance and cPanel readiness
+8fdf4f5  feat(admin): invoice list, printable invoice sheet and payment visibility
+08ecfe7  feat(invoices): issue an immutable invoice when an order is confirmed
+8e87c2a  docs: record template provenance and the Facebook source audit
+```
+
+### Next, in order
+
+1. **Send the owner [client/data-needed-from-owner.md](client/data-needed-from-owner.md).**
+   Nothing else unblocks the store. Items 1–8 are hard blockers: without a delivery area
+   no customer can complete checkout.
+2. **Send the host [deployment/cpanel-capability-checklist.md](deployment/cpanel-capability-checklist.md).**
+   Questions A1, A2 and A4 decide whether cPanel deployment is possible at all.
+3. **Do the visual QA** in a real browser at 390 / 768 / 1440px. Test the printed invoice
+   with more than 15 line items — that is where the first page break happens.
+4. **Settle the currency and the invoice prefix** before the first confirmed order. Both
+   become expensive once invoices exist.
+5. Then load the real catalog and branding, and re-run acceptance against it.
+
+### Decisions worth remembering
+
+- **Facebook was not worked around.** No search fallback, no similarly-named page, no
+  plausible placeholder. A blank field is a real blank.
+- **No Passenger/WSGI adapter was written** — it would be untested against an environment
+  nobody has described yet, which is worse than nothing.
+- **Invoice cancellation routes through order cancellation**, so the two can never
+  disagree and stock restoration stays in a single code path.
+- **One invoice per order is a database constraint**, not only a service-level check.
+
+---
+
+# Template history — full-stack commerce MVP
 
 **Authoritative handoff document.** Rewritten 2026-08-01 at the end of the continuation
 session. Every figure below was produced by a command run in that session against this
