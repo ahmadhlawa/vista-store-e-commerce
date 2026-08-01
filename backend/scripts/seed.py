@@ -1,10 +1,23 @@
-"""Idempotent development seed.
+"""DEMO SEED — development and demonstration only. Never run against a client store.
 
 Creates enough content to demonstrate every part of the storefront and the admin
-area. Re-running it updates the same rows instead of duplicating them — every entity
-is matched on its natural key (slug, code, name or section key).
+area: sample categories, products, variants, packages, coupons, articles, a demo
+order and demo store identity. Re-running it updates the same rows instead of
+duplicating them — every entity is matched on its natural key (slug, code, name or
+section key) — and it deliberately rewrites its own seeded content, including
+resetting seeded product stock.
 
     python -m scripts.seed
+
+This is one of two separate initialization workflows:
+
+  demo seed        (here)                    sample commercial data, for development
+  client bootstrap (scripts.instance_cli)    store identity and structural defaults
+                                             only — no products, orders or coupons,
+                                             and it never overwrites owner edits
+
+A real client instance gets `instance_cli apply`, not this. See
+docs/client-lifecycle.md.
 
 An admin account is only created when credentials are supplied explicitly, through
 --admin-email/--admin-password or INITIAL_ADMIN_EMAIL/INITIAL_ADMIN_PASSWORD.
@@ -791,7 +804,12 @@ def seed(db: Session, *, admin_email: str, admin_password: str, admin_name: str)
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Seed demo data (idempotent).")
+    parser = argparse.ArgumentParser(
+        description=(
+            "DEMO SEED (idempotent) — development and demonstration only. "
+            "For a real client instance use: python -m scripts.instance_cli apply."
+        )
+    )
     parser.add_argument("--admin-email", default=settings.INITIAL_ADMIN_EMAIL)
     parser.add_argument("--admin-password", default=settings.INITIAL_ADMIN_PASSWORD)
     parser.add_argument("--admin-name", default=settings.INITIAL_ADMIN_NAME)
