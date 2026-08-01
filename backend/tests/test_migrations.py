@@ -23,6 +23,7 @@ EXPECTED_TABLES = {
     "delivery_areas",
     "hero_slides",
     "home_sections",
+    "instance_metadata",
     "media_assets",
     "order_items",
     "order_status_history",
