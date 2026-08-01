@@ -251,7 +251,11 @@ def list_orders(
 def _load_order(db: DbSession, order_id: int) -> Order:
     stmt = (
         select(Order)
-        .options(selectinload(Order.items), selectinload(Order.status_history))
+        .options(
+            selectinload(Order.items),
+            selectinload(Order.status_history),
+            selectinload(Order.invoice),
+        )
         .where(Order.id == order_id)
     )
     order = db.execute(stmt).scalars().unique().one_or_none()

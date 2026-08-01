@@ -64,6 +64,9 @@ class Order(TimestampMixin, Base):
         cascade="all, delete-orphan",
         order_by="OrderStatusHistory.id",
     )
+    # At most one, ever. Not cascaded: an invoice outlives any attempt to tidy up orders,
+    # and the FK is RESTRICT so an invoiced order cannot be deleted out from under it.
+    invoice = relationship("Invoice", back_populates="order", uselist=False)
 
     __table_args__ = (
         CheckConstraint("subtotal >= 0", name="ck_orders_subtotal_non_negative"),

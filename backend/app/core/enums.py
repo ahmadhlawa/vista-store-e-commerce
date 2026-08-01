@@ -40,6 +40,13 @@ class PaymentMethod(StrEnum):
     MANUAL = "manual"
 
 
+class InvoiceStatus(StrEnum):
+    """An invoice is issued once and either stands or is cancelled. It is never deleted."""
+
+    ISSUED = "issued"
+    CANCELLED = "cancelled"
+
+
 class DiscountType(StrEnum):
     PERCENTAGE = "percentage"
     FIXED = "fixed"
