@@ -1,12 +1,26 @@
-# Commerce template
+# Vista Store — متجر فيستا
 
-A reusable full-stack commerce application: an Arabic, right-to-left React storefront and
-an admin workspace, backed by a FastAPI service with SQLAlchemy, Alembic and — for local
-development — SQLite.
+The commerce application for **Vista Store**: an Arabic, right-to-left React storefront
+and an admin workspace, backed by a FastAPI service with SQLAlchemy, Alembic and — for
+local development — SQLite.
 
-It is a **template**, deployed as one independent instance per client. There is no
-multi-tenancy, no `tenant_id`, and no shared database. The repository carries no client
-name or branding; the store's identity is data, editable in the admin area.
+This is one **client instance** built from the Golden Commerce Template. It is not
+multi-tenant: one deployment, one store, one database. The store's identity still lives
+in data rather than in code, so the owner edits it from the admin area.
+
+> **Status: local development only.** Nothing has been deployed. The store cannot take a
+> real order yet, because almost all of the business data is still missing — the supplied
+> Facebook page is login-walled, so only the business name could be verified. Start at
+> [docs/client/data-needed-from-owner.md](docs/client/data-needed-from-owner.md).
+
+| | |
+| --- | --- |
+| Template origin | [docs/template-origin.md](docs/template-origin.md) — commit `dba6a67`, version `0.3.0-rc.1` |
+| Instance profile | [instance/vista-store.yaml](instance/vista-store.yaml) |
+| What is verified | [docs/client/facebook-source-audit.md](docs/client/facebook-source-audit.md) |
+| What is missing | [docs/client/data-needed-from-owner.md](docs/client/data-needed-from-owner.md) |
+| Local acceptance | [docs/client/local-acceptance.md](docs/client/local-acceptance.md) |
+| Hosting | [docs/deployment/cpanel-handoff.md](docs/deployment/cpanel-handoff.md) |
 
 ## What it does
 
@@ -20,8 +34,17 @@ package contents), categories, orders with status workflow and internal notes, c
 delivery areas, hero slides, banners, home sections, articles, static pages, a media
 library, store settings, and — for super admins only — admin accounts and an audit log.
 
+**Invoicing** — an immutable invoice is issued automatically the first time an order is
+confirmed, with sequential numbering, an admin list and detail screen, and a
+print-friendly A4 Arabic sheet. Cancelling an order cancels its invoice and keeps both
+the record and the number forever.
+
+**Payments** — cash on delivery and manual/bank transfer only. There is no card form, no
+payment gateway, and no code path that claims money has been captured.
+
 **Deliberately not included:** customer accounts, online card payments, multi-tenancy,
-product reviews. See [docs/known-limitations.md](docs/known-limitations.md).
+product reviews, server-side PDF generation. See
+[docs/known-limitations.md](docs/known-limitations.md).
 
 ## Stack
 
@@ -45,7 +68,10 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip install -e ".[dev]"
 copy .env.example .env          # then set SECRET_KEY; never commit this file
 .venv\Scripts\alembic.exe upgrade head
-.venv\Scripts\python.exe -m scripts.seed
+
+# Vista Store instance bootstrap. Creates store identity, home sections and the
+# empty policy pages — and no products, orders or admin accounts.
+.venv\Scripts\python.exe -m scripts.instance_cli apply --profile ../instance/vista-store.yaml
 .venv\Scripts\python.exe -m app.initial_data --email you@example.com --password '<choose one>'
 .venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 
@@ -68,7 +94,7 @@ CHANGELOG.md  template releases
 instance/     validated, non-secret instance profiles
 backend/      FastAPI application, Alembic migrations, seed script, tests
   app/        api/ core/ db/ models/ schemas/ services/ storage/
-  alembic/    schema of record — 0001_initial, 0002_instance_metadata
+  alembic/    schema of record — 0001_initial, 0002_instance_metadata, 0003_invoices
   scripts/    seed.py (demo data), instance_cli.py, mysql_compat.py
   tests/      pytest suite
 frontend/     React storefront and admin workspace
@@ -85,7 +111,7 @@ cd backend  ; .venv\Scripts\python.exe -m pytest --cov=app
 cd frontend ; npx vitest run
 ```
 
-Current state: backend **134 passed**; frontend **24 passed**.
+Current state: backend **193 passed** (91% coverage); frontend **47 passed**.
 
 Offline MySQL portability check (connects to nothing):
 
