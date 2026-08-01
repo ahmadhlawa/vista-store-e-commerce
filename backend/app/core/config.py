@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
@@ -29,7 +31,13 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "sqlite+pysqlite:///./data/commerce_dev.db"
 
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    # NoDecode keeps pydantic-settings from JSON-decoding this inside the env/dotenv
+    # source, which would reject the documented comma-separated form before the
+    # validator below ever runs.
+    CORS_ORIGINS: Annotated[list[str], NoDecode] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
 
     STORAGE_PROVIDER: str = "local"
     LOCAL_MEDIA_ROOT: str = "./data/uploads"
@@ -51,8 +59,15 @@ class Settings(BaseSettings):
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:
+        """Accept the documented comma-separated form, and a JSON list as a courtesy."""
         if isinstance(value, str):
-            return [origin.strip() for origin in value.split(",") if origin.strip()]
+            text = value.strip()
+            if text.startswith("["):
+                try:
+                    return json.loads(text)
+                except json.JSONDecodeError:
+                    pass
+            return [origin.strip() for origin in text.split(",") if origin.strip()]
         return value
 
     @property
