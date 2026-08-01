@@ -20,6 +20,7 @@ dependencies = [
     "pwdlib[argon2]>=0.2.1",
     "PyMySQL>=1.1.1",
     "python-dotenv>=1.0",
+    "PyYAML>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -32,6 +33,8 @@ dev = [
 [project.scripts]
 commerce-admin = "app.initial_data:main"
 commerce-seed = "scripts.seed:main"
+commerce-instance = "scripts.instance_cli:main"
+commerce-mysql-check = "scripts.mysql_compat:main"
 
 [tool.setuptools]
 packages = ["app", "scripts"]

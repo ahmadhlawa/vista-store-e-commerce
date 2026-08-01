@@ -12,6 +12,7 @@ from app.models.catalog import (
     ProductVariantOptionValue,
 )
 from app.models.content import Article, HomeSection, StaticPage
+from app.models.instance import InstanceMetadata
 from app.models.marketing import Banner, Coupon, DeliveryArea, HeroSlide
 from app.models.media import MediaAsset
 from app.models.orders import Order, OrderItem, OrderStatusHistory
@@ -27,6 +28,7 @@ __all__ = [
     "DeliveryArea",
     "HeroSlide",
     "HomeSection",
+    "InstanceMetadata",
     "MediaAsset",
     "Order",
     "OrderItem",
