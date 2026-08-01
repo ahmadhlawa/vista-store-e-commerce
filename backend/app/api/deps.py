@@ -13,6 +13,7 @@ from app.core.enums import AdminRole
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models import AdminUser
+from app.services import store_settings as settings_service
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -64,6 +65,28 @@ def require_super_admin(admin: CurrentAdmin) -> AdminUser:
 
 
 SuperAdmin = Annotated[AdminUser, Depends(require_super_admin)]
+
+
+def require_storefront_open(db: DbSession) -> None:
+    """Close the public shopping surface while the owner has maintenance mode on.
+
+    Deliberately narrow. It guards the storefront's catalog, checkout and editorial
+    endpoints only — never `/health`, never `/api/v1/store/settings` (the maintenance
+    screen is built from it), never authentication and never the admin surface, so the
+    owner can keep working and can switch the setting back off from Admin.
+    """
+    row = settings_service.get_settings_row(db)
+    if row is not None and row.maintenance_mode:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "maintenance_mode",
+                "message": "المتجر في وضع الصيانة حالياً. نعود قريباً.",
+            },
+        )
+
+
+StorefrontOpen = Depends(require_storefront_open)
 
 
 @dataclass(slots=True)

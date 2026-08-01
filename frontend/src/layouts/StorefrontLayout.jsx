@@ -4,6 +4,7 @@ import sx from "../sx.js";
 import Header from "../components/Header.jsx";
 import Footer from "../components/Footer.jsx";
 import Overlays from "../components/Overlays.jsx";
+import MaintenanceScreen from "../components/Maintenance.jsx";
 import { TrustStrip } from "../components/Home.jsx";
 import { useShellView } from "../hooks/useShellView.js";
 import { useStore } from "../app/StoreProvider.jsx";
@@ -41,6 +42,13 @@ export default function StorefrontLayout() {
       }
     },
   };
+
+  // Maintenance mode replaces the storefront in place — no redirect, so there is no
+  // loop and no route to get stuck on. Gated on `ready` so the real setting decides,
+  // not the pre-fetch default. /admin never renders this layout.
+  if (store.ready && store.settings.maintenanceMode) {
+    return <MaintenanceScreen settings={store.settings} />;
+  }
 
   return (
     <div style={sx`direction:rtl;background:#FBF9F6;min-height:100vh;display:flex;flex-direction:column`}>

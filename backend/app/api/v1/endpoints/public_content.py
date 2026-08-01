@@ -26,6 +26,11 @@ from app.services import store_settings as settings_service
 
 router = APIRouter(tags=["public-content"])
 
+# Store identity is served from its own router because it must stay reachable while
+# maintenance mode is on — the maintenance screen is rendered from it. `router` is the
+# gated one; see `app/api/v1/router.py`.
+identity_router = APIRouter(tags=["public-content"])
+
 _NOT_FOUND = HTTPException(
     status_code=status.HTTP_404_NOT_FOUND,
     detail={"code": "not_found", "message": "العنصر غير موجود."},
@@ -41,7 +46,7 @@ def _within_window(stmt: Select, model) -> Select:
     )
 
 
-@router.get("/store/settings", response_model=StoreSettingsPublic)
+@identity_router.get("/store/settings", response_model=StoreSettingsPublic)
 def store_settings(db: DbSession):
     return settings_service.public_settings(db)
 
