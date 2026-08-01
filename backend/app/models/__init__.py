@@ -12,6 +12,7 @@ from app.models.catalog import (
     ProductVariantOptionValue,
 )
 from app.models.content import Article, HomeSection, StaticPage
+from app.models.imports import ImportBatch, ImportBatchRecord
 from app.models.instance import InstanceMetadata
 from app.models.invoices import Invoice, InvoiceItem, InvoiceSequence
 from app.models.marketing import Banner, Coupon, DeliveryArea, HeroSlide
@@ -29,6 +30,8 @@ __all__ = [
     "DeliveryArea",
     "HeroSlide",
     "HomeSection",
+    "ImportBatch",
+    "ImportBatchRecord",
     "InstanceMetadata",
     "Invoice",
     "InvoiceItem",

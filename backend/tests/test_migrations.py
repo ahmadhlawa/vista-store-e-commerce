@@ -23,6 +23,8 @@ EXPECTED_TABLES = {
     "delivery_areas",
     "hero_slides",
     "home_sections",
+    "import_batch_records",
+    "import_batches",
     "instance_metadata",
     "invoice_items",
     "invoice_sequences",
