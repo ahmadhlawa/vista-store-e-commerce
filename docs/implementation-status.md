@@ -5,6 +5,15 @@ session. Every figure below was produced by a command run in that session agains
 repository; none of it is from memory or carried over unverified from the previous
 handoff.
 
+> **Superseded in part by the 0.3.0-rc.1 acceptance pass** (branch
+> `feat/template-acceptance-rc`, 2026-08-01). That pass created a clean client instance
+> from scratch, completed maintenance mode, performed browser acceptance in real Chrome
+> and added an ephemeral MySQL 8 CI gate. Current gate-by-gate status is in
+> [acceptance/release-candidate-report.md](acceptance/release-candidate-report.md), and
+> the route-by-route visual record is in [acceptance/visual-qa.md](acceptance/visual-qa.md).
+> §10, §11 and §15 below have been corrected accordingly; the rest describes the MVP
+> session that produced the code and is left as written.
+
 ---
 
 ## 1. Objective
@@ -314,23 +323,26 @@ docs/known-limitations.md
 
 ## 10. Partially implemented (documented, not defects)
 
-1. **`maintenance_mode`** — stored, editable and exposed publicly, but the storefront does
-   not gate itself on it.
-2. **Recently-viewed products** — fetched one slug at a time; a batch endpoint would be
+1. **Recently-viewed products** — fetched one slug at a time; a batch endpoint would be
    better.
-3. **Home showcase backgrounds** — fixed gradients, not admin-editable.
-4. **Search** — normalised `LIKE` over `Product.search_text`; correct, but not a full-text
+2. **Home showcase backgrounds** — fixed gradients, not admin-editable.
+3. **Search** — normalised `LIKE` over `Product.search_text`; correct, but not a full-text
    index.
-5. **R2 storage** — interface boundary only; `save()` and `delete()` raise.
+4. **R2 storage** — interface boundary only; `save()` and `delete()` raise.
+
+`maintenance_mode` was the fifth entry here. It is complete as of 0.3.0-rc.1 — backend
+gate, Arabic RTL storefront screen, and tests at both layers.
 
 ---
 
 ## 11. Not done, and deliberately so
 
-1. **Browser verification** — no browser tooling was available. Every route renders under
-   jsdom and the production build succeeds, but nothing has been seen in a real browser.
-   **This remains the largest untested risk.** Do not claim visual success.
-2. **MySQL** — designed for, never connected to. See
+1. **Browser verification beyond Chrome** — the 0.3.0-rc.1 pass opened every public and
+   admin route in real Chrome 151 at 390 / 768 / 1440 px and fixed two mobile layout
+   defects ([acceptance/visual-qa.md](acceptance/visual-qa.md)). Firefox, WebKit, physical
+   devices and a visual-regression baseline are still missing.
+2. **MySQL in production** — proven in CI against an ephemeral MySQL 8 service on every
+   relevant push, never on a real server. See
    [future-mysql-migration.md](future-mysql-migration.md).
 3. **Deployment** — templates written; nothing installed, activated or executed anywhere.
 4. **React Router advisory** — `react-router-dom` 6.30.4 carries an open-redirect/XSS
@@ -404,17 +416,20 @@ frontend/node_modules/              frontend/dist/
 
 ## 15. If work continues
 
-The MVP scope is complete. Anything further is new work, and the sensible candidates, in
-order of value:
+Items 1, 3 and 5 of the previous list — browser verification, gating on
+`maintenance_mode`, and exercising MySQL — were done in the 0.3.0-rc.1 acceptance pass.
+What remains, in order of value:
 
-1. **Open the application in a real browser** and walk the flows visually, at desktop and
-   phone widths. This is the one gap that automated verification cannot close.
+1. **Add rate limiting to `/api/v1/auth/login`** before any public deployment. Nothing in
+   the application or the Nginx template does this today.
 2. **Decide on the React Router v7 upgrade** — see §11 item 4.
-3. **Gate the storefront on `maintenance_mode`**, the only stored-but-unused setting.
-4. **Add rate limiting to `/api/v1/auth/login`** before any public deployment.
-5. **Exercise the MySQL path** against a scratch database, following
-   [future-mysql-migration.md](future-mysql-migration.md).
-6. **Add ESLint and Ruff**, then a CI workflow running both suites.
+3. **Add ESLint and Ruff**, then extend CI to run both suites and both linters, not just
+   the MySQL gate.
+4. **Widen browser coverage** past Chrome, and keep a visual-regression baseline so a
+   future change cannot break the design silently.
+5. **Take a first client instance to a real server** and work through the operational half
+   of [future-mysql-migration.md](future-mysql-migration.md) — charset, users, privileges,
+   backups, pooling.
 
 Reproduction commands for the current state are in
 [local-setup.md](local-setup.md) and [sqlite-workflow.md](sqlite-workflow.md).

@@ -1,4 +1,4 @@
-﻿"""Data-layer behaviour that differs between SQLite and MySQL.
+"""Data-layer behaviour that differs between SQLite and MySQL.
 
 SQLite is permissive: it stores Decimal as float, JSON as text, ignores VARCHAR
 lengths and — unless told otherwise — does not enforce foreign keys. Everything here

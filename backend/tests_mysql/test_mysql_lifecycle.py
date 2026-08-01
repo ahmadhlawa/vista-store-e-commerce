@@ -1,4 +1,4 @@
-﻿"""The client lifecycle, run for real against MySQL 8.
+"""The client lifecycle, run for real against MySQL 8.
 
 Everything here shells out to the same commands an operator runs, so a green result
 means the documented lifecycle works on MySQL — not that a mock did.

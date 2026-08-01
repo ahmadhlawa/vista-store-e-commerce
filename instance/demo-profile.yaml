@@ -11,7 +11,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 profile_schema_version: 1
-template_version: "0.2.0"
+template_version: "0.3.0-rc.1"
 client_slug: "demo-store"
 
 store:

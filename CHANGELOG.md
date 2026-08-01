@@ -6,6 +6,71 @@ repository root; nothing else declares it.
 Instances record the template version they were initialized from in `instance_metadata`,
 and report it through `commerce-instance manifest`.
 
+## 0.3.0-rc.1 — 2026-08-01
+
+Release candidate. An acceptance pass over the working implementation: a clean client
+instance built from scratch and driven over real HTTP, maintenance mode completed, browser
+acceptance in real Chrome, and an ephemeral MySQL 8 gate in CI. Full evidence in
+[docs/acceptance/release-candidate-report.md](docs/acceptance/release-candidate-report.md).
+
+### Added
+
+- **Maintenance mode**, previously stored and editable but acted on by nothing.
+  - Backend: `require_storefront_open` closes the public catalog, checkout and editorial
+    routers with `503 maintenance_mode`. Store identity moved to its own ungated router,
+    because the maintenance screen is rendered from it. `/health`, authentication and the
+    whole admin surface stay open, so the owner can switch it back off; the storefront
+    returns on the next request, with no rebuild and no restart. Nothing redirects, so
+    there is no loop.
+  - Frontend: an Arabic RTL maintenance screen replaces the storefront in place, built
+    only from the public settings projection — store name, tagline and safe contact
+    details. `/admin` is a separate route branch and never reaches it.
+  - Tests: 9 backend, 5 frontend.
+- **Ephemeral MySQL 8 CI gate** — `.github/workflows/mysql-compatibility.yml`, a GitHub
+  Actions service container created for the job and destroyed with it. It proves, against
+  a real MySQL 8: Alembic upgrades a new empty database to head, the migrated schema
+  matches the models, every table is InnoDB/utf8mb4, profile validate/plan/apply succeed,
+  a repeated apply is idempotent, instance metadata is recorded, the manifest carries no
+  secrets, a conflicting slug is refused, the demo seed runs twice without changing a
+  single row count, admin creation and login work, categories and products persist,
+  `Decimal` money and JSON config round-trip exactly, and foreign keys, unique constraints
+  and guest checkout with inventory all behave. `tests_mysql/` sits outside `testpaths`,
+  so the SQLite suite is unchanged and a normal `pytest` run never collects it.
+- **`mysql` optional dependency group** — `PyMySQL[rsa]`, which MySQL 8 needs for its
+  default `caching_sha2_password` authentication. CI-and-deployment only; the SQLite
+  development runtime is unaffected.
+- **Acceptance documentation** — `docs/acceptance/release-candidate-report.md` (gate
+  matrix) and `docs/acceptance/visual-qa.md` (every route, viewport and interaction).
+
+### Fixed
+
+- **A profile could produce a dead storefront.** `contact.email` was validated as a plain
+  string, but bootstrap writes it into `StoreSettings` and `StoreSettingsPublic.email` is
+  an `EmailStr`. A profile with a reserved-TLD or malformed address validated, applied
+  cleanly, and then made `GET /api/v1/store/settings` return 500 — the storefront's first
+  call. The profile now uses the same `EmailStr`, so `commerce-instance validate` refuses
+  it up front with exit 2 and a message naming the field.
+- **The cart's order summary was unreachable on a phone.** `grid-column:1`/`grid-column:2`
+  fought `--shop`, which collapses to a single column below 900 px, so the summary landed
+  in an implicit off-canvas column — 118 px of it, including most of the checkout button,
+  clipped by the global `overflow-x:hidden`. The same declarations also inverted the
+  desktop layout. Removed; auto-placement and the existing `order` now do the work.
+- **A long store name broke the mobile header.** The logo block could not shrink, so a
+  realistic client store name pushed the cart button 7 px off the edge at 390 px on every
+  public route. It now shrinks and ellipsizes.
+- **The template shipped a previous client's identity.** `index.html` carried that store's
+  `<title>` and a monogram favicon, and the admin workspace never overrode the title. Both
+  are neutral now, and `AdminLayout` sets its own.
+
+### Notes
+
+- No storefront or Admin redesign. The three visual fixes restore the existing design's
+  intent at widths where it was broken; no colour, type scale, spacing token or layout
+  concept changed.
+- No deployment, and no MySQL server outside GitHub Actions was contacted. SQLite remains
+  the local runtime, and Docker is not a local requirement.
+- Backend 149 tests / 90 % coverage, frontend 29 tests, production build clean.
+
 ## 0.2.0 — 2026-08-01
 
 Productization: the template can now create clean, independent store instances from a

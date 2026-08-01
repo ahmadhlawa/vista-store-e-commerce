@@ -48,18 +48,18 @@ want before changing anything.
 
 The candidates listed in §15 of the handoff, in order of value:
 
-1. **Browser verification.** No browser tooling has ever been available in these sessions,
-   so nothing has been visually inspected. Open the app, walk the storefront and admin
-   flows at desktop and phone widths. This is the one gap automated checks cannot close.
-2. **Decide on the React Router v7 upgrade.** `react-router-dom` 6.30.4 carries an
+> Browser verification, `maintenance_mode` and the MySQL path were items 1, 3 and 5 of
+> this list. All three were completed in the 0.3.0-rc.1 acceptance pass — see
+> `docs/acceptance/release-candidate-report.md`. What is left:
+
+1. **Decide on the React Router v7 upgrade.** `react-router-dom` 6.30.4 carries an
    open-redirect/XSS advisory with **no fix inside v6**. `npm audit fix --force` installs
    the breaking v7. It was deliberately not taken; current exposure is assessed as low in
    `docs/known-limitations.md`. Treat it as its own planned piece of work with real
    regression testing — not as a drive-by audit fix.
-3. **Gate the storefront on `maintenance_mode`** — stored and editable, but nothing acts on it.
-4. **Rate limiting on `/api/v1/auth/login`** before any public deployment.
-5. **Exercise the MySQL path** against a scratch database, per `docs/future-mysql-migration.md`.
-6. **Add ESLint and Ruff**, then CI running both suites.
+2. **Rate limiting on `/api/v1/auth/login`** before any public deployment.
+3. **Add ESLint and Ruff**, then extend CI to run both suites and both linters.
+4. **Widen browser coverage past Chrome**, and keep a visual-regression baseline.
 
 ## Constraints you must respect
 

@@ -21,7 +21,7 @@
 profile_schema_version: 1
 
 # The Golden Template release this profile was written for (see the VERSION file).
-template_version: "0.2.0"
+template_version: "0.3.0-rc.1"
 
 # Stable identifier for the instance. Lowercase letters, digits and hyphens, 3-40
 # characters. Recorded in the database and refused if it ever changes.
