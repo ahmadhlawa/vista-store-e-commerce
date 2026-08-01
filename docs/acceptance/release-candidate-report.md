@@ -25,7 +25,7 @@ an earlier handoff, and nothing is asserted that was not observed.
 | Frontend tests | **PASS** | **29 passed**, 3 files |
 | Frontend build | **PASS** | 86 modules, `index-*.js` 387.44 kB (gzip 106.49 kB), built in 2.29 s |
 | Visual acceptance | **PASS** | real Chrome 151 at 390 / 768 / 1440; 78 route × viewport passes, 11 interaction passes, **3 defects found and fixed** — §5 |
-| MySQL CI | **PASS** | ephemeral MySQL 8 service in GitHub Actions, run #2, conclusion `success` — §6 |
+| MySQL CI | **PASS** | ephemeral MySQL 8 service in GitHub Actions; runs #2 and #3 both `success`, every step green — §6 |
 | Secret and tracked-runtime-file scan | **PASS** | 190/190 tracked files scanned, 0 real findings — §7 |
 
 **Every mandatory gate is verified.** The tag `v0.3.0-rc.1` is therefore created.
@@ -213,8 +213,16 @@ remote.
 
 - Run #1 — `failure`. Thirteen of fifteen tests passed; the two failures were in the test
   fixtures, which signed in with a reserved `.test` TLD. The same trap as §3, this time in
-  my own code, not the product's.
-- Run #2 — **`success`**, all steps green.
+  the test code, not the product's.
+- Run #2 — **`success`**, all twelve steps green.
+- Run #3, on the release-candidate commit — **`success`**, all twelve steps green:
+  containers initialised, dependencies installed, MySQL healthy, databases created,
+  offline portability check, Alembic upgrade to head, MySQL integration suite, the SQLite
+  suite unchanged, and the tracked-artefact check.
+
+The tag points at a commit whose only difference from the run #3 tree is documentation;
+`backend/`, `instance/`, `VERSION` and the workflow — every path the gate covers — are
+byte-identical.
 
 ---
 
