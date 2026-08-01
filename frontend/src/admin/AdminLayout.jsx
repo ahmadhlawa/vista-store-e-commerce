@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import sx from "../sx.js";
 import { useAdminAuth } from "./AdminAuth.jsx";
@@ -28,6 +28,12 @@ export default function AdminLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const items = NAV.filter((item) => !item.superOnly || isSuperAdmin);
+
+  // The admin area never loads StoreSettings, so without this the tab keeps
+  // whatever title index.html shipped with.
+  useEffect(() => {
+    document.title = "لوحة إدارة المتجر";
+  }, []);
 
   const linkStyle = ({ isActive }) =>
     sx`display:block;padding:11px 14px;border-radius:10px;font-size:14px;font-weight:${isActive ? 800 : 600};color:${isActive ? "#fff" : "#3B3730"};background:${isActive ? "#1F4E4A" : "transparent"};text-decoration:none`;

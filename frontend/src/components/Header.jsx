@@ -19,13 +19,16 @@ export default function Header({ v }) {
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18"></path></svg>
           </button>
 
-          <A href="/" style={sx`display:flex;flex-direction:column;gap:1px;flex:0 0 auto;text-decoration:none`}>
+          {/* `flex:0 1 auto` with `min-width:0`: the store name is client data, so a
+              long one must shrink and ellipsize rather than push the cart button off
+              the screen. It still never shrinks when there is room. */}
+          <A href="/" style={sx`display:flex;flex-direction:column;gap:1px;flex:0 1 auto;min-width:0;text-decoration:none`}>
             {v.logoUrl ? (
-              <img src={v.logoUrl} alt={v.storeName} style={sx`height:38px;width:auto;object-fit:contain`} />
+              <img src={v.logoUrl} alt={v.storeName} style={sx`height:38px;width:auto;max-width:100%;object-fit:contain`} />
             ) : (
-              <span style={sx`font-family:'Marcellus',serif;font-size:27px;line-height:1;letter-spacing:.14em;color:#1F4E4A`}>{v.storeName}</span>
+              <span style={sx`font-family:'Marcellus',serif;font-size:27px;line-height:1;letter-spacing:.14em;color:#1F4E4A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap`}>{v.storeName}</span>
             )}
-            {v.storeTagline && <span style={sx`font-size:10.5px;color:#9C958A;letter-spacing:.06em`}>{v.storeTagline}</span>}
+            {v.storeTagline && <span style={sx`font-size:10.5px;color:#9C958A;letter-spacing:.06em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap`}>{v.storeTagline}</span>}
           </A>
 
           <form onSubmit={v.submitSearch} role="search" style={sx`display:var(--desk);flex:1;max-width:560px;position:relative`}>

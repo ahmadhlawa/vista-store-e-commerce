@@ -16,7 +16,12 @@ export function CartPage({ v }) {
       )}
       {v.cartHasItems && (
         <div style={sx`display:grid;grid-template-columns:var(--shop);gap:24px;align-items:start;direction:rtl`}>
-          <div style={sx`grid-column:1;display:flex;flex-direction:column;gap:12px;order:2`}>
+          {/* No explicit grid-column: `--shop` collapses to a single column below
+              900px, so a hard `grid-column:2` put the summary in an implicit
+              off-canvas column. Auto-placement plus `order` gives the intended
+              sidebar on desktop and a clean stack on mobile — same pattern as
+              the listing page. */}
+          <div style={sx`display:flex;flex-direction:column;gap:12px;min-width:0;order:2`}>
             {v.cartRows.map((i) => (
               <div key={i.key} style={sx`display:flex;gap:14px;background:#fff;border:1px solid #E9E3DA;border-radius:14px;padding:14px;align-items:center;flex-wrap:wrap`}>
                 <span style={sx`width:88px;height:88px;border-radius:11px;background:${i.bg};flex:0 0 auto`}></span>
@@ -36,7 +41,7 @@ export function CartPage({ v }) {
             ))}
             <A href="/shop" style={sx`align-self:flex-start;margin-top:6px;font-size:13.5px;font-weight:700`}>→ متابعة التسوّق</A>
           </div>
-          <aside style={sx`grid-column:2;order:1;position:sticky;top:150px;background:#fff;border:1px solid #E9E3DA;border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:12px`}>
+          <aside style={sx`order:1;min-width:0;position:sticky;top:150px;background:#fff;border:1px solid #E9E3DA;border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:12px`}>
             <h2 style={sx`margin:0 0 4px;font-size:16px;font-weight:800`}>ملخّص الطلب</h2>
             <div style={sx`display:flex;justify-content:space-between;font-size:14px;color:#4A453E`}><span>المجموع الفرعي</span><strong>{v.subtotalText}</strong></div>
             {v.hasDiscount && <div style={sx`display:flex;justify-content:space-between;font-size:14px;color:#2E7D5B`}><span>الخصم ({v.couponLabel})</span><strong>−{v.discountText}</strong></div>}
