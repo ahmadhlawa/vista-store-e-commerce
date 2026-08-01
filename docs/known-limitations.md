@@ -90,6 +90,40 @@ Be precise about these when reporting status.
   confirmation, because there is no mail sending. The newsletter block is a call to action,
   not a subscription form.
 
+## Dependency advisories
+
+`npm audit` currently reports 7 advisories (5 moderate, 1 high, 1 critical). They split
+into two very different groups.
+
+**Development tooling only — not in the shipped bundle:** `vite`, `vite-node`, `esbuild`,
+`vitest`, `@vitest/mocker`. These affect the dev server and the test runner. The
+"critical" `vitest` entry requires the Vitest UI server to be listening, which this project
+never starts. Nothing here reaches a deployed instance, since production serves the static
+`dist/` output through Nginx.
+
+**A production dependency — `react-router` / `react-router-dom` 6.30.4.** The advisories
+are an open redirect via a backslash in `<Link>` / `useNavigate`, and an XSS following from
+it. This one ships to users, so it deserves a clear answer:
+
+- **There is no fix within v6.** The vulnerable range is `6.0.0 – 7.17.0`, and 6.30.4 is
+  already the newest v6 release. `npm audit fix --force` resolves it by installing React
+  Router **v7**, a breaking major upgrade.
+- **It was deliberately not upgraded.** A v7 migration is a framework change well beyond
+  this MVP's scope and would put the preserved design and the whole route layer at risk.
+  That is a decision to take deliberately, not as a side effect of an audit fix.
+- **Current exposure looks low.** Every `navigate()` call site uses a hard-coded literal
+  path prefix; the only user-supplied value that reaches routing is the search term, which
+  goes through `encodeURIComponent` into a query string, never into the path. `<Link to>`
+  targets come from static navigation constants, server-generated slugs and ids, or
+  admin-configured URLs — and `utils/A.jsx` sends anything matching `http(s):`, `tel:`,
+  `mailto:` or `wa.me` to a plain `<a>` rather than to the router. No unauthenticated,
+  user-controlled value reaches a router path today.
+
+Re-check this before a public launch, and treat "upgrade to React Router v7" as its own
+planned piece of work with its own regression testing. If a future change starts routing a
+user-supplied path (a `returnTo` parameter, for instance), the upgrade stops being
+optional.
+
 ## Quality tooling not configured
 
 - No ESLint config in `frontend/`, and no Ruff or mypy config in `backend/`.

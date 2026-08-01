@@ -1,116 +1,117 @@
 # Continuation prompt for the next session
 
-Paste everything between the markers into a fresh Claude Opus 5 / Claude Code session
-opened on `D:\Project\commerce-template`.
+The MVP scope described in `docs/implementation-status.md` is **complete and verified**.
+There is no unfinished task queued. Use this prompt only if new work is being started.
+
+Paste everything between the markers into a fresh Claude Code session opened on
+`D:\Project\commerce-template`.
 
 ---8<--- COPY FROM HERE ---8<---
 
-You are continuing an in-progress project. **Do not restart it and do not redo completed
-work.**
+You are continuing an existing, completed project. **Do not restart it, do not redesign the
+architecture, and do not redo completed work.**
 
 ## First, read the handoff
 
-Read `docs/implementation-status.md` in full before doing anything else. It is the
-authoritative record of what exists, what was verified, what fails, and what is left. It
-was written after inspecting the repository and running every verification command, so
-trust it over any assumption — but still verify the repository yourself before editing.
+Read `docs/implementation-status.md` in full before doing anything else. It records what
+exists, what was verified and with which command, and what was deliberately left out. It
+was written after running every verification command — but still verify the repository
+yourself, and **trust fresh command output over the document** if they ever disagree.
 
-Then inspect the real state before you change anything:
+Then inspect the real state:
 
 ```powershell
 cd D:\Project\commerce-template
 git status --short --branch
-git log --oneline -5
+git log --oneline --decorate -6
 git diff --check
 ```
 
-Read the actual files you are about to touch. Do not rely on the handoff alone for file
-contents.
+Read the actual files you are about to touch. Do not rely on the handoff for file contents.
 
 ## Where you are
 
 - Repository: `D:\Project\commerce-template`
-- Branch: `feat/fullstack-commerce-mvp` — **stay on it**
-- The backend is complete and verified: 70 pytest tests pass, 88 % coverage, Alembic
-  revision `0001_initial` builds the whole schema, the seed is idempotent, `/health`
-  returns 200, OpenAPI generates 62 paths.
-- The frontend rewrite is complete and builds (`✓ 85 modules transformed`), and 22 of its
-  24 Vitest tests pass.
-- Everything is preserved in a WIP commit. Nothing is pushed; the branch has no upstream.
+- Branch: `feat/fullstack-commerce-mvp` — **stay on it**, it is pushed and up to date
+- The backend, the storefront, the admin workspace, the deployment templates and the
+  documentation are all complete and verified.
+- Verified at the end of the last session: backend **74 pytest tests pass at 88 % coverage**;
+  frontend **24 Vitest tests pass**; `npm run build` succeeds; Alembic builds a clean
+  database to `0001_initial (head)`; the seed is idempotent (identical row counts across
+  all 24 tables); `/health` returns 200; OpenAPI generates **62 paths**; a 27-check
+  end-to-end run over real HTTP passed completely.
 
-## Your objective
+## There is no queued task
 
-Finish the remaining MVP scope, in this order. Section numbers refer to
-`docs/implementation-status.md`.
+Do not invent one. If the user has not asked for something specific, ask them what they
+want before changing anything.
 
-1. **Fix the two failing frontend tests** (§12.1). Both are ambiguous Testing Library
-   queries in the *test files* — `src/test/storefront.test.jsx:127` and
-   `src/test/admin.test.jsx:168`. Two one-line changes. Do not modify application code to
-   satisfy them. `npx vitest run` must then report 24 passed.
-2. **Run the local end-to-end smoke flow** and record what you actually observe: admin
-   login → create a product → see it in the storefront → add to cart → guest checkout →
-   the order appears in `/admin/orders` → change its status → upload an image in
-   `/admin/media` and attach it to a product. If browser tooling is unavailable, say so
-   plainly rather than claiming visual success.
-3. **Write the deployment templates** in `deployment/` (§17 step 3) — generic, clearly
-   marked as unactivated examples, using only the placeholders `CLIENT_SLUG`,
-   `CLIENT_DOMAIN`, `BACKEND_PORT`, `PROJECT_PATH`. Do not deploy or activate anything.
-4. **Write the documentation** (§11 item 2): rewrite the root `README.md` and add the
-   `docs/` pages for local setup, backend architecture, frontend architecture, the
-   database model, the API modules, the admin capability list, the SQLite workflow, the
-   future MySQL migration, the future R2 integration, deployment template usage, the
-   new-client cloning checklist, backup/restore, and known limitations.
-5. **Commit** in clear checkpoints and **run the full verification gate** (§17 step 6)
-   before claiming anything is done.
-6. **Push**: `git push -u origin feat/fullstack-commerce-mvp`. **Do not merge.**
+The candidates listed in §15 of the handoff, in order of value:
+
+1. **Browser verification.** No browser tooling has ever been available in these sessions,
+   so nothing has been visually inspected. Open the app, walk the storefront and admin
+   flows at desktop and phone widths. This is the one gap automated checks cannot close.
+2. **Decide on the React Router v7 upgrade.** `react-router-dom` 6.30.4 carries an
+   open-redirect/XSS advisory with **no fix inside v6**. `npm audit fix --force` installs
+   the breaking v7. It was deliberately not taken; current exposure is assessed as low in
+   `docs/known-limitations.md`. Treat it as its own planned piece of work with real
+   regression testing — not as a drive-by audit fix.
+3. **Gate the storefront on `maintenance_mode`** — stored and editable, but nothing acts on it.
+4. **Rate limiting on `/api/v1/auth/login`** before any public deployment.
+5. **Exercise the MySQL path** against a scratch database, per `docs/future-mysql-migration.md`.
+6. **Add ESLint and Ruff**, then CI running both suites.
 
 ## Constraints you must respect
 
-- **Preserve the approved architecture.** §14 of the handoff lists the decisions that must
-  not change without a stated reason — in particular: the frontend stays JavaScript/JSX,
-  the original design and its flat `v` view-model stay intact, the server owns every
-  price and total, Alembic is the schema of record, and nothing fabricates data the
-  system does not actually have.
-- **Do not restart or rewrite completed work.** The backend, the storefront rewrite and
-  the admin workspace are done. Change them only to fix a defect you have actually
-  reproduced.
+- **Preserve the approved architecture.** §12 of the handoff lists the decisions that must
+  not change without a stated reason: the frontend stays JavaScript/JSX, the flat `v`
+  view-model stays, the server owns every price and total, Alembic is the schema of record,
+  and nothing fabricates data the system does not have.
 - **Do not reset, revert, discard, clean, stash, force-push or amend published commits.**
-- **Do not touch `main`.** Do not merge into it.
+- **Do not touch `main`.** It is at `0c6ff5d` and is ahead of this branch on an unrelated
+  line; do **not** merge it in, and do not merge this branch into it.
 - **Do not touch, read from, or continue `feat/frontend-foundation`.** Its incomplete
   TypeScript migration must not be reused.
-- **Do not read, write, copy from, or run anything inside `D:\Project\MALIK`.** Anchor
-  every command with an explicit `D:\Project\commerce-template` path.
-- **Do not access any production system**: no SSH, no production servers, no real MySQL,
-  no Nginx, no systemd, no Redis, no Cloudflare, no `/opt/projects`, no T.A.S, no
-  Hani Yaseen, no Portfolio. Local SQLite only.
-- **Never commit a real `.env`, a SQLite database, uploaded media, `node_modules`, `dist`,
-  or any secret.** Do not re-add a generic `uploads/` rule to `.gitignore` — it would make
-  `backend/data/uploads/.gitkeep` impossible to track (see §14 item 13).
-- **No multi-tenancy**, no `tenant_id`, no shared SaaS database. One instance per client.
+- **Do not read, write, copy from, or run anything inside `D:\Project\MALIK`.** Anchor every
+  command with an explicit `D:\Project\commerce-template` path.
+- **Do not access any production system**: no SSH, no production servers, no real MySQL, no
+  Nginx, no systemd, no Redis, no Cloudflare, no deployment environment. Local SQLite only.
+- **Never commit** a real `.env`, a SQLite database, uploaded media, `node_modules`, `dist`,
+  or any secret. Do not re-add a generic `uploads/` rule to `.gitignore` — it would make
+  `backend/data/uploads/.gitkeep` untrackable (handoff §12 item 13).
+- **No multi-tenancy**, no `tenant_id`, no shared database. One instance per client.
+- **Do not widen the project** into SaaS, online card payments, customer accounts, real
+  MySQL connectivity, real R2 connectivity or production deployment.
 
-## Verification before you claim completion
+## Local setup
 
-Run these and report the real output. Do not describe unfinished work as complete, and do
-not claim a visual result you have not inspected.
+`backend/.venv` and `backend/.env` already exist on the development machine. If either is
+missing, follow `docs/local-setup.md` — do not improvise.
 
 ```powershell
 cd D:\Project\commerce-template\backend
-.venv\Scripts\python.exe -m pytest --cov=app
-$env:DATABASE_URL="sqlite+pysqlite:///./data/scratch.db"
-.venv\Scripts\alembic.exe upgrade head
-.venv\Scripts\python.exe -m scripts.seed
-Remove-Item .\data\scratch.db -Force; Remove-Item Env:\DATABASE_URL
+.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 
 cd D:\Project\commerce-template\frontend
-npm ci
-npx vitest run
+npm run dev
+```
+
+## Verification before you claim anything
+
+Run these and report the real output. Never describe unfinished work as complete, and never
+claim a visual result you have not actually looked at.
+
+```powershell
+cd D:\Project\commerce-template\backend
+.venv\Scripts\python.exe -m pytest --cov=app          # expect 74 passed, 88 %
+
+cd D:\Project\commerce-template\frontend
+npx vitest run                                        # expect 24 passed
 npm run build
 
 cd D:\Project\commerce-template
 git status --short --branch
 git diff --check
 ```
-
-Start with task 1.
 
 ---8<--- COPY TO HERE ---8<---
