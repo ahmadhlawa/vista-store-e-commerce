@@ -1,9 +1,22 @@
 # Future MySQL migration
 
-**Status: designed for, not tested.** The models, types and dependencies were chosen so
-that moving to MySQL 8 is a configuration change rather than a rewrite. No MySQL
-connection has ever been made from this repository, so treat the checklist below as work
-still to be done and verified, not as a completed migration.
+**Status: exercised in CI, never deployed.** The models, types and dependencies were
+chosen so that moving to MySQL 8 is a configuration change rather than a rewrite, and
+since 0.3.0-rc.1 `.github/workflows/mysql-compatibility.yml` proves that against a real —
+but ephemeral — MySQL 8 service on every relevant push: Alembic upgrades an empty
+database to head, the migrated schema matches the models, every table is InnoDB/utf8mb4,
+the client lifecycle runs and is idempotent, the demo seed runs twice without changing a
+row count, and `Decimal` money, JSON config, foreign keys, unique constraints and guest
+checkout all behave.
+
+That is a compatibility proof, not a deployment. **No MySQL server outside GitHub Actions
+has ever been contacted from this repository**, and the operational checklist below —
+charset, users, privileges, backups, connection pooling — is still work to be done on the
+day a client instance actually moves.
+
+> The CI gate installs `pip install -e ".[dev,mysql]"`. The `mysql` extra pulls
+> `PyMySQL[rsa]`, which MySQL 8 needs for its default `caching_sha2_password`
+> authentication. A real MySQL deployment needs the same extra.
 
 One database and one database user per client instance. No shared database, ever.
 
@@ -34,7 +47,7 @@ DATABASE_URL=mysql+pymysql://commerce_user:<password>@127.0.0.1:3306/commerce_da
 alembic upgrade head
 ```
 
-## What to verify — none of this has been done
+## What to verify on a real server — CI does not do any of this
 
 **1 — Charset and collation.** Create the database explicitly; do not rely on the server
 default. The content is Arabic and needs full Unicode:

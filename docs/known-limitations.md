@@ -23,9 +23,6 @@ These are decisions, not gaps. Adding any of them is a change of product, not a 
 
 ## Partly implemented
 
-- **`maintenance_mode`** is stored, editable in `/admin/settings` and exposed on the public
-  settings payload, but **the storefront does not gate itself on it**. Turning it on
-  currently changes nothing a visitor sees.
 - **Recently-viewed products** are fetched one slug at a time (`Promise.allSettled` over up
   to six requests). Correct, but a batch endpoint would be better.
 - **Home showcase blocks** use fixed gradient backgrounds. Which sections appear is
@@ -40,14 +37,16 @@ These are decisions, not gaps. Adding any of them is a change of product, not a 
 
 Be precise about these when reporting status.
 
-- **No browser verification has been performed.** Every route renders under jsdom in the
-  Vitest suite and the production build succeeds, but no page has been opened in a real
-  browser during this work, and no visual or responsive check has been made. Visual
-  regressions in the preserved design are the largest untested risk.
-- **MySQL is designed for, not tested.** Types and dependencies were chosen to be
-  portable, but no MySQL connection has ever been made. Expect the first
-  `alembic upgrade head` against MySQL to need attention — index key length on long slug
-  columns under `utf8mb4` is the likely first failure. See
+- **Browser verification covers Chrome only.** Every public and admin route was opened in
+  real Chrome 151 at 390 / 768 / 1440 px during the 0.3.0-rc.1 acceptance pass, and two
+  mobile layout defects were found and fixed —
+  [acceptance/visual-qa.md](acceptance/visual-qa.md). Firefox, Safari/WebKit and physical
+  devices remain untested, and no visual-regression baseline is kept, so a future change
+  can still break the design silently.
+- **MySQL is proven in CI, not in production.** `.github/workflows/mysql-compatibility.yml`
+  runs the migration, the client lifecycle, the demo seed and focused integration tests
+  against an ephemeral MySQL 8 service on every relevant push. No MySQL server outside CI
+  has ever been contacted, and nothing has been deployed. See
   [future-mysql-migration.md](future-mysql-migration.md).
 - **The deployment templates have never been installed or run** on any server. They are
   reviewed examples, not proven configuration.

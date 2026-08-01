@@ -1,4 +1,4 @@
-"""Data-layer behaviour that differs between SQLite and MySQL.
+﻿"""Data-layer behaviour that differs between SQLite and MySQL.
 
 SQLite is permissive: it stores Decimal as float, JSON as text, ignores VARCHAR
 lengths and — unless told otherwise — does not enforce foreign keys. Everything here
@@ -35,7 +35,7 @@ def unique(prefix: str) -> str:
 
 @pytest.fixture()
 def admin_token(db: Session, client) -> str:
-    email = f"{unique('mysql-admin')}@commerce-ci.test"
+    email = f"{unique('mysql-admin')}@example.com"
     password = "MysqlOnlyPassw0rd!7"
     db.add(
         AdminUser(

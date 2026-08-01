@@ -119,8 +119,11 @@ The store's identity, all of it data rather than code:
 - Currency
 - Default SEO title and description
 - Order notification address (never exposed on the public settings endpoint)
-- `maintenance_mode` — **stored and editable, but the storefront does not yet act on it**;
-  see [known-limitations.md](known-limitations.md)
+- `maintenance_mode` — turning it on closes the public storefront: the shop shows an
+  Arabic maintenance screen built from this store's identity and contact details, and the
+  public catalog, checkout and editorial endpoints answer `503 maintenance_mode`. Admin
+  login, the admin API and `/health` stay open, so the owner can switch it back off from
+  this same screen; the storefront returns on the next request, with no rebuild or restart
 
 ## Admin accounts — `/admin/admins` (super admin only)
 

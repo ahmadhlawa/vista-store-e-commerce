@@ -1,4 +1,4 @@
-"""The client lifecycle, run for real against MySQL 8.
+﻿"""The client lifecycle, run for real against MySQL 8.
 
 Everything here shells out to the same commands an operator runs, so a green result
 means the documented lifecycle works on MySQL — not that a mock did.
@@ -24,7 +24,7 @@ REPO_ROOT = BACKEND_ROOT.parent
 EXAMPLE_PROFILE = REPO_ROOT / "instance" / "client-profile.example.yaml"
 DEMO_PROFILE = REPO_ROOT / "instance" / "demo-profile.yaml"
 
-ADMIN_EMAIL = "ci-owner@commerce-ci.test"
+ADMIN_EMAIL = "ci-owner@example.com"
 ADMIN_PASSWORD = "CiOnlyPassw0rd!42"
 
 
