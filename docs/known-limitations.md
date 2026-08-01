@@ -60,9 +60,11 @@ These are decisions, not gaps. Adding any of them is a change of product, not a 
   admin-controlled; the background is not yet editable.
 - **Search** is a normalised `LIKE` over `Product.search_text`. It tolerates spelling and
   diacritic variation and is correct, but it is not a full-text index and will not scale.
-- **Cloudflare R2 storage** is an interface boundary only. `save()` and `delete()` raise;
-  local disk is the only working provider. See
-  [future-r2-integration.md](future-r2-integration.md).
+- **Cloudflare R2 storage** is implemented but has never touched a real bucket. `save()`,
+  `delete()`, `exists()` and prefix containment are written and unit-tested against a stub
+  S3 client; no credentials have ever been available here, so the live smoke test is
+  **blocked, not passed**. Local disk remains the default and the only provider proven end
+  to end. See [deployment/r2-preview-setup.md](deployment/r2-preview-setup.md).
 
 ## Not verified
 
@@ -77,8 +79,17 @@ Be precise about these when reporting status.
 - **MySQL is proven in CI, not in production.** `.github/workflows/mysql-compatibility.yml`
   runs the migration, the client lifecycle, the demo seed and focused integration tests
   against an ephemeral MySQL 8 service on every relevant push. No MySQL server outside CI
-  has ever been contacted, and nothing has been deployed. See
-  [future-mysql-migration.md](future-mysql-migration.md).
+  has ever been contacted, and nothing has been deployed. An isolated local development
+  container is now configured in `compose.mysql.dev.yml`, but **it has never been run** —
+  Docker is not installed on the machine this was written on. See
+  [future-mysql-migration.md](future-mysql-migration.md) and
+  [deployment/mysql-local-development.md](deployment/mysql-local-development.md).
+- **The preview catalog is demonstration content, not Vista Store's.** Every product name
+  and price in `instance/preview/vista-social-preview.yaml` is invented. It is removable
+  with `vista-preview purge --confirm`. See
+  [client/preview-content-manifest.md](client/preview-content-manifest.md).
+- **The preview catalog has never been looked at in a browser.** No browser tooling was
+  available. See [client/preview-visual-qa.md](client/preview-visual-qa.md).
 - **The deployment templates have never been installed or run** on any server. They are
   reviewed examples, not proven configuration.
 - **Python 3.13 is what the development environment runs**, while the code targets 3.12+.

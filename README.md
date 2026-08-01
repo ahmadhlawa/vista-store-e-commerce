@@ -17,8 +17,9 @@ in data rather than in code, so the owner edits it from the admin area.
 | --- | --- |
 | Template origin | [docs/template-origin.md](docs/template-origin.md) — commit `dba6a67`, version `0.3.0-rc.1` |
 | Instance profile | [instance/vista-store.yaml](instance/vista-store.yaml) |
-| What is verified | [docs/client/facebook-source-audit.md](docs/client/facebook-source-audit.md) |
+| What is verified | [docs/client/social-source-audit.md](docs/client/social-source-audit.md) |
 | What is missing | [docs/client/data-needed-from-owner.md](docs/client/data-needed-from-owner.md) |
+| Preview catalog | [docs/client/preview-content-manifest.md](docs/client/preview-content-manifest.md) — demonstration content, removable in one command |
 | Local acceptance | [docs/client/local-acceptance.md](docs/client/local-acceptance.md) |
 | Hosting | [docs/deployment/cpanel-handoff.md](docs/deployment/cpanel-handoff.md) |
 
@@ -84,6 +85,23 @@ npm run dev                     # proxies /api, /media and /health to 127.0.0.1:
 The storefront is then on <http://localhost:5173> and the admin area on
 <http://localhost:5173/admin/login>.
 
+### Optional: load the preview catalog
+
+The store starts empty, because no Vista Store product could be verified. To see it with
+plausible demonstration content instead:
+
+```powershell
+cd backend
+.venv\Scripts\python.exe -m scripts.preview_cli seed     # 7 categories, 25 products
+.venv\Scripts\python.exe -m scripts.preview_cli status
+.venv\Scripts\python.exe -m scripts.preview_cli purge --confirm   # take it all back out
+```
+
+Every name and price in it is invented; see
+[docs/client/preview-content-manifest.md](docs/client/preview-content-manifest.md). Set
+`VITE_PREVIEW_NOTICE` in `frontend/.env` to show the "preview data" banner while it is
+loaded.
+
 Full walkthrough, including troubleshooting: [docs/local-setup.md](docs/local-setup.md).
 
 ## Layout
@@ -94,8 +112,8 @@ CHANGELOG.md  template releases
 instance/     validated, non-secret instance profiles
 backend/      FastAPI application, Alembic migrations, seed script, tests
   app/        api/ core/ db/ models/ schemas/ services/ storage/
-  alembic/    schema of record — 0001_initial, 0002_instance_metadata, 0003_invoices
-  scripts/    seed.py (demo data), instance_cli.py, mysql_compat.py
+  alembic/    schema of record — 0001_initial … 0004_import_batches
+  scripts/    seed.py (demo data), instance_cli.py, preview_cli.py, mysql_compat.py
   tests/      pytest suite
 frontend/     React storefront and admin workspace
   src/        api/ app/ components/ hooks/ layouts/ pages/ admin/

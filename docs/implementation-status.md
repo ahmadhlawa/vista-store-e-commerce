@@ -1,5 +1,96 @@
 # Implementation status
 
+## Preview catalog, R2 storage and MySQL runtime — 2026-08-02
+
+**Branch:** `feat/vista-preview-data-storage`, cut from `feat/vista-store-initial-release`
+at `db16863`. **Not merged, not pushed** — this repository has no `origin` remote, only
+the read-only `template-upstream`.
+
+| Phase | State |
+| --- | --- |
+| 1. Social source audit | **Done** — Instagram readable, Facebook still login-walled. [client/social-source-audit.md](client/social-source-audit.md) |
+| 2. Preview dataset | **Done** — `instance/preview/vista-social-preview.yaml`: 7 categories, 25 products, 12 media, 1 delivery area, 3 hero slides, 2 banners, 1 coupon |
+| 3. Preview batch lifecycle | **Done** — `import_batches` / `import_batch_records`, revision `0004`, `vista-preview validate/plan/seed/status/purge` |
+| 4. R2 storage provider | **Done as code**, **live verification BLOCKED** — no credentials in this environment |
+| 5. MySQL development runtime | **Done as configuration**, **live verification BLOCKED** — Docker not installed |
+| 6. Storefront preview notice | **Done** — `VITE_PREVIEW_NOTICE`, absent from the bundle when unset |
+| 7. Visual QA | **NOT DONE** — no browser tooling available. [client/preview-visual-qa.md](client/preview-visual-qa.md) records what was and was not verified |
+
+### Verification (all run in this session)
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Backend suite + coverage | `pytest --cov=app` | **259 passed**, **91 %** (baseline 193) |
+| Frontend suite | `npx vitest run` | **53 passed** (baseline 47) |
+| Frontend build | `npm run build` | clean, 405.68 kB JS / 110.91 kB gzip |
+| Preview notice toggle | two builds | string present when configured, **absent from the bundle** when not |
+| MySQL portability gate | `python -m scripts.mysql_compat --verbose` | **8 checks, 0 failures, 0 warnings**, head `0004_import_batches`, 29 tables |
+| Alembic on a clean database | `alembic upgrade head` | `0001 → 0002 → 0003 → 0004` |
+| Preview seed / idempotency | `vista-preview seed` ×3 | `create=54`, then `skip=53, update=1` twice — the single update is the batch's own seed counter |
+| Preview purge, dry run | `vista-preview purge` | `delete=53`, nothing written |
+| Preview purge, applied | `vista-preview purge --confirm` | `delete=66` (53 rows + 12 storage objects + the batch); status then reports the batch gone |
+| Re-seed after purge | `vista-preview seed` | `create=54`, `seed_count` back to 1 |
+| **Live storefront over HTTP** | operator script, uvicorn + seeded SQLite | **39/39 checks** |
+| **Routes through the real Vite dev server** | 19 SPA routes + 8 proxied API paths + media | **28/28 reachable** |
+| Whitespace | `git diff --check` | clean |
+
+The live pass proved, among other things: a client-supplied `unit_price` of 1 is ignored
+and the order totals 190; `payment_method: card` is refused with 422; confirming the order
+issued exactly one invoice, `INV-000001`, matching the order total; the preview coupon
+discounts server-side; and the preview delivery area is the only one, labelled and priced
+at zero.
+
+### Two defects found and fixed while exercising live data
+
+1. **A sale was being mistaken for an owner edit.** `stock_quantity` was in the row
+   fingerprint, so buying a preview product made it look edited — `purge` then skipped it
+   with a misleading reason and left it behind. Stock is now excluded.
+2. **`--force` bypassed the never-delete guard.** The refusal that protects a product an
+   order references ran only on the not-edited branch, so a forced purge of an edited row
+   walked straight past it. The guard now runs first, for every row, and no flag overrides
+   it.
+
+Both have regression tests.
+
+### Blocked, and honestly so
+
+* **Live R2 smoke test — BLOCKED.** `backend/.env` carries the `R2_*` keys empty and no
+  `R2_*` variable is set in the environment. The provider is implemented and unit-tested
+  against a stub; **no object has ever been written to a real bucket.** Exact steps to
+  finish: [deployment/r2-preview-setup.md](deployment/r2-preview-setup.md).
+* **MySQL runtime acceptance — BLOCKED.** Docker is not installed (`docker --version`
+  unavailable; no install under `%ProgramFiles%\Docker` or `%LOCALAPPDATA%\Docker`).
+  Nothing was installed to work around it and no existing MySQL server was contacted. The
+  13-step sequence is written and ready: [deployment/mysql-local-development.md](deployment/mysql-local-development.md).
+* **Visual QA — NOT DONE.** No Playwright, no Puppeteer, no Chrome or Edge on `PATH`, no
+  browser tool in the harness. Nothing has been looked at. The route table in
+  [client/preview-visual-qa.md](client/preview-visual-qa.md) is all ✗ and must stay that
+  way until someone runs it.
+
+### Next, in order
+
+1. **Do the visual QA** at 390 / 768 / 1440 px with the preview catalog loaded — commands
+   are at the bottom of [client/preview-visual-qa.md](client/preview-visual-qa.md). Print
+   an invoice for the graduation package order; that is where the first page break lands.
+2. **Supply R2 credentials** and run the smoke test in
+   [deployment/r2-preview-setup.md](deployment/r2-preview-setup.md) §3.
+3. **Install Docker** and run the 13-step sequence in
+   [deployment/mysql-local-development.md](deployment/mysql-local-development.md).
+4. **Send the owner [client/data-needed-from-owner.md](client/data-needed-from-owner.md).**
+   The preview catalog buys time; it does not replace a single item on that list.
+5. **Settle the currency before the first real order.** Still unverified, still expensive
+   to change once an invoice exists.
+
+### The exact command to remove the preview
+
+```
+cd backend
+.venv\Scripts\python.exe -m scripts.preview_cli purge            # dry run
+.venv\Scripts\python.exe -m scripts.preview_cli purge --confirm  # apply
+```
+
+---
+
 ## Vista Store client instance — 2026-08-02
 
 **Branch:** `feat/vista-store-initial-release` · **Not merged, not pushed.**
@@ -396,6 +487,8 @@ docs/known-limitations.md
 3. **Search** — normalised `LIKE` over `Product.search_text`; correct, but not a full-text
    index.
 4. **R2 storage** — interface boundary only; `save()` and `delete()` raise.
+   *Superseded 2026-08-02:* implemented on `feat/vista-preview-data-storage`, unit-tested
+   against a stub, **never run against a real bucket**. See the top of this file.
 
 `maintenance_mode` was the fifth entry here. It is complete as of 0.3.0-rc.1 — backend
 gate, Arabic RTL storefront screen, and tests at both layers.
