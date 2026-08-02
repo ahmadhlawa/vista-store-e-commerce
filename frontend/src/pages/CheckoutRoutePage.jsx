@@ -58,7 +58,13 @@ export default function CheckoutRoutePage() {
     };
   }, [cart, coupon.applied, form.areaId]);
 
-  const update = (patch) => setCheckoutForm((current) => ({ ...current, ...patch }));
+  const update = (patch) => {
+    const next = { ...form, ...patch };
+    setCheckoutForm(next);
+    // Once the form has been submitted and errors are showing, fixing a field
+    // clears its message straight away rather than at the next submit.
+    setErrors((current) => (Object.keys(current).length ? validate(next) : current));
+  };
 
   const placeOrder = async (event) => {
     event.preventDefault();

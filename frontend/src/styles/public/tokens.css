@@ -100,7 +100,9 @@
   /* ── aspect ratios ───────────────────────────────────────────────────── */
   --vs-ar-product: 1 / 1;
   --vs-ar-category: 4 / 5;
-  --vs-ar-package: 3 / 2;
+  /* Square by default so a package sitting in a mixed catalogue grid lines up
+     with the products around it; the dedicated package grid widens it. */
+  --vs-ar-package: 1 / 1;
   --vs-ar-hero: 16 / 7;
 }
 

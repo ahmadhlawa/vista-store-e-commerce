@@ -260,8 +260,12 @@ def test_unrelated_media_is_neither_inspected_nor_touched(
     db.commit()
 
     importer.seed()
-    (storage.root / db.query(MediaAsset).filter(MediaAsset.original_filename == "tile.png")
-     .one().stored_key).unlink()
+    # Whatever the batch named its own artwork, delete that file — not the
+    # owner's — so the repair pass has something of its own to put back.
+    preview_media = (
+        db.query(MediaAsset).filter(MediaAsset.original_filename != "owner.png").one()
+    )
+    (storage.root / preview_media.stored_key).unlink()
     importer.seed()
 
     survivor = db.query(MediaAsset).filter(MediaAsset.original_filename == "owner.png").one()

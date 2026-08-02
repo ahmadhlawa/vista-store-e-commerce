@@ -52,7 +52,9 @@ def test_shipped_vista_dataset_is_valid() -> None:
     assert dataset.media_prefix.endswith("/")
     counts = dataset.counts()
     assert 5 <= counts["categories"] <= 8
-    assert 18 <= counts["products"] <= 30
+    # A demonstration catalogue, not a dump: wide enough to fill every storefront
+    # section, small enough to stay reviewable and removable in one batch.
+    assert 18 <= counts["products"] <= 60
     assert counts["delivery_areas"] >= 1
     assert counts["hero_slides"] >= 1
 

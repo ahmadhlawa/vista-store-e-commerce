@@ -15,7 +15,22 @@ body {
   margin: 0;
   padding: 0;
   background: #fbf9f6;
-  overflow-x: hidden;
+  /* `clip`, not `hidden`: `overflow-x: hidden` makes the body a scroll
+     container, which silently disables every `position: sticky` inside it —
+     the storefront header included. `clip` keeps the same safety net against a
+     stray horizontal overflow without creating that scroll container. */
+  overflow-x: clip;
+}
+
+/* The storefront header is sticky, so anchored navigation has to clear it. */
+html {
+  scroll-padding-top: 140px;
+}
+
+@media (max-width: 899px) {
+  html {
+    scroll-padding-top: 72px;
+  }
 }
 
 body {

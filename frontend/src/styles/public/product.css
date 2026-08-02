@@ -7,15 +7,32 @@
 .vs-pdp {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.04fr);
-  gap: 32px;
+  grid-template-rows: auto auto;
+  gap: 28px 32px;
   align-items: start;
   padding-block: 20px 0;
+}
+
+.vs-pdp > .vs-gallery {
+  grid-row: 1 / -1;
+}
+
+.vs-pdp__info,
+.vs-pdp__panels {
+  grid-column: 2;
 }
 
 @media (max-width: 899px) {
   .vs-pdp {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
     gap: 22px;
+  }
+  .vs-pdp > .vs-gallery,
+  .vs-pdp__info,
+  .vs-pdp__panels {
+    grid-column: auto;
+    grid-row: auto;
   }
 }
 
@@ -157,7 +174,7 @@
 }
 
 .vs-pdp__panels {
-  padding-block-start: 34px;
+  min-width: 0;
 }
 
 /* package contents ------------------------------------------------------ */

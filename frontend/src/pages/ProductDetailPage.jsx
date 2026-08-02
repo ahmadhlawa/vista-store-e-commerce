@@ -263,11 +263,13 @@ export default function ProductDetailPage() {
               </li>
             </ul>
           </div>
-        </div>
 
-        <section className="vs-section--tight vs-pdp__panels">
-          <ProductPanels panels={panels} />
-        </section>
+          {/* Inside the product grid rather than under it: on desktop the panels
+              fill the column beside the gallery instead of leaving it blank. */}
+          <section className="vs-pdp__panels">
+            <ProductPanels panels={panels} />
+          </section>
+        </div>
       </div>
 
       {related.length > 0 && (

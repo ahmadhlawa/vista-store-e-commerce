@@ -157,6 +157,7 @@
 
 .vs-grid--packages {
   grid-template-columns: repeat(var(--vs-cols-pkg), minmax(0, 1fr));
+  --vs-ar-package: 3 / 2;
 }
 
 /* Horizontal rail: same cards, scrolled instead of wrapped. */
