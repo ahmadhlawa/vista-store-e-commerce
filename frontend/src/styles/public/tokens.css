@@ -1,0 +1,155 @@
+/* Vista public storefront design tokens.
+   Everything is scoped to `.vs-public`, the storefront shell root, so the admin
+   workspace under /admin never inherits a single storefront value. Brand colours
+   are overwritten at runtime by StoreProvider from StoreSettings. */
+
+.vs-public {
+  /* ── layout ──────────────────────────────────────────────────────────── */
+  --vs-container: 1400px;
+  --vs-container-narrow: 1080px;
+  --vs-gutter: 20px;
+  --vs-section: 68px;
+  --vs-section-tight: 40px;
+  --vs-grid-gap: 20px;
+  --vs-cols: 4;
+  --vs-cols-cat: 4;
+  --vs-cols-pkg: 3;
+
+  /* ── header ──────────────────────────────────────────────────────────── */
+  --vs-strip-h: 38px;
+  --vs-header-h: 76px;
+  --vs-nav-h: 52px;
+  --vs-rail-h: 0px;
+  /* What a sticky element must clear. Kept as one token so page-level sticky
+     panels never re-derive it. */
+  --vs-sticky-top: calc(var(--vs-header-h) + var(--vs-nav-h) + 16px);
+
+  /* ── surfaces ────────────────────────────────────────────────────────── */
+  --vs-page: #fbf9f6;
+  --vs-surface: #ffffff;
+  --vs-surface-2: #f4f1ec;
+  --vs-surface-3: #efeae1;
+  --vs-surface-dark: #1a1815;
+  --vs-surface-dark-2: #241f1a;
+
+  /* ── borders ─────────────────────────────────────────────────────────── */
+  --vs-border: #e9e3da;
+  --vs-border-strong: #dcd3c6;
+  --vs-border-dark: #35312b;
+
+  /* ── text ────────────────────────────────────────────────────────────── */
+  --vs-ink: #1e1b18;
+  --vs-ink-2: #4a453e;
+  --vs-ink-3: #7c766d;
+  --vs-ink-4: #9c958a;
+  --vs-ink-invert: #ffffff;
+
+  /* ── brand (StoreProvider overrides --vs-primary/-accent/-success) ───── */
+  --vs-primary: #1f4e4a;
+  --vs-primary-dark: #163a37;
+  --vs-primary-mid: #27615c;
+  --vs-primary-soft: #f1f5f4;
+  --vs-accent: #c9a24b;
+  --vs-accent-dark: #b08c3c;
+  --vs-accent-soft: #f7f0df;
+  --vs-success: #2e7d5b;
+  --vs-danger: #c0392b;
+  --vs-danger-soft: #fbf1ef;
+  --vs-warn: #8a6a1f;
+
+  /* ── radius ──────────────────────────────────────────────────────────── */
+  --vs-r-sm: 8px;
+  --vs-r-md: 12px;
+  --vs-r-lg: 16px;
+  --vs-r-xl: 22px;
+  --vs-r-pill: 999px;
+
+  /* ── shadow ──────────────────────────────────────────────────────────── */
+  --vs-shadow-1: 0 1px 2px rgba(30, 27, 24, 0.05);
+  --vs-shadow-2: 0 10px 26px rgba(30, 27, 24, 0.09);
+  --vs-shadow-3: 0 18px 44px rgba(30, 27, 24, 0.14);
+  --vs-shadow-4: 0 0 60px rgba(26, 24, 21, 0.28);
+  --vs-shadow-header: 0 4px 18px rgba(30, 27, 24, 0.07);
+
+  /* ── motion ──────────────────────────────────────────────────────────── */
+  --vs-t-fast: 140ms;
+  --vs-t: 200ms;
+  --vs-t-card: 260ms;
+  --vs-t-drawer: 300ms;
+  --vs-t-hero: 600ms;
+  --vs-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* ── type ────────────────────────────────────────────────────────────── */
+  --vs-fs-h1: 34px;
+  --vs-fs-h2: 24px;
+  --vs-fs-h3: 18px;
+  --vs-fs-body: 14.5px;
+  --vs-fs-sm: 13px;
+  --vs-fs-xs: 11.5px;
+  --vs-lh: 1.75;
+
+  /* ── z layers ────────────────────────────────────────────────────────── */
+  --vs-z-rail: 40;
+  --vs-z-header: 60;
+  --vs-z-popover: 70;
+  --vs-z-scrim: 80;
+  --vs-z-drawer: 90;
+  --vs-z-modal: 95;
+  --vs-z-toast: 100;
+
+  /* ── aspect ratios ───────────────────────────────────────────────────── */
+  --vs-ar-product: 1 / 1;
+  --vs-ar-category: 4 / 5;
+  --vs-ar-package: 3 / 2;
+  --vs-ar-hero: 16 / 7;
+}
+
+@media (max-width: 1279px) {
+  .vs-public {
+    --vs-cols: 3;
+    --vs-cols-cat: 3;
+    --vs-cols-pkg: 3;
+    --vs-grid-gap: 18px;
+    --vs-fs-h1: 30px;
+  }
+}
+
+@media (max-width: 899px) {
+  .vs-public {
+    --vs-cols: 2;
+    --vs-cols-cat: 3;
+    --vs-cols-pkg: 2;
+    --vs-gutter: 18px;
+    --vs-grid-gap: 14px;
+    --vs-section: 48px;
+    --vs-section-tight: 30px;
+    /* The nav band and the category rail leave the sticky header on mobile, so
+       only the 60px action row follows the scroll. */
+    --vs-header-h: 60px;
+    --vs-nav-h: 0px;
+    --vs-sticky-top: 76px;
+    --vs-tabbar-h: 64px;
+    --vs-fs-h1: 26px;
+    --vs-fs-h2: 20px;
+    --vs-ar-hero: 4 / 5;
+  }
+}
+
+@media (max-width: 599px) {
+  .vs-public {
+    --vs-cols: 2;
+    --vs-cols-cat: 2;
+    --vs-cols-pkg: 1;
+    --vs-gutter: 16px;
+    --vs-grid-gap: 12px;
+    --vs-fs-h1: 23px;
+    --vs-fs-h2: 18.5px;
+  }
+}
+
+@media (max-width: 359px) {
+  .vs-public {
+    --vs-cols: 1;
+    --vs-cols-cat: 2;
+  }
+}
