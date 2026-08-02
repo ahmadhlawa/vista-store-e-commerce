@@ -8,7 +8,8 @@ Two safety properties are enforced here and are the reason this file exists at a
 
 * **Every object this application writes lives under `R2_OBJECT_PREFIX`.** The prefix is
   applied on write and re-checked on delete.
-* **`delete()` refuses any key outside that prefix.** A bucket may hold objects this
+* **`delete()` and `restore()` refuse any key outside that prefix, and `exists()` reports
+  such a key as absent without issuing a request.** A bucket may hold objects this
   application did not create — a backup, another tool's output, a previous instance —
   and a media record whose key points outside our namespace is a bug or tampering, not a
   licence to delete someone else's file.
@@ -135,6 +136,8 @@ class R2StorageProvider(StorageProvider):
         )
 
     def exists(self, key: str) -> bool:
+        # A key outside the prefix is reported absent without a request: this application
+        # does not probe objects it did not write.
         if not self.owns_key(key):
             return False
         try:
@@ -142,6 +145,29 @@ class R2StorageProvider(StorageProvider):
         except Exception:  # noqa: BLE001 - any failure means "not readable as ours"
             return False
         return True
+
+    def restore(self, key: str, data: bytes, *, content_type: str) -> StoredFile:
+        if not self.owns_key(key):
+            raise R2StorageError(
+                f"Refusing to write {key!r}: it is outside the configured prefix "
+                f"{self.object_prefix!r}."
+            )
+        try:
+            self.client.put_object(
+                Bucket=self.bucket_name,
+                Key=key,
+                Body=data,
+                ContentType=content_type,
+                CacheControl="public, max-age=31536000, immutable",
+            )
+        except Exception as exc:  # noqa: BLE001 - re-raised without the credential
+            raise R2StorageError(f"R2 repair failed for {key!r}: {type(exc).__name__}") from exc
+        return StoredFile(
+            key=key,
+            url=self.url_for(key),
+            content_type=content_type,
+            size_bytes=len(data),
+        )
 
     def delete(self, key: str) -> None:
         if not self.owns_key(key):

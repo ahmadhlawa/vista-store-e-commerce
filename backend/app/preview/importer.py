@@ -53,7 +53,7 @@ from app.services import catalog as catalog_service
 from app.services.placeholder_image import gradient_png, hex_to_rgb
 from app.storage.base import StorageProvider, validate_image_upload
 
-Outcome = Literal["create", "update", "skip", "delete", "blocked", "gone"]
+Outcome = Literal["create", "update", "repair", "skip", "delete", "blocked", "gone"]
 
 # Entity types, in creation order. Purge walks this list backwards, so a row is never
 # deleted before the rows that point at it.
@@ -516,14 +516,16 @@ class PreviewImporter:
             target = f"media:{item.key}"
             row, record = self._owned_row(MEDIA, item.key, index)
 
-            # An uploaded object is never re-uploaded: the bytes are deterministic and
-            # the key is already recorded. Re-running the seed must not litter storage.
+            # An owned object is never re-uploaded blindly: the bytes are deterministic
+            # and the key is already recorded. Re-running the seed must not litter
+            # storage. But the row alone is only a claim — the object it names can have
+            # gone missing, so the object is checked too, and repaired in place.
             if row is not None:
                 urls[item.key] = row.url
-                edited = row_fingerprint(MEDIA, row) != record.content_fingerprint
-                plan.add(
-                    "skip", target, "owner-edited; left as is" if edited else "already uploaded"
-                )
+                if row_fingerprint(MEDIA, row) != record.content_fingerprint:
+                    plan.add("skip", target, "owner-edited; left as is")
+                    continue
+                self._verify_media_object(plan, target, item, record, row, apply=apply)
                 continue
 
             plan.add("create", target, f"{item.shape} placeholder → {self.dataset.media_prefix}")
@@ -533,10 +535,7 @@ class PreviewImporter:
                 urls[item.key] = ""
                 continue
 
-            width, height = IMAGE_SHAPES[item.shape]
-            data = gradient_png(
-                width, height, hex_to_rgb(item.start_color), hex_to_rgb(item.end_color)
-            )
+            data = self._placeholder_bytes(item)
             content_type, extension = validate_image_upload(data, MAX_PREVIEW_IMAGE_BYTES)
             stored = self.storage.save(
                 data,
@@ -557,6 +556,66 @@ class PreviewImporter:
             urls[item.key] = asset.url
             self._remember(batch, record, MEDIA, item.key, asset, storage_key=stored.key)
         return urls
+
+    def _placeholder_bytes(self, item: Any) -> bytes:
+        """The item's placeholder image. Deterministic, so a repair reproduces it byte for
+        byte and the recorded size stays true."""
+        width, height = IMAGE_SHAPES[item.shape]
+        return gradient_png(
+            width, height, hex_to_rgb(item.start_color), hex_to_rgb(item.end_color)
+        )
+
+    def _verify_media_object(
+        self,
+        plan: PreviewPlan,
+        target: str,
+        item: Any,
+        record: ImportBatchRecord,
+        row: Any,
+        *,
+        apply: bool,
+    ) -> None:
+        """Confirm the object behind an owned, unedited media row — and rebuild it if gone.
+
+        The repair writes back to the **recorded key**, so no second `MediaAsset` row is
+        created and no URL already published in a category, product, slide or banner
+        changes. Three refusals keep it inside its own namespace:
+
+        * a key outside the batch's media prefix is never even probed;
+        * a row uploaded to a different provider than the one now configured is left
+          alone, because "absent here" says nothing about the bytes over there;
+        * an owner-edited row never reaches this method at all.
+        """
+        key = record.storage_key or row.stored_key
+        prefix = self.dataset.media_prefix
+        if not key or (prefix and prefix not in key):
+            plan.add("skip", target, f"outside the batch prefix {prefix!r}; not inspected")
+            return
+        if row.storage_provider != self.storage.name:
+            plan.add(
+                "skip",
+                target,
+                f"uploaded to {row.storage_provider!r}, current provider is "
+                f"{self.storage.name!r}; not inspected",
+            )
+            return
+        if self.storage.exists(key):
+            plan.add("skip", target, "already uploaded")
+            return
+
+        plan.add("repair", target, f"object {key} is missing; re-uploaded to the same key")
+        if not apply:
+            return
+        data = self._placeholder_bytes(item)
+        content_type, _ = validate_image_upload(data, MAX_PREVIEW_IMAGE_BYTES)
+        stored = self.storage.restore(key, data, content_type=content_type)
+        # The row is not replaced — only the facts about the bytes are refreshed, and the
+        # fingerprint follows so the repair is not mistaken for an owner edit next time.
+        row.size_bytes = stored.size_bytes
+        row.content_type = stored.content_type
+        self.db.flush()
+        record.content_fingerprint = row_fingerprint(MEDIA, row)
+        self.db.flush()
 
     # ── categories ───────────────────────────────────────────────────────────
     def _seed_categories(

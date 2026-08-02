@@ -172,6 +172,68 @@ def test_delete_refuses_a_key_outside_the_prefix(r2: R2StorageProvider, stub: St
     assert stub.deletes == []
 
 
+# ── existence and repair ─────────────────────────────────────────────────────
+def test_exists_is_false_for_a_key_never_written(r2: R2StorageProvider) -> None:
+    assert r2.exists("vista-store/preview/never-written.png") is False
+
+
+def test_exists_never_probes_an_object_outside_the_prefix(r2: R2StorageProvider) -> None:
+    class Loud(StubS3Client):
+        def head_object(self, **kwargs):
+            raise AssertionError("head_object must not be called for a foreign key")
+
+    r2._client = Loud()
+    assert r2.exists("someone-elses-backup/important.zip") is False
+
+
+def test_restore_rewrites_the_same_key_and_keeps_the_url(
+    r2: R2StorageProvider, stub: StubS3Client
+) -> None:
+    data = gradient_png(8, 8, (1, 2, 3), (4, 5, 6))
+    stored = r2.save(data, content_type="image/png", extension=".png", prefix="preview/")
+    stub.objects.pop(stored.key)
+    assert r2.exists(stored.key) is False
+
+    repaired = r2.restore(stored.key, data, content_type="image/png")
+
+    assert repaired.key == stored.key
+    assert repaired.url == stored.url
+    assert repaired.size_bytes == len(data)
+    assert r2.exists(stored.key) is True
+
+
+def test_restore_refuses_a_key_outside_the_prefix(
+    r2: R2StorageProvider, stub: StubS3Client
+) -> None:
+    before = len(stub.puts)
+    with pytest.raises(R2StorageError, match="outside the configured prefix"):
+        r2.restore("someone-elses-backup/important.zip", b"x", content_type="image/png")
+    assert len(stub.puts) == before
+
+
+def test_local_exists_and_restore_round_trip(tmp_path: Path) -> None:
+    provider = LocalStorageProvider(tmp_path / "media", "/media")
+    data = gradient_png(8, 8, (0, 0, 0), (255, 255, 255))
+    stored = provider.save(data, content_type="image/png", extension=".png", prefix="preview/")
+
+    assert provider.exists(stored.key) is True
+    (provider.root / stored.key).unlink()
+    assert provider.exists(stored.key) is False
+
+    repaired = provider.restore(stored.key, data, content_type="image/png")
+
+    assert repaired.key == stored.key
+    assert repaired.url == stored.url
+    assert (provider.root / stored.key).read_bytes() == data
+    assert provider.exists(stored.key) is True
+
+
+@pytest.mark.parametrize("outside", ["", "../escape.png", "missing.png"])
+def test_local_exists_is_false_outside_the_media_root(tmp_path: Path, outside: str) -> None:
+    provider = LocalStorageProvider(tmp_path / "media", "/media")
+    assert provider.exists(outside) is False
+
+
 def test_a_failing_upload_is_reported_without_the_credential() -> None:
     class Failing(StubS3Client):
         def put_object(self, **kwargs):

@@ -26,6 +26,7 @@ from app.models import (
 )
 from app.preview.dataset import parse_dataset
 from app.preview.importer import PreviewImporter
+from app.services.placeholder_image import gradient_png
 from app.storage.local import LocalStorageProvider
 
 DOCUMENT = {
@@ -146,6 +147,132 @@ def test_uploaded_media_lands_under_the_declared_prefix(
 ) -> None:
     importer.seed()
     assert db.query(MediaAsset).one().stored_key.startswith("test-store/preview/")
+
+
+# ── missing objects behind a surviving row ───────────────────────────────────
+def test_seed_skips_media_whose_row_and_object_both_exist(
+    importer: PreviewImporter, storage: LocalStorageProvider, db: Session
+) -> None:
+    importer.seed()
+    key = db.query(MediaAsset).one().stored_key
+    assert storage.exists(key)
+
+    plan = importer.seed()
+
+    assert counts(plan).get("repair") is None
+    assert any(a.target == "media:tile" and a.detail == "already uploaded" for a in plan.actions)
+
+
+def test_seed_repairs_media_whose_object_vanished_underneath_it(
+    importer: PreviewImporter, storage: LocalStorageProvider, db: Session
+) -> None:
+    importer.seed()
+    asset = db.query(MediaAsset).one()
+    key, url, size = asset.stored_key, asset.url, asset.size_bytes
+
+    (storage.root / key).unlink()  # a cleared upload directory, a lifecycle rule, a restore
+    assert not storage.exists(key)
+
+    plan = importer.seed()
+
+    assert counts(plan)["repair"] == 1
+    assert storage.exists(key)
+    restored = db.query(MediaAsset).one()  # one row, still the same one
+    assert (restored.stored_key, restored.url, restored.size_bytes) == (key, url, size)
+
+
+def test_a_repair_creates_no_second_media_row_or_batch_record(
+    importer: PreviewImporter, storage: LocalStorageProvider, db: Session
+) -> None:
+    importer.seed()
+    asset_id = db.query(MediaAsset).one().id
+    (storage.root / db.query(MediaAsset).one().stored_key).unlink()
+
+    importer.seed()
+
+    assert [row.id for row in db.query(MediaAsset).all()] == [asset_id]
+    media_records = (
+        db.query(ImportBatchRecord).filter(ImportBatchRecord.entity_type == "media_asset").all()
+    )
+    assert len(media_records) == 1
+    assert media_records[0].entity_id == asset_id
+
+
+def test_a_repaired_object_is_readable_again_at_its_published_url(
+    importer: PreviewImporter, storage: LocalStorageProvider, db: Session
+) -> None:
+    importer.seed()
+    asset = db.query(MediaAsset).one()
+    original = (storage.root / asset.stored_key).read_bytes()
+    (storage.root / asset.stored_key).unlink()
+
+    importer.seed()
+
+    # Byte-identical, and the category that published the URL still points at it.
+    assert (storage.root / asset.stored_key).read_bytes() == original
+    assert storage.url_for(asset.stored_key) == asset.url
+    assert db.query(Category).filter(Category.slug == "cat").one().image_url == asset.url
+
+
+def test_a_missing_object_is_not_repaired_when_the_owner_edited_the_row(
+    importer: PreviewImporter, storage: LocalStorageProvider, db: Session
+) -> None:
+    importer.seed()
+    asset = db.query(MediaAsset).one()
+    key = asset.stored_key
+    asset.original_filename = "owner-renamed.png"
+    db.commit()
+    (storage.root / key).unlink()
+
+    plan = importer.seed()
+
+    assert counts(plan).get("repair") is None
+    assert not storage.exists(key)  # never re-created under the owner's row
+
+
+def test_unrelated_media_is_neither_inspected_nor_touched(
+    importer: PreviewImporter, storage: LocalStorageProvider, db: Session
+) -> None:
+    owner_stored = storage.save(
+        gradient_png(4, 4, (9, 9, 9), (1, 1, 1)),
+        content_type="image/png",
+        extension=".png",
+        prefix="owner-uploads/",
+    )
+    db.add(
+        MediaAsset(
+            original_filename="owner.png",
+            stored_key=owner_stored.key,
+            content_type="image/png",
+            size_bytes=owner_stored.size_bytes,
+            url=owner_stored.url,
+            storage_provider=storage.name,
+        )
+    )
+    db.commit()
+
+    importer.seed()
+    (storage.root / db.query(MediaAsset).filter(MediaAsset.original_filename == "tile.png")
+     .one().stored_key).unlink()
+    importer.seed()
+
+    survivor = db.query(MediaAsset).filter(MediaAsset.original_filename == "owner.png").one()
+    assert survivor.stored_key == owner_stored.key
+    assert (storage.root / owner_stored.key).exists()
+
+
+def test_a_repair_is_itself_idempotent(
+    importer: PreviewImporter, storage: LocalStorageProvider, db: Session
+) -> None:
+    importer.seed()
+    (storage.root / db.query(MediaAsset).one().stored_key).unlink()
+    importer.seed()
+
+    plan = importer.seed()
+
+    assert counts(plan).get("repair") is None
+    assert counts(plan).get("create") is None
+    assert importer.status()["owner_edited"] == []
 
 
 # ── ownership ────────────────────────────────────────────────────────────────

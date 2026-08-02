@@ -98,6 +98,30 @@ class StorageProvider(ABC):
         ...
 
     @abstractmethod
+    def exists(self, key: str) -> bool:
+        """True when an object this provider owns is stored under `key`.
+
+        A `MediaAsset` row is only a claim that bytes were written once. The object can
+        disappear underneath it — a cleared upload directory, a bucket lifecycle rule, a
+        restored machine — and nothing in the database notices. Callers that must trust
+        the object, not just the row, ask here.
+
+        Never raises for a missing or foreign key: a key this provider does not own is
+        simply not present as far as the caller is concerned.
+        """
+        ...
+
+    @abstractmethod
+    def restore(self, key: str, data: bytes, *, content_type: str) -> StoredFile:
+        """Re-write `data` at an existing `key`, keeping its URL.
+
+        Only for repairing an object whose key is already recorded. It deliberately does
+        not mint a key: reusing the recorded one is what lets a caller repair storage
+        without touching the database row that points at it.
+        """
+        ...
+
+    @abstractmethod
     def delete(self, key: str) -> None: ...
 
     @abstractmethod
