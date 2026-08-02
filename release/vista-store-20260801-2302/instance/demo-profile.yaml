@@ -1,0 +1,106 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Demo instance profile — the development and demonstration store.
+#
+# This is the identity half of the demo store. The catalogue half (sample products,
+# orders, coupons) comes from the separate demo seed:
+#
+#   python -m scripts.instance_cli apply --profile ../instance/demo-profile.yaml
+#   python -m scripts.seed
+#
+# Never apply the demo seed to a real client store. Non-secret, like every profile.
+# ─────────────────────────────────────────────────────────────────────────────
+
+profile_schema_version: 1
+template_version: "0.3.0-rc.1"
+client_slug: "demo-store"
+
+store:
+  name: "متجر تجريبي"
+  tagline: "مستلزمات الريزن والشموع"
+  locale: "ar"
+  timezone: "Asia/Hebron"
+  currency_code: "ILS"
+  currency_symbol: "₪"
+  seo_title: "متجر تجريبي — مستلزمات الريزن والشموع"
+  seo_description: "مواد وأدوات الريزن والشمع والتيرازو بأسعار الجملة مع إرشادات بالعربية."
+
+domain:
+  primary: "demo.localhost"
+  aliases: []
+
+contact:
+  phone: "0000000000"
+  whatsapp: "0000000000"
+  email: "info@example.com"
+  address: "العنوان يُضبط من لوحة التحكم"
+  working_hours: "السبت – الخميس · ٩:٠٠ – ١٩:٠٠"
+
+theme:
+  primary_color: "#1F4E4A"
+  secondary_color: "#C9A24B"
+  accent_color: "#2E7D5B"
+
+features:
+  packages: true
+  silicone_molds: true
+  articles: true
+  coupons: true
+
+home_sections:
+  - key: "hero"
+    type: "promo_banner"
+    title: "الشريط الرئيسي"
+    description: "شرائح العرض وبانرات الصفحة الأولى."
+    sort_order: 0
+  - key: "categories"
+    type: "categories"
+    title: "أقسام منتجاتنا"
+    description: "تسوّق حسب القسم"
+    sort_order: 1
+  - key: "packages"
+    type: "packages"
+    title: "بكجات المبتدئين"
+    description: "ابدأ من هنا"
+    sort_order: 2
+    requires_feature: "packages"
+  - key: "molds"
+    type: "silicone_molds"
+    title: "قوالب سيليكون"
+    description: "أكبر تشكيلة قوالب سيليكون"
+    sort_order: 3
+    requires_feature: "silicone_molds"
+  - key: "featured"
+    type: "featured_products"
+    title: "منتجات مختارة"
+    description: "اختيارات فريق الورشة"
+    sort_order: 4
+  - key: "new-and-best"
+    type: "new_products"
+    title: "منتجات جديدة"
+    description: "وصل حديثاً"
+    sort_order: 5
+  - key: "bestsellers"
+    type: "bestsellers"
+    title: "الأكثر مبيعاً"
+    description: "ما يطلبه الحرفيون أكثر"
+    sort_order: 6
+
+static_pages:
+  - slug: "about"
+    title: "موقع الشركة"
+    lead: "متجر حرفي متخصص في مستلزمات الريزن والشمع."
+  - slug: "privacy-policy"
+    title: "سياسة الخصوصية"
+    lead: "نحفظ بياناتك بالحد الأدنى اللازم لتنفيذ الطلب."
+  - slug: "return-policy"
+    title: "سياسة التبديل والإرجاع"
+    lead: "إرجاع خلال ١٤ يوماً على المنتجات غير المستخدمة."
+  - slug: "terms"
+    title: "الشروط والأحكام"
+    lead: "استخدامك للمتجر يعني موافقتك على الشروط التالية."
+  - slug: "shipping-policy"
+    title: "سياسة الشحن"
+    lead: "نوصل لكل المناطق خلال ١–٤ أيام عمل."
+  - slug: "contact"
+    title: "اتصل بنا"
+    lead: "فريق الدعم متاح خلال ساعات العمل."
