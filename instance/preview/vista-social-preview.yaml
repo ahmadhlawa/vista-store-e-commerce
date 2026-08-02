@@ -43,58 +43,124 @@ notice: "نسخة تجريبية — البيانات والأسعار للمع�
 # scope. The yellow/purple pairing is the one visible in the Instagram bio.
 media:
   - key: "hero-invitations"
+    artwork_version: "v2"
     alt_text: "خلفية تدرّج لقسم مكاتيب الأفراح"
     shape: "wide"
     start_color: "#5B3E85"
     end_color: "#E4B33C"
   - key: "hero-gifts"
+    artwork_version: "v2"
     alt_text: "خلفية تدرّج لقسم الهدايا المخصصة"
     shape: "wide"
     start_color: "#7A4FA3"
     end_color: "#F2D06B"
   - key: "hero-events"
+    artwork_version: "v2"
     alt_text: "خلفية تدرّج لقسم مطبوعات المناسبات"
     shape: "wide"
     start_color: "#3F2A63"
     end_color: "#C98F2E"
   - key: "tile-wedding"
+    artwork_version: "v2"
     alt_text: "صورة قسم مكاتيب وبطاقات الأفراح"
     start_color: "#6B4E9B"
     end_color: "#EBD9A8"
   - key: "tile-events"
+    artwork_version: "v2"
     alt_text: "صورة قسم مطبوعات المناسبات والتخرج"
     start_color: "#4A3579"
     end_color: "#E4B33C"
   - key: "tile-gifts"
+    artwork_version: "v2"
     alt_text: "صورة قسم الهدايا المخصصة"
     start_color: "#8A5FB0"
     end_color: "#F6E3A1"
   - key: "tile-apparel"
+    artwork_version: "v2"
     alt_text: "صورة قسم الملابس المطبوعة"
     start_color: "#382A55"
     end_color: "#B99246"
   - key: "tile-scarves"
+    artwork_version: "v2"
     alt_text: "صورة قسم السكارف والشالات"
     start_color: "#7D5A9E"
     end_color: "#F0C86A"
   - key: "tile-ramadan"
+    artwork_version: "v2"
     alt_text: "صورة قسم رمضان والمناسبات"
     start_color: "#2E2350"
     end_color: "#D8A93F"
   - key: "tile-signage"
+    artwork_version: "v2"
     alt_text: "صورة قسم اللوحات والستاندات"
     start_color: "#54407F"
     end_color: "#CBA457"
   - key: "banner-offers"
+    artwork_version: "v2"
     alt_text: "بانر عروض المعاينة"
     shape: "wide"
     start_color: "#5B3E85"
     end_color: "#D8A93F"
   - key: "banner-packages"
+    artwork_version: "v2"
     alt_text: "بانر الباقات الجاهزة"
     shape: "wide"
     start_color: "#6B4E9B"
     end_color: "#F2D06B"
+  - key: "hero-apparel"
+    alt_text: "صورة معاينة لملابس مطبوعة"
+    shape: "wide"
+    start_color: "#342353"
+    end_color: "#D9A33D"
+  - key: "banner-seasonal"
+    alt_text: "بانر معاينة للمنتجات الموسمية"
+    shape: "wide"
+    start_color: "#51367C"
+    end_color: "#E6C56B"
+  - key: "tile-misc"
+    alt_text: "صورة قسم منتجات متنوعة للمعاينة"
+    start_color: "#63488B"
+    end_color: "#E9D3A0"
+  - key: "product-tote"
+    alt_text: "صورة معاينة لحقيبة قماش مطبوعة"
+    start_color: "#5C3F80"
+    end_color: "#D9B653"
+  - key: "product-notebook"
+    alt_text: "صورة معاينة لدفتر مطبوع"
+    start_color: "#3F2D65"
+    end_color: "#E6C979"
+  - key: "product-pillow"
+    alt_text: "صورة معاينة لوسادة مخصصة"
+    start_color: "#73529B"
+    end_color: "#F0D98F"
+  - key: "product-badge"
+    alt_text: "صورة معاينة لبادج بالاسم"
+    start_color: "#45306D"
+    end_color: "#D3A44A"
+  - key: "product-coaster"
+    alt_text: "صورة معاينة لقواعد أكواب مطبوعة"
+    start_color: "#6A4A92"
+    end_color: "#E8CD78"
+  - key: "product-tshirt"
+    alt_text: "صورة معاينة لتيشيرت مطبوع"
+    start_color: "#392855"
+    end_color: "#CFA34C"
+  - key: "product-cap"
+    alt_text: "صورة معاينة لقبعة مطبوعة"
+    start_color: "#563C79"
+    end_color: "#E3BA61"
+  - key: "product-wedding-package"
+    alt_text: "صورة معاينة لباقة أفراح"
+    start_color: "#72529C"
+    end_color: "#F1DFA8"
+  - key: "product-eid-package"
+    alt_text: "صورة معاينة لباقة عيد"
+    start_color: "#30244E"
+    end_color: "#D9AA42"
+  - key: "product-gift-package"
+    alt_text: "صورة معاينة لباقة هدايا"
+    start_color: "#835AAA"
+    end_color: "#F4D77F"
 
 # ── categories ───────────────────────────────────────────────────────────────
 # Each one maps to a product line that is actually visible on the Instagram
@@ -133,12 +199,20 @@ categories:
     sort_order: 3
     origin: "confirmed"
     source_note: "Instagram story highlight: بلايز هودي"
+  - slug: "misc-custom"
+    name: "منتجات متنوعة مخصصة"
+    description: "هدايا وقطع صغيرة بطباعة اسم أو تصميم للمعاينة."
+    image: "tile-misc"
+    is_featured: false
+    sort_order: 4
+    origin: "confirmed"
+    source_note: "Instagram story highlight: منتجات متفرقة"
   - slug: "scarves"
     name: "سكارف وشالات"
     description: "سكارف وشالات سادة أو مطبوعة بالاسم."
     image: "tile-scarves"
     is_featured: true
-    sort_order: 4
+    sort_order: 5
     origin: "confirmed"
     source_note: "Instagram story highlight: سكارف ميكاسا"
   - slug: "ramadan-occasions"
@@ -146,7 +220,7 @@ categories:
     description: "زينة وبطاقات وأكياس عيدية للمواسم."
     image: "tile-ramadan"
     is_featured: false
-    sort_order: 5
+    sort_order: 6
     origin: "confirmed"
     source_note: "Instagram story highlight: رمضان 2026"
   - slug: "signage-stands"
@@ -154,7 +228,7 @@ categories:
     description: "لوحات أكريليك ورول أب ستاند للمناسبات والمحلات."
     image: "tile-signage"
     is_featured: false
-    sort_order: 6
+    sort_order: 7
     origin: "confirmed"
     source_note: "Instagram post 2026-07-18: ستاندات خشب وبنرات بمقاسات معلنة"
 
@@ -445,6 +519,85 @@ products:
     origin: "inferred"
     source_note: "Signage line confirmed; name and price are preview-only."
 
+  # منتجات متنوعة وملابس مطبوعة — مستوحاة من الهايلايتات الظاهرة فقط.
+  - slug: "preview-printed-tote"
+    name: "حقيبة قماش بطباعة اسم"
+    category: "misc-custom"
+    price: "32.00"
+    stock_quantity: 90
+    short_description: "حقيبة قماش للمعاينة بطباعة اسم أو عبارة قصيرة."
+    image: "product-tote"
+    is_new: true
+    sort_order: 23
+    origin: "inferred"
+    source_note: "Inspired by the visible miscellaneous-products highlight; price is preview-only."
+  - slug: "preview-custom-notebook"
+    name: "دفتر ملاحظات بغلاف مطبوع"
+    category: "misc-custom"
+    price: "28.00"
+    stock_quantity: 100
+    short_description: "دفتر للمعاينة بغلاف يحمل الاسم أو رسالة إهداء."
+    image: "product-notebook"
+    is_featured: true
+    sort_order: 24
+    origin: "inferred"
+    source_note: "Inspired by the visible miscellaneous-products highlight; price is preview-only."
+  - slug: "preview-photo-pillow"
+    name: "وسادة بصورة مخصصة"
+    category: "custom-gifts"
+    price: "55.00"
+    compare_at_price: "65.00"
+    stock_quantity: 60
+    short_description: "وسادة هدية للمعاينة بطباعة صورة أو اسم."
+    image: "product-pillow"
+    is_bestseller: true
+    sort_order: 25
+    origin: "inferred"
+    source_note: "Inspired by the confirmed custom-gifts line; price is preview-only."
+  - slug: "preview-name-badge"
+    name: "بادج أكريليك بالاسم"
+    category: "misc-custom"
+    price: "10.00"
+    stock_quantity: 180
+    short_description: "بادج صغير للمعاينة باسم مخصص للمناسبات."
+    image: "product-badge"
+    sort_order: 26
+    origin: "inferred"
+    source_note: "Inspired by the visible miscellaneous-products highlight; price is preview-only."
+  - slug: "preview-printed-coasters"
+    name: "قواعد أكواب بطباعة عبارات"
+    category: "custom-gifts"
+    price: "24.00"
+    compare_at_price: "30.00"
+    stock_quantity: 140
+    short_description: "طقم قواعد أكواب للمعاينة بعبارات أو أسماء مخصصة."
+    image: "product-coaster"
+    is_new: true
+    sort_order: 27
+    origin: "inferred"
+    source_note: "Inspired by the confirmed custom-gifts line; price is preview-only."
+  - slug: "preview-graduation-tshirt"
+    name: "تيشيرت بطباعة مناسبة تخرج"
+    category: "printed-apparel"
+    price: "58.00"
+    stock_quantity: 75
+    short_description: "تيشيرت للمعاينة بطباعة اسم الخريج أو عبارة تهنئة."
+    image: "product-tshirt"
+    is_featured: true
+    sort_order: 28
+    origin: "inferred"
+    source_note: "Inspired by the confirmed printed-hoodies highlight; price is preview-only."
+  - slug: "preview-printed-cap"
+    name: "قبعة بطباعة اسم"
+    category: "printed-apparel"
+    price: "38.00"
+    stock_quantity: 80
+    short_description: "قبعة للمعاينة بطباعة اسم أو رمز بسيط."
+    image: "product-cap"
+    sort_order: 29
+    origin: "inferred"
+    source_note: "Inspired by the confirmed printed-hoodies highlight; price is preview-only."
+
   # باقات — the store visibly sells occasion sets, so a package is consistent
   - slug: "preview-package-graduation"
     name: "باقة تجهيز حفل تخرج"
@@ -456,7 +609,7 @@ products:
     short_description: "بنر وفوم بورد وستاند خشبي وكروت هدايا في باقة واحدة."
     image: "tile-events"
     is_featured: true
-    sort_order: 23
+    sort_order: 30
     origin: "inferred"
     source_note: "Assembled from product types visible in the 2026-07-18 post; price is preview-only."
     package_items:
@@ -478,7 +631,7 @@ products:
     short_description: "كروت دعوة ومغلفات وكروت شكر بكميّة جاهزة."
     image: "tile-wedding"
     is_bestseller: true
-    sort_order: 24
+    sort_order: 31
     origin: "inferred"
     source_note: "Assembled from the wedding-invitation line; price is preview-only."
     package_items:
@@ -489,6 +642,65 @@ products:
         quantity: 50
       - product: "preview-thankyou-card"
         quantity: 25
+  - slug: "preview-package-wedding-welcome"
+    name: "باقة استقبال الزفاف"
+    category: "wedding-invitations"
+    product_type: "package"
+    price: "340.00"
+    compare_at_price: "410.00"
+    stock_quantity: 10
+    short_description: "دعوات ولوحة استقبال وستاند للمعاينة في باقة واحدة."
+    image: "product-wedding-package"
+    is_featured: true
+    sort_order: 32
+    origin: "inferred"
+    source_note: "Assembled from confirmed wedding invitations and event-print types; price is preview-only."
+    package_items:
+      - product: "preview-wedding-card-classic"
+        quantity: 50
+      - product: "preview-acrylic-sign"
+        quantity: 1
+      - product: "preview-wooden-stand"
+        quantity: 1
+  - slug: "preview-package-eid"
+    name: "باقة عيدية مطبوعة"
+    category: "ramadan-occasions"
+    product_type: "package"
+    price: "145.00"
+    stock_quantity: 18
+    short_description: "أكياس عيدية وزينة ولوحة تهنئة في باقة معاينة."
+    image: "product-eid-package"
+    is_bestseller: true
+    sort_order: 33
+    origin: "inferred"
+    source_note: "Assembled from the confirmed Ramadan 2026 line; price is preview-only."
+    package_items:
+      - product: "preview-eidiya-envelope"
+        quantity: 20
+      - product: "preview-ramadan-decor"
+        quantity: 1
+      - product: "preview-ramadan-frame"
+        quantity: 1
+  - slug: "preview-package-gift"
+    name: "باقة هدية باسم مخصص"
+    category: "custom-gifts"
+    product_type: "package"
+    price: "110.00"
+    compare_at_price: "135.00"
+    stock_quantity: 20
+    short_description: "مج وميدالية ودفتر في باقة هدية للمعاينة."
+    image: "product-gift-package"
+    is_new: true
+    sort_order: 34
+    origin: "inferred"
+    source_note: "Assembled from the confirmed custom-gifts line; price is preview-only."
+    package_items:
+      - product: "preview-custom-mug"
+        quantity: 1
+      - product: "preview-acrylic-keychain"
+        quantity: 1
+      - product: "preview-custom-notebook"
+        quantity: 1
 
 # ── delivery ─────────────────────────────────────────────────────────────────
 # Checkout cannot complete without a delivery area, so exactly one exists — and
@@ -532,6 +744,16 @@ hero_slides:
     sort_order: 2
     origin: "inferred"
 
+  - key: "hero-apparel"
+    title: "طباعة تليق بمناسبتك"
+    subtitle: "نسخة تجريبية للمعاينة"
+    description: "هوديز وتيشيرتات وقطع صغيرة بطباعة مخصصة."
+    button_label: "استكشف الملابس"
+    button_url: "/category/printed-apparel"
+    image: "hero-apparel"
+    sort_order: 3
+    origin: "inferred"
+
 banners:
   - key: "banner-offers"
     placement: "home_main"
@@ -549,6 +771,14 @@ banners:
     image: "banner-packages"
     sort_order: 1
     origin: "placeholder"
+  - key: "banner-seasonal"
+    placement: "home_strip"
+    title: "رمضان والعيد للمعاينة"
+    subtitle: "منتجات موسمية تجريبية بتصاميم قابلة للتخصيص"
+    link_url: "/category/ramadan-occasions"
+    image: "banner-seasonal"
+    sort_order: 2
+    origin: "placeholder"
 
 # Extra sections only. The four sections the client bootstrap creates
 # (categories / featured / new / bestsellers) belong to the owner's instance and
@@ -564,6 +794,11 @@ home_sections:
     section_type: "promo_banner"
     title: "عروض المعاينة"
     sort_order: 5
+  - key: "preview-inspiration"
+    section_type: "custom_text"
+    title: "فكرة مطبوعة على ذوقك"
+    description: "اختر القسم في هذه المعاينة وشاهد كيف تظهر منتجات المناسبات والهدايا والملابس المخصصة."
+    sort_order: 6
 
 # ── coupon ───────────────────────────────────────────────────────────────────
 # One preview coupon so the discount path can be exercised end to end. Not a

@@ -325,3 +325,20 @@ wherever the UI exercised them, and are retained:
 * `PREVIEW10` discounts server-side; `payment_method: card` is refused with 422;
   `PaymentMethod` has exactly two members.
 * The preview notice is compiled out of the bundle entirely when the variable is unset.
+
+---
+
+## 10. Content-enrichment follow-up — 2026-08-02
+
+The effective database was confirmed as `backend/data/vista_preview.db` before seeding;
+`vista_store_dev.db` was not used. The preview status now reports 80 owned records:
+8 categories, 35 products (5 packages), 25 media objects, 4 hero slides, 3 banners and
+3 preview-owned home sections. Re-seeding reports all 80 content/media records as skips
+(only the import batch seed counter updates).
+
+The existing local Chrome process was available but this execution environment could not
+attach a DevTools session or launch a controlled Chrome instance. Therefore no new 390 /
+768 / 1440 screenshots were captured for this follow-up and no visual-pass claim is made.
+The prior route matrix above remains the last browser evidence. Required owner gap remains:
+original Vista product/hero photography; the 25 current images are generated, owned preview
+artwork rather than social images.

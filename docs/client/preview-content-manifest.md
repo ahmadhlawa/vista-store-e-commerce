@@ -13,7 +13,7 @@ provenance.
 
 ## The one-line summary
 
-**Nothing in the preview catalog is Vista Store's real product data.** Seven product
+**Nothing in the preview catalog is Vista Store's real product data.** Eight product
 *lines* are confirmed from the client's own public Instagram profile. Every product
 *name*, every *price*, every *stock number* and every *description* was written for this
 demonstration. No price on either social page was legible, so no price could be copied
@@ -25,17 +25,17 @@ even in principle.
 
 | Type | Count |
 | --- | --- |
-| Categories | 7 |
-| Products | 25 (23 standard + 2 packages) |
-| Products on offer (`compare_at_price` set) | 5 |
-| Featured / new / bestseller flags | 8 / 6 / 7 |
-| Hero slides | 3 |
-| Banners | 2 |
-| Home sections added | 2 |
+| Categories | 8 |
+| Products | 35 (30 standard + 5 packages) |
+| Products on offer (`compare_at_price` set) | 9 |
+| Featured / new / bestseller flags | 12 / 9 / 10 |
+| Hero slides | 4 |
+| Banners | 3 |
+| Home sections added | 3 (seven populated section types with the four instance sections) |
 | Delivery areas | 1 |
 | Coupons | 1 |
-| Media objects | 12 |
-| **Owned rows recorded in the batch** | **53** |
+| Media objects | 25 |
+| **Owned rows recorded in the batch** | **80** |
 
 ---
 
@@ -65,14 +65,15 @@ Everything below exists so the storefront is worth looking at. It is `origin: in
 the YAML, and each entry carries a `source_note` naming the visible thing it was built
 from.
 
-* **All 25 product names.** Written for this dataset. None was quoted from a post.
-* **All 25 prices, and all 5 `compare_at_price` values.** Invented. They are not a
+* **All 35 product names.** Written for this dataset. None was quoted from a post.
+* **All 35 prices, and all 9 `compare_at_price` values.** Invented. They are not a
   quotation, a range, an estimate, or anything the owner has said.
 * **All stock quantities.** Invented; they exist so "in stock / low stock" states render.
 * **All descriptions and short descriptions.** Written for this dataset.
-* **The two packages** (`preview-package-graduation`, `preview-package-wedding`). Assembled
+* **The five packages** (`preview-package-graduation`, `preview-package-wedding`,
+  `preview-package-wedding-welcome`, `preview-package-eid`, `preview-package-gift`). Assembled
   from confirmed product types, but the bundles themselves are invented.
-* **The three hero slides and their copy.**
+* **The four hero slides and their copy.**
 * **The yellow/purple placeholder palette,** inferred from the bio's 💛/💜 emoji. Used only
   for generated images; the store theme is untouched.
 
@@ -80,7 +81,7 @@ from.
 
 Owned by this project, not by Vista Store, and not pretending to be photographs.
 
-* **12 gradient images**, produced by `app/services/placeholder_image.py`, uploaded through
+* **25 distinct Vista preview artworks**, produced by `app/services/placeholder_image.py`, uploaded through
   the configured storage provider under `vista-store/preview/`.
 * **The delivery area `منطقة تجريبية للمعاينة`,** priced at **0.00** with no estimate. It
   exists only because checkout cannot complete without one. Its zero fee is a deliberate

@@ -50,7 +50,7 @@ from app.models import (
 )
 from app.preview.dataset import PreviewDataset
 from app.services import catalog as catalog_service
-from app.services.placeholder_image import gradient_png, hex_to_rgb
+from app.services.placeholder_image import hex_to_rgb, vista_preview_png
 from app.storage.base import StorageProvider, validate_image_upload
 
 Outcome = Literal["create", "update", "repair", "skip", "delete", "blocked", "gone"]
@@ -525,6 +525,20 @@ class PreviewImporter:
                 if row_fingerprint(MEDIA, row) != record.content_fingerprint:
                     plan.add("skip", target, "owner-edited; left as is")
                     continue
+                expected_filename = f"{item.key}-{item.artwork_version}.png"
+                if row.original_filename != expected_filename:
+                    plan.add("update", target, f"refresh {item.artwork_version} artwork")
+                    if apply:
+                        data = self._placeholder_bytes(item)
+                        content_type, _ = validate_image_upload(data, MAX_PREVIEW_IMAGE_BYTES)
+                        stored = self.storage.restore(row.stored_key, data, content_type=content_type)
+                        row.original_filename = expected_filename
+                        row.content_type = stored.content_type
+                        row.size_bytes = stored.size_bytes
+                        self.db.flush()
+                        record.content_fingerprint = row_fingerprint(MEDIA, row)
+                        self.db.flush()
+                    continue
                 self._verify_media_object(plan, target, item, record, row, apply=apply)
                 continue
 
@@ -544,7 +558,7 @@ class PreviewImporter:
                 prefix=self.dataset.media_prefix,
             )
             asset = MediaAsset(
-                original_filename=f"{item.key}.png",
+                original_filename=f"{item.key}-{item.artwork_version}.png",
                 stored_key=stored.key,
                 content_type=stored.content_type,
                 size_bytes=stored.size_bytes,
@@ -561,8 +575,8 @@ class PreviewImporter:
         """The item's placeholder image. Deterministic, so a repair reproduces it byte for
         byte and the recorded size stays true."""
         width, height = IMAGE_SHAPES[item.shape]
-        return gradient_png(
-            width, height, hex_to_rgb(item.start_color), hex_to_rgb(item.end_color)
+        return vista_preview_png(
+            width, height, hex_to_rgb(item.start_color), hex_to_rgb(item.end_color), item.key
         )
 
     def _verify_media_object(

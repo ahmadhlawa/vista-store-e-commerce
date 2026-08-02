@@ -58,6 +58,7 @@ class PreviewMedia(_Strict):
     shape: Literal["tile", "wide", "square"] = "tile"
     start_color: str
     end_color: str
+    artwork_version: str = Field(default="v1", pattern=r"^v[1-9][0-9]*$")
     origin: Origin = "placeholder"
     source_url: str | None = Field(default=None, max_length=500)
 

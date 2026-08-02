@@ -114,3 +114,18 @@ same table shape: platform, source URL, visible type, visible name, visible pric
 characteristics, confidence, and whether it is used. Original photography should be
 requested from the owner rather than harvested — both platforms re-encode and downscale
 what they serve.
+
+---
+
+## Enrichment audit update — 2026-08-02
+
+| Platform | Exact source | Date | Visibly available | Image decision | Confidence | Intended preview usage |
+| --- | --- | --- | --- | --- | --- | --- |
+| Facebook | `https://www.facebook.com/people/Vista-Store-%D9%85%D8%AC%D8%B1-%D9%81%D9%8A%D8%B3%D8%AA%D8%A7/61582596333597/` | unavailable | Login wall; no post, image, price, specification, or contact panel was available. | Rejected — nothing retrievable. | unavailable | None. |
+| Instagram | `https://www.instagram.com/vistastore.ps` | 2026-08-02 | Bio: custom printing and personalized gifts. | Rejected — no stable public original available for import. | confirmed | Gifts and miscellaneous custom products. |
+| Instagram | `https://www.instagram.com/vistastore.ps` | 2026-08-02 | Highlights: wedding invitations, printed hoodies, scarves, Ramadan 2026, miscellaneous products. | Rejected — no stable public original available for import. | confirmed | Eight category lines and inferred preview products. |
+| Instagram | `https://www.instagram.com/vistastore.ps` | 2026-07-18 visible post | Graduation occasion: banner 200 × 85 cm, foam board 70 × 100 cm, wooden stand, gift cards; no legible price. | Rejected — no stable public original available for import. | confirmed for types and dimensions | Event-print products; only the two dimensions are retained as specifications. |
+
+No social CDN URL or downloaded social image is stored in the database. The preview batch
+now generates 25 owned, deterministic Vista preview artworks; they are not photographs and
+remain restorable and removable through the existing storage and preview lifecycle.
