@@ -22,7 +22,7 @@
   }
 }
 
-@keyframes vs-slide-end {
+@keyframes vs-slide-from-left {
   from {
     transform: translateX(-100%);
   }
@@ -31,7 +31,7 @@
   }
 }
 
-@keyframes vs-slide-start {
+@keyframes vs-slide-from-right {
   from {
     transform: translateX(100%);
   }
@@ -73,18 +73,20 @@
   max-width: 100vw;
 }
 
-/* In RTL, `inset-inline-start` is the visual left. The cart lives there so it
-   can never collide with the menu and category drawers on the right. */
-.vs-drawer--start {
-  inset-inline-start: 0;
+/* Sides are physical on purpose. The storefront is RTL throughout, and the rule
+   the design depends on is visual: navigation comes in from the right, where the
+   menu and category triggers are, and the cart comes in from the left so the two
+   can never collide. Logical properties would invert exactly this. */
+.vs-drawer--left {
+  left: 0;
   width: min(430px, 94vw);
-  animation: vs-slide-end var(--vs-t-drawer) var(--vs-ease) both;
+  animation: vs-slide-from-left var(--vs-t-drawer) var(--vs-ease) both;
 }
 
-.vs-drawer--end {
-  inset-inline-end: 0;
+.vs-drawer--right {
+  right: 0;
   width: min(380px, 90vw);
-  animation: vs-slide-start var(--vs-t-drawer) var(--vs-ease) both;
+  animation: vs-slide-from-right var(--vs-t-drawer) var(--vs-ease) both;
 }
 
 .vs-drawer--wide {

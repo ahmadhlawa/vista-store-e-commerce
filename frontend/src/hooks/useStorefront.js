@@ -34,16 +34,28 @@ export function useProductActions() {
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
-  const revealCart = useCallback(() => {
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => store.openOverlay(OVERLAY.CART), CART_REVEAL_MS);
-  }, [store]);
+  const revealCart = useCallback(
+    (immediate) => {
+      clearTimeout(timer.current);
+      if (immediate) {
+        store.openOverlay(OVERLAY.CART);
+        return;
+      }
+      timer.current = setTimeout(() => store.openOverlay(OVERLAY.CART), CART_REVEAL_MS);
+    },
+    [store],
+  );
 
+  /**
+   * `immediate` is for callers that close their own overlay as part of the add —
+   * the quick view has already acknowledged the action, so waiting would leave
+   * the screen empty for half a second.
+   */
   const addProduct = useCallback(
-    (view, qty = 1, variant = null) => {
+    (view, qty = 1, variant = null, { immediate = false } = {}) => {
       if (!view || view.soldOut) return;
       store.addToCart(view.product, qty, variant);
-      revealCart();
+      revealCart(immediate);
     },
     [revealCart, store],
   );

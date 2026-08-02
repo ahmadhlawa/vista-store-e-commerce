@@ -87,7 +87,7 @@ export default function Header() {
                 type="button"
                 className="vs-iconbtn vs-mob"
                 onClick={() => openOverlay(OVERLAY.SEARCH)}
-                aria-label="بحث"
+                aria-label="فتح البحث"
                 aria-expanded={overlay === OVERLAY.SEARCH}
               >
                 <SearchIcon size={19} />

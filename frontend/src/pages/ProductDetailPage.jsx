@@ -93,12 +93,15 @@ export default function ProductDetailPage() {
   const specs = product.specs || [];
   const description = paragraphsOf(product.description || product.short);
 
+  // Returns false when the add was refused, so the button does not announce a
+  // success that did not happen.
   const add = () => {
     if (selection.missingChoice) {
       setError("اختر أحد الخيارات المتاحة قبل الإضافة إلى العربة.");
-      return;
+      return false;
     }
     addProduct(view, qty, selection.selected);
+    return true;
   };
 
   const panels = [

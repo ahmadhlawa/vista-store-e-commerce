@@ -6,7 +6,7 @@
 
 .vs-pdp {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.04fr);
   gap: 32px;
   align-items: start;
   padding-block: 20px 0;
@@ -35,10 +35,13 @@
   }
 }
 
+/* Capped so a square photograph cannot outrun the information column and leave
+   a column of empty page beside it on a product with little copy. */
 .vs-gallery__main {
   border-radius: var(--vs-r-lg);
   overflow: hidden;
   background: var(--vs-surface-2);
+  max-height: 540px;
 }
 
 .vs-gallery__thumbs {

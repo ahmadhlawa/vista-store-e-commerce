@@ -17,7 +17,7 @@ export default function MobileMenu({ open, onClose }) {
     <Drawer
       open={open}
       onClose={onClose}
-      side="end"
+      side="right"
       label="قائمة التنقّل"
       head={<strong className="vs-drawer__title">{settings.storeName}</strong>}
       footer={

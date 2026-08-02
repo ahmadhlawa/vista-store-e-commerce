@@ -30,9 +30,7 @@ export default function FilterPanel({ filters, patch, reset, showCategories, cei
                 type="radio"
                 name="vs-filter-category"
                 checked={filters.category === category.slug}
-                onChange={() =>
-                  patch({ category: null, cat: filters.category === category.slug ? null : category.slug })
-                }
+                onChange={() => patch({ cat: category.slug })}
               />
               {category.name}
               <span className="vs-check__count">{category.count}</span>

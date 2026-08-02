@@ -36,14 +36,17 @@ export default function QuickView({ slug, open, onClose }) {
   const images = product?.images?.length ? product.images : [];
   const activeImage = images[image] || null;
 
+  // Returns false when the add was refused, so the button does not announce a
+  // success that did not happen.
   const add = () => {
-    if (!product) return;
+    if (!product) return false;
     if (selection.missingChoice) {
       setError("اختر أحد الخيارات المتاحة قبل الإضافة إلى العربة.");
-      return;
+      return false;
     }
-    addProduct(view, qty, selection.selected);
-    onClose();
+    // The modal is closing, so the cart takes over straight away rather than
+    // leaving the visitor looking at nothing for half a second.
+    addProduct(view, qty, selection.selected, { immediate: true });
   };
 
   return (

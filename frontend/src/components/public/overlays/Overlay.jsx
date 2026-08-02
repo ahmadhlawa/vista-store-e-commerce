@@ -10,13 +10,14 @@ function Scrim({ onClose }) {
 }
 
 /**
- * Side panel. `side` is logical: "end" is the RTL right (menus, categories,
- * filters), "start" is the RTL left (the cart), "top" is the search sheet.
+ * Side panel. `side` is physical and deliberate: "right" for navigation and
+ * filters, which is where their triggers live in this RTL layout, "left" for the
+ * cart so the two can never collide, "top" for the search sheet.
  */
 export function Drawer({
   open,
   onClose,
-  side = "end",
+  side = "right",
   label,
   title,
   wide = false,

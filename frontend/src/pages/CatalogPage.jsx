@@ -93,6 +93,13 @@ export default function CatalogPage({ mode = "shop" }) {
 
   useEffect(() => {
     let cancelled = false;
+    // Nothing to ask the API for until the visitor has typed something.
+    if (mode === "search" && !term) {
+      setItems([]);
+      setMeta({ total: 0, pages: 0 });
+      setStatus("ready");
+      return undefined;
+    }
     if (firstLoad.current) setStatus("loading");
     catalogService
       .list({ ...baseQuery, page, page_size: PAGE_SIZE })
@@ -163,6 +170,9 @@ export default function CatalogPage({ mode = "shop" }) {
 
   const children = mode === "category" ? categories.find((c) => c.slug === params.slug)?.children || [] : [];
   const hasImage = mode === "category" && !!category?.imageUrl;
+  // An empty search box is a prompt, not a result set: listing the whole
+  // catalogue under "search results" would be a lie about what was searched.
+  const awaitingTerm = mode === "search" && !term;
   const empty = status === "ready" && items.length === 0;
 
   const filterPanel = (
@@ -210,6 +220,22 @@ export default function CatalogPage({ mode = "shop" }) {
         </div>
       </header>
 
+      {awaitingTerm ? (
+        <div className="vs-container vs-section">
+          <div className="vs-state">
+            <span className="vs-state__icon">
+              <SearchIcon size={26} />
+            </span>
+            <h2 className="vs-state__title">ابدأ بالبحث</h2>
+            <p className="vs-state__body">
+              اكتب اسم منتج أو قسم في شريط البحث أعلى الصفحة لعرض النتائج.
+            </p>
+            <Link to="/shop" className="vs-btn vs-btn--primary">
+              أو تصفّح كل المنتجات
+            </Link>
+          </div>
+        </div>
+      ) : (
       <div className="vs-container vs-section--tight">
         <div className="vs-catalog">
           <aside className="vs-catalog__side" aria-label="تصفية النتائج">
@@ -318,11 +344,12 @@ export default function CatalogPage({ mode = "shop" }) {
           </div>
         </div>
       </div>
+      )}
 
       <Drawer
         open={store.overlay === OVERLAY.FILTERS}
         onClose={store.closeAll}
-        side="end"
+        side="right"
         label="تصفية النتائج"
         title="تصفية النتائج"
         footer={

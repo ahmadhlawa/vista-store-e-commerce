@@ -12,7 +12,7 @@ export default function CartDrawer({ open, onClose }) {
     <Drawer
       open={open}
       onClose={onClose}
-      side="start"
+      side="left"
       label="عربة التسوّق"
       title={`عربة التسوّق (${count})`}
       footer={

@@ -345,6 +345,7 @@
 /* ── desktop nav band ──────────────────────────────────────────────────── */
 
 .vs-nav {
+  position: relative;
   height: var(--vs-nav-h);
   background: var(--vs-primary);
   color: #fff;

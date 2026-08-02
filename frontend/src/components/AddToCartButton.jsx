@@ -7,7 +7,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 export const ADDED_LABEL = "تمت الإضافة";
 export const SUCCESS_MS = 1000;
 
-/** Fires `onAdd` once, then holds a success flag for SUCCESS_MS. */
+/**
+ * Fires `onAdd` once, then holds a success flag for SUCCESS_MS.
+ *
+ * `onAdd` may return `false` to say the add did not happen — a product whose
+ * options have not been chosen, for instance. The button must not claim success
+ * for something it refused to do.
+ */
 export function useAddToCartFeedback(onAdd) {
   const [added, setAdded] = useState(false);
   const timer = useRef(null);
@@ -18,7 +24,7 @@ export function useAddToCartFeedback(onAdd) {
     // While the success state is showing, further activations are swallowed:
     // one click (or Enter/Space) must never add two lines.
     if (added) return;
-    onAdd?.();
+    if (onAdd?.() === false) return;
     setAdded(true);
     clearTimeout(timer.current);
     timer.current = setTimeout(() => setAdded(false), SUCCESS_MS);
