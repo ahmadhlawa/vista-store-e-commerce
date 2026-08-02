@@ -20,7 +20,7 @@ the read-only `template-upstream`.
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Backend suite + coverage | `pytest --cov=app` | **259 passed**, **91 %** (baseline 193) |
+| Backend suite + coverage | `pytest --cov=app` | **260 passed**, **91 %** (baseline 193), 5:07 |
 | Frontend suite | `npx vitest run` | **53 passed** (baseline 47) |
 | Frontend build | `npm run build` | clean, 405.68 kB JS / 110.91 kB gzip |
 | Preview notice toggle | two builds | string present when configured, **absent from the bundle** when not |
@@ -33,6 +33,8 @@ the read-only `template-upstream`.
 | **Live storefront over HTTP** | operator script, uvicorn + seeded SQLite | **39/39 checks** |
 | **Routes through the real Vite dev server** | 19 SPA routes + 8 proxied API paths + media | **28/28 reachable** |
 | Whitespace | `git diff --check` | clean |
+| Tracked-file hygiene | `git ls-files` filtered | no `.env`, `*.db`, `node_modules/`, `dist/`, `.venv/`, coverage artefacts; the only `.env*` files tracked are six `.example` templates |
+| Secret scan | pattern sweep over every tracked file | no credential value — every hit is a variable name, an empty default or a test stub |
 
 The live pass proved, among other things: a client-supplied `unit_price` of 1 is ignored
 and the order totals 190; `payment_method: card` is refused with 422; confirming the order
