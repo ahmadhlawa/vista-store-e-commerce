@@ -226,6 +226,13 @@ class ProductPublicOut(APIModel):
     is_new: bool
     is_bestseller: bool
     primary_image_url: str | None = None
+    # A catalogue card must know whether adding the product is a one-click action
+    # or needs an option chosen first. The list projection deliberately omits the
+    # option rows themselves, so it carries the flag instead.
+    has_options: bool = False
+    # A package card states how much is in the package. The list projection omits
+    # the item rows, so it carries the count.
+    package_item_count: int = 0
 
 
 class ProductPublicDetail(ProductPublicOut):

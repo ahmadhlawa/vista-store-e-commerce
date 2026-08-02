@@ -184,6 +184,27 @@ def test_variants_belong_to_their_product_and_carry_their_own_stock(
     assert detail["variants"][0]["price_override"] == 150
 
 
+def test_listing_flags_products_that_need_an_option_chosen(
+    client: TestClient, db: Session, admin_token: str
+) -> None:
+    """A catalogue card decides between a direct add and "choose an option" from
+    the list projection, which deliberately carries no option rows."""
+    plain = make_product(db, slug="plain-item", name="منتج بسيط")
+    with_options = make_product(db, slug="option-item", name="منتج بخيارات")
+
+    client.put(
+        f"/api/v1/admin/products/{with_options.id}/options",
+        headers=auth(admin_token),
+        json=[{"name": "اللون", "values": [{"value": "أحمر"}, {"value": "أزرق"}]}],
+    )
+
+    listed = {item["slug"]: item for item in client.get("/api/v1/products").json()["items"]}
+    assert listed[plain.slug]["has_options"] is False
+    assert listed[with_options.slug]["has_options"] is True
+
+    assert client.get(f"/api/v1/products/{with_options.slug}").json()["has_options"] is True
+
+
 def test_package_cannot_contain_itself_or_another_package(
     client: TestClient, db: Session, admin_token: str
 ) -> None:
