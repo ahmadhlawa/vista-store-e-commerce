@@ -54,3 +54,8 @@ backups/
 
 # Release packages built by scripts/make_release_package.py
 release/
+
+
+
+.env.mysql.local
+.env.mysql.app.local
