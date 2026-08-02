@@ -56,6 +56,25 @@ All checks below were asserted programmatically in the browser
 | Checkout: creates order `ORD-260802-9132` and empties the cart | Pass |
 | 1920: container capped at 1400, gutters 260, cards 254–325px | Pass |
 
+## Responsive sweep
+
+Measured at every width the brief names, on `/shop` and `/`:
+
+| Width | Product columns | Card width | Tab bar | Overflow |
+| --- | --- | --- | --- | --- |
+| 360 | 2 | 158 | yes | 0 |
+| 390 | 2 | 173 | yes | 0 |
+| 430 | 2 | 193 | yes | 0 |
+| 768 | 3 | 235 | yes | 0 |
+| 1024 | 3 | 221 / 316 | no | 0 |
+| 1280 | 4 | 224 / 295 | no | 0 |
+| 1440 | 4 | 254 / 325 | no | 0 |
+| 1920 | 4 | 254 / 325 | no | 0 |
+
+(Two card widths where the catalogue has a filter sidebar and the homepage does
+not.) The tablet tier was corrected during this sweep: 768 was falling to two
+columns with oversized cards, and now holds three down to 700px.
+
 ## Defects found and fixed
 
 1. **Sticky was disabled site-wide.** `html, body { overflow-x: hidden }` (carried

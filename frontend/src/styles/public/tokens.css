@@ -116,9 +116,11 @@
   }
 }
 
+/* The shell switches to its mobile form at 900, but the catalogue keeps three
+   columns down to 700: a tablet has the room, and two columns there would leave
+   the cards oversized. */
 @media (max-width: 899px) {
   .vs-public {
-    --vs-cols: 2;
     --vs-cols-cat: 3;
     --vs-cols-pkg: 2;
     --vs-gutter: 18px;
@@ -137,9 +139,14 @@
   }
 }
 
-@media (max-width: 599px) {
+@media (max-width: 699px) {
   .vs-public {
     --vs-cols: 2;
+  }
+}
+
+@media (max-width: 599px) {
+  .vs-public {
     --vs-cols-cat: 2;
     --vs-cols-pkg: 1;
     --vs-gutter: 16px;
