@@ -25,7 +25,12 @@ from sqlalchemy.orm import Session
 
 from app.models import Category, DeliveryArea, ImportBatch, ImportBatchRecord, Product
 from app.preview.dataset import load_dataset, parse_dataset
-from app.preview.importer import MODEL_FOR_TYPE, PreviewImporter, row_fingerprint
+from app.preview.importer import (
+    MODEL_FOR_TYPE,
+    PreviewImporter,
+    find_batch,
+    row_fingerprint,
+)
 from app.storage.local import LocalStorageProvider
 
 VISTA_DATASET = (
@@ -76,6 +81,25 @@ def document(batch_key: str) -> dict:
     }
 
 
+def owned(db: Session, importer: PreviewImporter, entity_type: str) -> list:
+    """The rows this batch owns, resolved through its own ownership records.
+
+    A developer's MySQL database is not the empty CI service container: it also holds the
+    seeded Vista preview batch and the client bootstrap. Picking "the first row of this
+    table" would silently assert against someone else's data, so every lookup here goes
+    through the batch that created the row.
+    """
+    batch = find_batch(db, importer.dataset.batch_key)
+    assert batch is not None
+    ids = db.execute(
+        select(ImportBatchRecord.entity_id).where(
+            ImportBatchRecord.batch_id == batch.id,
+            ImportBatchRecord.entity_type == entity_type,
+        )
+    ).scalars().all()
+    return [db.get(MODEL_FOR_TYPE[entity_type], entity_id) for entity_id in ids]
+
+
 @pytest.fixture()
 def importer(db: Session, tmp_path: Path) -> Iterator[PreviewImporter]:
     key = f"mysql-preview-{uuid.uuid4().hex[:8]}"
@@ -105,9 +129,7 @@ def test_the_shipped_vista_dataset_seeds_and_purges_on_mysql(db: Session, tmp_pa
 
 def test_decimal_money_keeps_its_scale(importer: PreviewImporter, db: Session) -> None:
     importer.seed()
-    product = db.execute(
-        select(Product).where(Product.slug.like("prod-%"))
-    ).scalars().first()
+    product = owned(db, importer, "product")[0]
 
     assert product.price == Decimal("1234.56")
     assert product.price.as_tuple().exponent == -2
@@ -116,9 +138,9 @@ def test_decimal_money_keeps_its_scale(importer: PreviewImporter, db: Session) -
 
 def test_arabic_content_survives_utf8mb4(importer: PreviewImporter, db: Session) -> None:
     importer.seed()
-    product = db.execute(select(Product).where(Product.slug.like("prod-%"))).scalars().first()
-    category = db.execute(select(Category).where(Category.slug.like("cat-%"))).scalars().first()
-    area = db.execute(select(DeliveryArea)).scalars().first()
+    product = owned(db, importer, "product")[0]
+    category = owned(db, importer, "category")[0]
+    area = owned(db, importer, "delivery_area")[0]
 
     assert product.name == "منتج تجريبي بالعربية — ٢٠٢٦"
     assert "لآلئ" in product.short_description
@@ -148,7 +170,10 @@ def test_batch_ownership_is_enforced_by_a_unique_constraint(
     importer: PreviewImporter, db: Session
 ) -> None:
     importer.seed()
-    record = db.execute(select(ImportBatchRecord)).scalars().first()
+    batch = find_batch(db, importer.dataset.batch_key)
+    record = db.execute(
+        select(ImportBatchRecord).where(ImportBatchRecord.batch_id == batch.id)
+    ).scalars().first()
 
     db.add(
         ImportBatchRecord(
@@ -166,7 +191,7 @@ def test_batch_ownership_is_enforced_by_a_unique_constraint(
 
 def test_batch_key_is_unique(importer: PreviewImporter, db: Session) -> None:
     importer.seed()
-    existing = db.execute(select(ImportBatch)).scalars().first()
+    existing = find_batch(db, importer.dataset.batch_key)
 
     db.add(ImportBatch(batch_key=existing.batch_key, source_label="clash"))
     with pytest.raises(IntegrityError):
@@ -176,7 +201,7 @@ def test_batch_key_is_unique(importer: PreviewImporter, db: Session) -> None:
 
 def test_purging_the_batch_cascades_to_its_records(importer: PreviewImporter, db: Session) -> None:
     importer.seed()
-    batch_id = db.execute(select(ImportBatch.id)).scalars().first()
+    batch_id = find_batch(db, importer.dataset.batch_key).id
 
     importer.purge(apply=True)
 
