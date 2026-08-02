@@ -149,6 +149,14 @@ def test_uploaded_media_lands_under_the_declared_prefix(
     assert db.query(MediaAsset).one().stored_key.startswith("test-store/preview/")
 
 
+def test_seed_records_the_preview_artwork_version_in_the_media_filename(
+    importer: PreviewImporter, db: Session
+) -> None:
+    importer.seed()
+
+    assert db.query(MediaAsset).one().original_filename == "tile-v1.png"
+
+
 # ── missing objects behind a surviving row ───────────────────────────────────
 def test_seed_skips_media_whose_row_and_object_both_exist(
     importer: PreviewImporter, storage: LocalStorageProvider, db: Session
