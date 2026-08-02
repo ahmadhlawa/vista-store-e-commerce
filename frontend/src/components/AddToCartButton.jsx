@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // keep their own dimensions and colours (passed in as `style`); everything the
 // interaction needs — hover lift, press scale, the success window and the
 // double-click guard — lives here so the two cards cannot drift apart.
-export const ADDED_LABEL = "تمت الإضافة ✓";
+export const ADDED_LABEL = "تمت الإضافة";
 export const SUCCESS_MS = 1000;
 
 /** Fires `onAdd` once, then holds a success flag for SUCCESS_MS. */
@@ -27,7 +27,14 @@ export function useAddToCartFeedback(onAdd) {
   return { added, fire };
 }
 
-export default function AddToCartButton({ onAdd, label, icon, disabled = false, style }) {
+export default function AddToCartButton({
+  onAdd,
+  label,
+  icon,
+  disabled = false,
+  style,
+  className = "",
+}) {
   const { added, fire } = useAddToCartFeedback(onAdd);
   return (
     <button
@@ -35,14 +42,17 @@ export default function AddToCartButton({ onAdd, label, icon, disabled = false, 
       onClick={fire}
       disabled={disabled}
       aria-live="polite"
-      className={added ? "atc-btn is-added" : "atc-btn"}
+      className={`vs-atc ${className}${added ? " is-added" : ""}`.trim()}
       style={style}
     >
       {added ? (
-        ADDED_LABEL
+        <>
+          <span aria-hidden="true">✓</span>
+          {ADDED_LABEL}
+        </>
       ) : (
         <>
-          {icon ? <span style={{ fontSize: "15px" }}>{icon}</span> : null}
+          {icon}
           {label}
         </>
       )}
