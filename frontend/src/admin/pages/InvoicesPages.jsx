@@ -166,6 +166,24 @@ export function InvoicesPage() {
  * without taking the sheet out of the document, which is what keeps the page break and
  * the RTL table layout intact. Anything marked `.no-print` inside the sheet — buttons,
  * internal notes, audit metadata — is removed outright.
+ *
+ * Pagination rules, in the order they matter:
+ *
+ * * **The item rows may break; the closing block may not.** Item rows are a list and
+ *   reading one across a page boundary costs nothing. The totals, the cancellation
+ *   notice and the customer notes are a single financial statement — a subtotal on one
+ *   page and the amount due on the next is a document you cannot trust at a glance. So
+ *   `.invoice-summary` carries `break-inside: avoid` and moves whole to the next page
+ *   when what remains of this one is not enough. This is exactly the 12-line case the
+ *   visual audit caught.
+ * * **The header row repeats.** `display: table-header-group` asks the browser to
+ *   reprint `<thead>` on every page; browsers that ignore it simply lose nothing.
+ * * **`overflow` must be released.** The sheet is `overflow: hidden` on screen to clip
+ *   the rotated watermark. Left in place while printing it truncates a document taller
+ *   than one page, so print restores `visible` — and the watermark is pinned to the page
+ *   box instead, which keeps it on every sheet rather than only the first.
+ * * **Nothing is scaled down to fit.** Body text stays at 12px and the table keeps its
+ *   own metrics; a legible second page beats an illegible first.
  */
 const PRINT_CSS = `
 @media print {
@@ -184,12 +202,47 @@ const PRINT_CSS = `
     border: 0 !important;
     border-radius: 0 !important;
     font-size: 12px !important;
+    overflow: visible !important;
   }
-  #invoice-sheet .no-print { display: none !important; }
-  #invoice-sheet table { page-break-inside: auto; }
-  #invoice-sheet tr { page-break-inside: avoid; page-break-after: auto; }
+  /*
+   * Global, not scoped to the sheet. visibility:hidden blanks the admin chrome but
+   * leaves its boxes in flow, and a tall box below the sheet — the cancel-invoice card,
+   * the page header — pushes the document past A4 and prints an empty second sheet.
+   * Removing those boxes outright is what keeps a short invoice on one page. The rule
+   * only ever loads on the invoice screen: this component mounts PRINT_CSS.
+   */
+  .no-print { display: none !important; }
+
+  /* The item table is the only thing allowed to span pages. */
+  #invoice-sheet .invoice-items { overflow: visible !important; }
+  #invoice-sheet table { page-break-inside: auto; break-inside: auto; }
   #invoice-sheet thead { display: table-header-group; }
-  #invoice-sheet .invoice-watermark { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #invoice-sheet tfoot { display: table-footer-group; }
+  #invoice-sheet tr { page-break-inside: avoid; break-inside: avoid; page-break-after: auto; }
+  #invoice-sheet tbody tr:first-child { page-break-before: avoid; break-before: avoid; }
+
+  /* The identity/meta header and the per-page header row must not be stranded alone. */
+  #invoice-sheet .invoice-header { page-break-after: avoid; break-after: avoid; }
+  #invoice-sheet .invoice-parties { page-break-inside: avoid; break-inside: avoid; }
+
+  /* Totals, notes and the cancellation notice travel together, whole, always. */
+  #invoice-sheet .invoice-summary {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-before: auto;
+    orphans: 4;
+    widows: 4;
+  }
+  #invoice-sheet .invoice-summary > * { page-break-inside: avoid; break-inside: avoid; }
+
+  /* Pinned to the page box so a multi-page invoice is marked cancelled on every sheet. */
+  #invoice-sheet .invoice-watermark {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 2 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
 `;
 
@@ -298,18 +351,22 @@ export function InvoiceDetailPage() {
     <>
       <style>{PRINT_CSS}</style>
 
-      <PageHeader
-        title={`الفاتورة ${invoice.invoice_number}`}
-        description={`الطلب ${invoice.order_number} · ${formatDateTime(invoice.issued_at)}`}
-        actions={
-          <>
-            <Button variant="ghost" onClick={() => navigate("/admin/invoices")}>رجوع</Button>
-            <Button variant="ghost" onClick={() => navigate(`/admin/orders/${invoice.order_id}`)}>عرض الطلب</Button>
-            <Button onClick={() => window.print()}>طباعة الفاتورة</Button>
-          </>
-        }
-      />
-      {feedback.node}
+      {/* Chrome above the sheet. `.no-print` removes it from flow, not just from view —
+          a box left in flow prints as an empty page. */}
+      <div className="no-print">
+        <PageHeader
+          title={`الفاتورة ${invoice.invoice_number}`}
+          description={`الطلب ${invoice.order_number} · ${formatDateTime(invoice.issued_at)}`}
+          actions={
+            <>
+              <Button variant="ghost" onClick={() => navigate("/admin/invoices")}>رجوع</Button>
+              <Button variant="ghost" onClick={() => navigate(`/admin/orders/${invoice.order_id}`)}>عرض الطلب</Button>
+              <Button onClick={() => window.print()}>طباعة الفاتورة</Button>
+            </>
+          }
+        />
+        {feedback.node}
+      </div>
 
       {/* The printable sheet. Everything outside it is admin chrome and prints nothing. */}
       <div
@@ -331,7 +388,7 @@ export function InvoiceDetailPage() {
           </div>
         )}
 
-        <div style={sx`display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;border-bottom:2px solid #1F4E4A;padding-bottom:16px;margin-bottom:18px`}>
+        <div className="invoice-header" style={sx`display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;border-bottom:2px solid #1F4E4A;padding-bottom:16px;margin-bottom:18px`}>
           <Identity invoice={invoice} />
           <div style={sx`display:flex;flex-direction:column;gap:4px;text-align:start;min-width:210px`}>
             <strong style={sx`font-size:20px`}>
@@ -349,7 +406,7 @@ export function InvoiceDetailPage() {
           </div>
         </div>
 
-        <div style={sx`display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;margin-bottom:18px`}>
+        <div className="invoice-parties" style={sx`display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;margin-bottom:18px`}>
           <div style={sx`display:flex;flex-direction:column;gap:3px`}>
             <strong style={sx`font-size:13px;color:#1F4E4A;margin-bottom:3px`}>بيانات العميل</strong>
             <span style={sx`font-size:13px`}>{invoice.customer_name}</span>
@@ -372,7 +429,7 @@ export function InvoiceDetailPage() {
           </div>
         </div>
 
-        <div style={sx`overflow-x:auto`}>
+        <div className="invoice-items" style={sx`overflow-x:auto`}>
           <table style={sx`width:100%;border-collapse:collapse;min-width:520px`}>
             <thead>
               <tr>
@@ -401,47 +458,56 @@ export function InvoiceDetailPage() {
           </table>
         </div>
 
-        <div style={sx`display:flex;justify-content:flex-start;margin-top:16px`}>
-          <div style={sx`width:min(320px,100%);margin-inline-start:auto`}>
-            <TotalRow label="المجموع الفرعي" value={amount(invoice.subtotal, symbol)} />
-            {invoice.discount > 0 && (
-              <TotalRow
-                label={`الخصم${invoice.coupon_code ? ` (${invoice.coupon_code})` : ""}`}
-                value={`− ${amount(invoice.discount, symbol)}`}
-                tone="#1F6B4A"
-              />
-            )}
-            <TotalRow label="رسوم التوصيل" value={amount(invoice.delivery_fee, symbol)} />
-            {invoice.tax_enabled && (
-              <TotalRow
-                label={`الضريبة (${Number(invoice.tax_rate)}٪${invoice.prices_include_tax ? " — شاملة" : ""})`}
-                value={amount(invoice.tax_amount, symbol)}
-              />
-            )}
-            <TotalRow label="الإجمالي المستحق" value={amount(invoice.grand_total, symbol)} strong />
+        {/*
+          Totals, customer notes and the cancellation notice are one closing statement.
+          The wrapper exists so print can keep them on a single page — see PRINT_CSS.
+        */}
+        <div className="invoice-summary">
+          <div style={sx`display:flex;justify-content:flex-start;margin-top:16px`}>
+            <div style={sx`width:min(320px,100%);margin-inline-start:auto`}>
+              <TotalRow label="المجموع الفرعي" value={amount(invoice.subtotal, symbol)} />
+              {invoice.discount > 0 && (
+                <TotalRow
+                  label={`الخصم${invoice.coupon_code ? ` (${invoice.coupon_code})` : ""}`}
+                  value={`− ${amount(invoice.discount, symbol)}`}
+                  tone="#1F6B4A"
+                />
+              )}
+              <TotalRow label="رسوم التوصيل" value={amount(invoice.delivery_fee, symbol)} />
+              {invoice.tax_enabled && (
+                <TotalRow
+                  label={`الضريبة (${Number(invoice.tax_rate)}٪${invoice.prices_include_tax ? " — شاملة" : ""})`}
+                  value={amount(invoice.tax_amount, symbol)}
+                />
+              )}
+              <TotalRow label="الإجمالي المستحق" value={amount(invoice.grand_total, symbol)} strong />
+            </div>
           </div>
-        </div>
 
-        {invoice.customer_notes && (
-          <div style={sx`margin-top:18px;padding-top:12px;border-top:1px solid #E7E2D9`}>
-            <strong style={sx`font-size:12.5px;color:#1F4E4A`}>ملاحظات العميل</strong>
-            <p style={sx`margin:5px 0 0;font-size:12.5px;line-height:1.8;color:#4A453E`}>
-              {invoice.customer_notes}
+          {invoice.customer_notes && (
+            <div style={sx`margin-top:18px;padding-top:12px;border-top:1px solid #E7E2D9`}>
+              <strong style={sx`font-size:12.5px;color:#1F4E4A`}>ملاحظات العميل</strong>
+              <p style={sx`margin:5px 0 0;font-size:12.5px;line-height:1.8;color:#4A453E`}>
+                {invoice.customer_notes}
+              </p>
+            </div>
+          )}
+
+          {cancelled && (
+            <p style={sx`margin:16px 0 0;font-size:12.5px;color:#8C2F22;font-weight:700`}>
+              أُلغيت هذه الفاتورة بتاريخ {formatDateTime(invoice.cancelled_at)}
+              {invoice.cancellation_reason ? ` — ${invoice.cancellation_reason}` : ""}.
             </p>
-          </div>
-        )}
-
-        {cancelled && (
-          <p style={sx`margin:16px 0 0;font-size:12.5px;color:#8C2F22;font-weight:700`}>
-            أُلغيت هذه الفاتورة بتاريخ {formatDateTime(invoice.cancelled_at)}
-            {invoice.cancellation_reason ? ` — ${invoice.cancellation_reason}` : ""}.
-          </p>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Admin-only controls. Outside the sheet, so they can never reach a printed page. */}
       {!cancelled && (
-        <div style={{ ...card, ...sx`margin-bottom:30px;max-width:820px;margin-inline:auto` }}>
+        <div
+          className="no-print"
+          style={{ ...card, ...sx`margin-bottom:30px;max-width:820px;margin-inline:auto` }}
+        >
           <h2 style={sx`margin:0 0 6px;font-size:16px;font-weight:800`}>إلغاء الفاتورة</h2>
           <p style={sx`margin:0 0 12px;font-size:12.5px;color:#7C766D;line-height:1.8`}>
             إلغاء الفاتورة يلغي الطلب المرتبط بها ويعيد المخزون المحجوز. تبقى الفاتورة ورقمها

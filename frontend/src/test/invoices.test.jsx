@@ -220,6 +220,55 @@ describe("admin invoice detail", () => {
     expect(css).toContain("display: table-header-group");
   });
 
+  it("keeps the closing totals block whole across a page break", async () => {
+    signedIn();
+    stubApi({ "/api/v1/auth/me": ADMIN, "/api/v1/admin/invoices/INV-000001": INVOICE });
+    renderApp("/admin/invoices/INV-000001");
+    await screen.findByRole("heading", { name: /INV-000001/ });
+
+    const sheet = document.getElementById("invoice-sheet");
+    const summary = sheet.querySelector(".invoice-summary");
+
+    // Totals, notes and the cancellation notice are one element, so they move together.
+    expect(summary).toBeTruthy();
+    expect(summary.textContent).toContain("المجموع الفرعي");
+    expect(summary.textContent).toContain("الإجمالي المستحق");
+    expect(summary.textContent).toContain("اتصلوا قبل التوصيل");
+    // The item table is outside it, and is the only thing allowed to span pages.
+    expect(summary.querySelector("table")).toBeNull();
+    expect(sheet.querySelector(".invoice-items table")).toBeTruthy();
+
+    const css = Array.from(document.querySelectorAll("style"))
+      .map((node) => node.textContent)
+      .join("\n");
+
+    // The rule that fixes the 12-line case: the block never splits internally.
+    expect(css).toMatch(
+      /\.invoice-summary\s*\{[^}]*page-break-inside:\s*avoid[^}]*break-inside:\s*avoid/s,
+    );
+    // Item rows may continue onto the next page; the sheet must not clip them away.
+    expect(css).toMatch(/#invoice-sheet table\s*\{[^}]*break-inside:\s*auto/s);
+    expect(css).toMatch(/#invoice-sheet\s*\{[^}]*overflow:\s*visible\s*!important/s);
+  });
+
+  it("keeps the cancelled watermark on every printed page", async () => {
+    signedIn();
+    stubApi({ "/api/v1/auth/me": ADMIN, "/api/v1/admin/invoices/INV-000001": CANCELLED });
+    renderApp("/admin/invoices/INV-000001");
+    await screen.findByRole("heading", { name: /INV-000001/ });
+
+    const css = Array.from(document.querySelectorAll("style"))
+      .map((node) => node.textContent)
+      .join("\n");
+
+    // Pinned to the page box rather than the sheet, so page two is marked too, and the
+    // colour survives the browser's "background graphics" default.
+    expect(css).toMatch(
+      /\.invoice-watermark\s*\{[^}]*position:\s*fixed[^}]*print-color-adjust:\s*exact/s,
+    );
+    expect(document.querySelector("#invoice-sheet .invoice-watermark")).toBeTruthy();
+  });
+
   it("keeps internal notes, cost prices and audit data off the printable sheet", async () => {
     signedIn();
     stubApi({ "/api/v1/auth/me": ADMIN, "/api/v1/admin/invoices/INV-000001": INVOICE });
