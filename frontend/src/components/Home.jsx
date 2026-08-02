@@ -1,5 +1,6 @@
 import sx from "../sx.js";
 import A from "../utils/A.jsx";
+import AddToCartButton from "./AddToCartButton.jsx";
 import ProductCard from "./ProductCard.jsx";
 
 export function HomeTop({ v }) {
@@ -99,7 +100,12 @@ export function HomeTop({ v }) {
                     <span style={sx`font-size:18px;font-weight:800;color:#1F4E4A`}>{k.priceText}</span>
                     {k.hasSale && <span style={sx`font-size:13px;color:#A39C90;text-decoration:line-through`}>{k.oldText}</span>}
                   </div>
-                  <button type="button" onClick={k.add} disabled={k.soldOut} className="hv-teal-dark" style={sx`margin-top:4px;height:42px;border-radius:10px;border:1px solid #1F4E4A;background:#1F4E4A;color:#fff;font-family:inherit;font-size:13.5px;font-weight:700;cursor:${k.btnCursor};transition:background .18s ease`}>{k.soldOut ? "غير متوفر" : "أضف البكج إلى العربة"}</button>
+                  <AddToCartButton
+                    onAdd={k.add}
+                    label={k.soldOut ? "غير متوفر" : "أضف البكج إلى العربة"}
+                    disabled={k.soldOut}
+                    style={sx`margin-top:4px;height:42px;border-radius:10px;border:1px solid #1F4E4A;background:#1F4E4A;color:#fff;font-family:inherit;font-size:13.5px;font-weight:700;cursor:${k.btnCursor};display:flex;align-items:center;justify-content:center`}
+                  />
                 </div>
               </article>
             ))}

@@ -1,5 +1,6 @@
 import sx from "../sx.js";
 import A from "../utils/A.jsx";
+import AddToCartButton from "./AddToCartButton.jsx";
 
 // Expects a decorated product (see deco() in hooks/useShellView.js).
 export default function ProductCard({ p }) {
@@ -36,10 +37,13 @@ export default function ProductCard({ p }) {
           <span style={sx`font-size:17px;font-weight:800;color:#1F4E4A;font-feature-settings:'tnum'`}>{p.priceText}</span>
           {p.hasSale && <span style={sx`font-size:13px;color:#A39C90;text-decoration:line-through`}>{p.oldText}</span>}
         </div>
-        <button type="button" onClick={p.add} disabled={p.soldOut} className={p.soldOut ? undefined : "hv-fill-teal"} style={sx`margin-top:6px;height:40px;border-radius:10px;border:1px solid ${p.btnBorder};background:${p.btnBg};color:${p.btnColor};font-family:inherit;font-size:13.5px;font-weight:700;cursor:${p.btnCursor};display:flex;align-items:center;justify-content:center;gap:7px;transition:background .18s ease,color .18s ease,border-color .18s ease`}>
-          <span style={sx`font-size:15px`}>{p.btnIcon}</span>
-          {p.btnLabel}
-        </button>
+        <AddToCartButton
+          onAdd={p.add}
+          label={p.btnLabel}
+          icon={p.btnIcon}
+          disabled={p.soldOut}
+          style={sx`margin-top:6px;height:40px;border-radius:10px;border:1px solid ${p.btnBorder};background:${p.btnBg};color:${p.btnColor};font-family:inherit;font-size:13.5px;font-weight:700;cursor:${p.btnCursor};display:flex;align-items:center;justify-content:center;gap:7px`}
+        />
       </div>
     </div>
   );

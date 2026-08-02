@@ -81,7 +81,7 @@ export default function Header({ v }) {
             <button type="button" onClick={v.openCart} aria-label="عربة التسوّق" className="hv-teal-dark" style={sx`position:relative;display:flex;align-items:center;gap:8px;height:42px;padding:0 14px;border:1px solid #1F4E4A;border-radius:10px;background:#1F4E4A;color:#fff;font-size:13px;font-weight:700;cursor:pointer;transition:background .18s ease`}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h2l2.2 10.4a2 2 0 0 0 2 1.6h6.6a2 2 0 0 0 2-1.55L20.5 8H7"></path><circle cx="10" cy="20" r="1.3"></circle><circle cx="17" cy="20" r="1.3"></circle></svg>
               <span style={sx`display:var(--deskb)`}>{v.cartTotalText}</span>
-              <span key={v.bump} style={sx`position:absolute;top:-7px;inset-inline-start:-7px;min-width:21px;height:21px;padding:0 5px;border-radius:11px;background:#C9A24B;color:#1E1B18;font-size:11.5px;font-weight:800;display:flex;align-items:center;justify-content:center;animation:${v.badgeAnim}`}>{v.cartCount}</span>
+              <span key={v.badgeKey} style={sx`position:absolute;top:-7px;inset-inline-start:-7px;min-width:21px;height:21px;padding:0 5px;border-radius:11px;background:#C9A24B;color:#1E1B18;font-size:11.5px;font-weight:800;display:flex;align-items:center;justify-content:center;animation:${v.badgeAnim}`}>{v.cartCount}</span>
             </button>
           </div>
         </div>

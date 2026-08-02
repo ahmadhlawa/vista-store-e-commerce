@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useStore, DEFAULT_FILTERS } from "../app/StoreProvider.jsx";
 import { checkoutService } from "../services/checkout.js";
 import { footerLinks, navLinks, trustFeatures, trustGlyphs } from "../store.js";
+import { useCartCountPulse } from "./useCartCountPulse.js";
 import { discountPercent, makeMoney, whatsappHref } from "../utils/format.js";
 
 export function useShellView() {
@@ -13,7 +14,7 @@ export function useShellView() {
   const location = useLocation();
 
   const {
-    settings, categories, cart, bump, toast, overlays, setOverlays, closeAll,
+    settings, categories, cart, toast, overlays, setOverlays, closeAll,
     navOpenCat, setNavOpenCat, announce, setAnnounce, scrolled, query, suggestions,
     suggestTried, runSuggest, recentSearches, rememberSearch, filters, setFilters,
     coupon, setCoupon, addToCart, setLineQty, removeLine, deliveryAreas, sideBanners,
@@ -106,6 +107,9 @@ export function useShellView() {
   const subtotal = cart.reduce((sum, line) => sum + line.unit * line.qty, 0);
   const discount = coupon.applied ? coupon.discount : 0;
   const total = Math.max(0, subtotal - discount);
+  // The badge pulses on a real quantity increase — whatever caused it — rather
+  // than on any store update.
+  const badgePulse = useCartCountPulse(count);
 
   const cartRows = useMemo(
     () =>
@@ -275,8 +279,8 @@ export function useShellView() {
     // cart
     cartCount: count,
     cartTotalText: money(subtotal),
-    bump,
-    badgeAnim: bump ? "pulse .4s ease" : "none",
+    badgeKey: badgePulse,
+    badgeAnim: badgePulse ? "pulse .4s ease" : "none",
     cartRows,
     cartEmpty: cart.length === 0,
     cartHasItems: cart.length > 0,
