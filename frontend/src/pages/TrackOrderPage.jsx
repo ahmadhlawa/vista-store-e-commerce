@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { useOutletContext } from "react-router-dom";
-import { TrackPage } from "../components/Pages.jsx";
 import { checkoutService } from "../services/checkout.js";
 import { orderTokenStorage } from "../storage/authStorage.js";
 import { orderStatusLabels } from "../store.js";
@@ -10,13 +8,12 @@ import { orderStatusLabels } from "../store.js";
 const FLOW = ["pending", "confirmed", "processing", "ready", "shipped", "delivered"];
 
 export default function TrackOrderPage() {
-  const shell = useOutletContext();
   const [value, setValue] = useState("");
   const [order, setOrder] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const doTrack = async (event) => {
+  const track = async (event) => {
     event.preventDefault();
     const orderNumber = value.trim().toUpperCase();
     if (!orderNumber) return;
@@ -42,36 +39,66 @@ export default function TrackOrderPage() {
   const currentIndex = order ? FLOW.indexOf(order.status) : -1;
   const cancelled = order?.status === "cancelled";
 
-  const v = {
-    ...shell,
-    trackId: value,
-    setTrackId: (event) => setValue(event.target.value),
-    doTrack,
-    trackLabel: loading ? "جارٍ البحث…" : "تتبّع",
-    trackError: error,
-    trackOrder: order,
-    trackStatusLabel: order ? orderStatusLabels[order.status] || order.status : "",
-    trackSteps: cancelled
-      ? [
-          {
-            title: orderStatusLabels.cancelled,
-            mark: "✕",
-            dotBg: "#C0392B",
-            dotColor: "#fff",
-            titleColor: "#1E1B18",
-          },
-        ]
-      : FLOW.map((step, index) => {
-          const done = index <= currentIndex;
-          return {
-            title: orderStatusLabels[step],
-            mark: done ? "✓" : "•",
-            dotBg: done ? "#2E7D5B" : "#EDE8E0",
-            dotColor: done ? "#fff" : "#A39C90",
-            titleColor: done ? "#1E1B18" : "#9C958A",
-          };
-        }),
-  };
+  return (
+    <section className="vs-container vs-container--narrow vs-section">
+      <h1 className="vs-page__title">تتبّع الطلب</h1>
+      <p className="vs-page__lead">
+        أدخل رقم الطلب الذي ظهر لك عند التأكيد. يعمل التتبّع على المتصفح الذي أنشأت منه الطلب.
+      </p>
 
-  return <TrackPage v={v} />;
+      <form className="vs-track__form" onSubmit={track}>
+        <input
+          className="vs-input"
+          type="text"
+          dir="ltr"
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          placeholder="ORD-260731-1234"
+          aria-label="رقم الطلب"
+          aria-describedby={error ? "vs-track-error" : undefined}
+        />
+        <button type="submit" className="vs-btn vs-btn--primary vs-btn--lg" disabled={loading}>
+          {loading ? "جارٍ البحث…" : "تتبّع"}
+        </button>
+      </form>
+
+      {error && (
+        <p className="vs-field__error" id="vs-track-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      {order && (
+        <div className="vs-track__result">
+          <h2 className="vs-track__title">الطلب {order.order_number}</h2>
+          <p className="vs-track__status">
+            الحالة الحالية: <strong>{orderStatusLabels[order.status] || order.status}</strong>
+          </p>
+          <ol className="vs-steps">
+            {cancelled ? (
+              <li className="vs-steps__item" data-state="cancelled">
+                <span className="vs-steps__dot" aria-hidden="true">
+                  ✕
+                </span>
+                {orderStatusLabels.cancelled}
+              </li>
+            ) : (
+              FLOW.map((step, index) => (
+                <li
+                  key={step}
+                  className="vs-steps__item"
+                  data-state={index <= currentIndex ? "done" : "todo"}
+                >
+                  <span className="vs-steps__dot" aria-hidden="true">
+                    {index <= currentIndex ? "✓" : "•"}
+                  </span>
+                  {orderStatusLabels[step]}
+                </li>
+              ))
+            )}
+          </ol>
+        </div>
+      )}
+    </section>
+  );
 }

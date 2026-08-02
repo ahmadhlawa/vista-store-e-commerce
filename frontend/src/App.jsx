@@ -1,8 +1,8 @@
 import { Route, Routes } from "react-router-dom";
 import { StoreProvider } from "./app/StoreProvider.jsx";
-import StorefrontLayout from "./layouts/StorefrontLayout.jsx";
+import PublicShell from "./components/public/shell/PublicShell.jsx";
 import HomePage from "./pages/HomePage.jsx";
-import ProductListPage from "./pages/ProductListPage.jsx";
+import CatalogPage from "./pages/CatalogPage.jsx";
 import ProductDetailPage from "./pages/ProductDetailPage.jsx";
 import CartRoutePage from "./pages/CartRoutePage.jsx";
 import CheckoutRoutePage from "./pages/CheckoutRoutePage.jsx";
@@ -27,17 +27,17 @@ export default function App() {
       <Route
         element={
           <StoreProvider>
-            <StorefrontLayout />
+            <PublicShell />
           </StoreProvider>
         }
       >
         <Route index element={<HomePage />} />
-        <Route path="shop" element={<ProductListPage mode="shop" />} />
-        <Route path="category/:slug" element={<ProductListPage mode="category" />} />
-        <Route path="offers" element={<ProductListPage mode="offers" />} />
-        <Route path="packages" element={<ProductListPage mode="packages" />} />
-        <Route path="molds" element={<ProductListPage mode="molds" />} />
-        <Route path="search" element={<ProductListPage mode="search" />} />
+        <Route path="shop" element={<CatalogPage mode="shop" />} />
+        <Route path="category/:slug" element={<CatalogPage mode="category" />} />
+        <Route path="offers" element={<CatalogPage mode="offers" />} />
+        <Route path="packages" element={<CatalogPage mode="packages" />} />
+        <Route path="molds" element={<CatalogPage mode="molds" />} />
+        <Route path="search" element={<CatalogPage mode="search" />} />
         <Route path="product/:slug" element={<ProductDetailPage />} />
         <Route path="cart" element={<CartRoutePage />} />
         <Route path="checkout" element={<CheckoutRoutePage />} />

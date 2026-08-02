@@ -79,7 +79,9 @@ describe("public storefront", () => {
     expect(screen.getByText("130 ₪")).toBeInTheDocument();
     expect(screen.getByText("فقرة أولى.")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "المواصفات" }));
+    // Description / specifications / delivery are a real tablist at this width;
+    // below 900px the same panels become an accordion.
+    await userEvent.click(screen.getByRole("tab", { name: "المواصفات" }));
     expect(await screen.findByText("الوزن")).toBeInTheDocument();
   });
 
@@ -206,7 +208,8 @@ describe("public storefront", () => {
     await userEvent.type(await screen.findByPlaceholderText("مثال: سارة أحمد"), "سارة أحمد");
     await userEvent.type(screen.getByPlaceholderText("05XXXXXXXX"), "0591234567");
     await userEvent.type(screen.getByPlaceholderText("الشارع، رقم البناية، أقرب معلم"), "رام الله، شارع الإرسال");
-    await userEvent.selectOptions(screen.getByRole("combobox"), "1");
+    // Addressed by its own label: the header search field is also a combobox.
+    await userEvent.selectOptions(screen.getByLabelText(/منطقة التوصيل/), "1");
     await userEvent.click(screen.getByRole("checkbox"));
     await userEvent.click(screen.getByRole("button", { name: /تأكيد الطلب/ }));
 

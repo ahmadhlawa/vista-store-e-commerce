@@ -1,196 +1,282 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useOutletContext } from "react-router-dom";
-import { HomeBottom, HomeTop, TrustStrip } from "../components/Home.jsx";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { useStore } from "../app/StoreProvider.jsx";
+import { useCategoryNav, useMoney } from "../hooks/useStorefront.js";
 import { catalogService } from "../services/catalog.js";
 import { storefrontService } from "../services/storefront.js";
+import { productView } from "../utils/productView.js";
+import Hero from "../components/public/home/Hero.jsx";
+import { PromoTile, StripBanner } from "../components/public/home/Banners.jsx";
+import TrustStrip from "../components/public/home/TrustStrip.jsx";
+import SectionHead from "../components/public/shell/SectionHead.jsx";
+import CategoryCard from "../components/public/catalog/CategoryCard.jsx";
+import ProductGrid, { GridSkeleton } from "../components/public/catalog/ProductGrid.jsx";
+import { ArrowForward } from "../components/public/shell/icons.jsx";
 
-const SECTION = {
-  FEATURED: "featured_products",
-  NEW: "new_products",
-  BEST: "bestsellers",
-  PACKAGES: "packages",
-  MOLDS: "silicone_molds",
-  CATEGORIES: "categories",
-  PROMO: "promo_banner",
-  TEXT: "custom_text",
+/**
+ * Each admin-managed section type is rendered by exactly one composition, and
+ * every composition is different — a grid, a rail, a package grid, a banner, a
+ * split editorial block — so the page has rhythm instead of eight identical rows.
+ */
+const SECTIONS = {
+  categories: { kind: "categories", fallbackTitle: "تسوّق حسب القسم", more: "/shop" },
+  featured_products: {
+    kind: "products",
+    layout: "grid",
+    source: "featured",
+    fallbackTitle: "منتجات مختارة",
+    more: "/shop",
+    limit: 8,
+  },
+  new_products: {
+    kind: "products",
+    layout: "grid",
+    source: "newest",
+    fallbackTitle: "وصل حديثاً",
+    more: "/shop?sort=newest",
+    limit: 8,
+  },
+  bestsellers: {
+    kind: "products",
+    layout: "rail",
+    source: "bestsellers",
+    fallbackTitle: "الأكثر مبيعاً",
+    more: "/shop",
+    limit: 10,
+  },
+  packages: {
+    kind: "products",
+    layout: "packages",
+    source: "packages",
+    fallbackTitle: "باقات جاهزة",
+    more: "/packages",
+    limit: 6,
+  },
+  silicone_molds: {
+    kind: "products",
+    layout: "split",
+    source: "molds",
+    fallbackTitle: "قوالب سيليكون",
+    more: "/molds",
+    limit: 4,
+  },
+  promo_banner: { kind: "banner", fallbackTitle: "" },
+  custom_text: { kind: "text", fallbackTitle: "" },
 };
 
-const SHOWCASE_BACKGROUNDS = [
-  "linear-gradient(150deg,#1f4e4a,#3d7d75)",
-  "linear-gradient(150deg,#4a3527,#8a6237)",
-];
+const LOADERS = {
+  featured: (limit) => catalogService.featured(limit),
+  newest: (limit) => catalogService.newest(limit),
+  bestsellers: (limit) => catalogService.bestsellers(limit),
+  packages: (limit) => catalogService.packages({ page_size: limit }),
+  molds: (limit) => catalogService.molds({ page_size: limit }),
+};
 
-const emptyPage = { items: [], total: 0 };
-
-/** The homepage is composed from the admin-managed home sections. */
 export default function HomePage() {
-  const shell = useOutletContext();
-  const [heroSlides, setHeroSlides] = useState([]);
-  const [sections, setSections] = useState({ sections: [], byType: {} });
-  const [packages, setPackages] = useState(emptyPage);
-  const [molds, setMolds] = useState(emptyPage);
-  const [featured, setFeatured] = useState(emptyPage);
-  const [newest, setNewest] = useState(emptyPage);
-  const [best, setBest] = useState(emptyPage);
-  const [articles, setArticles] = useState([]);
-  const [heroIndex, setHeroIndex] = useState(0);
-  const [heroPaused, setHeroPaused] = useState(false);
-  const [tab, setTab] = useState("new");
-  const timer = useRef(null);
+  const store = useStore();
+  const money = useMoney();
+  const categories = useCategoryNav();
 
+  const [hero, setHero] = useState({ slides: [], status: "loading" });
+  const [sections, setSections] = useState({ list: [], status: "loading" });
+  const [lists, setLists] = useState({});
+
+  // Sections first: only the product lists an enabled section actually needs are
+  // fetched, so a store with three sections makes three requests, not six.
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const results = await Promise.allSettled([
-        storefrontService.heroSlides(),
-        storefrontService.homeSections(),
-        catalogService.packages({ page_size: 8 }),
-        catalogService.molds({ page_size: 4 }),
-        catalogService.featured(8),
-        catalogService.newest(8),
-        catalogService.bestsellers(8),
-        storefrontService.articles({ page_size: 4 }),
-      ]);
-      if (cancelled) return;
-      const value = (index, fallback) =>
-        results[index].status === "fulfilled" ? results[index].value : fallback;
-      setHeroSlides(value(0, []));
-      setSections(value(1, { sections: [], byType: {} }));
-      setPackages(value(2, emptyPage));
-      setMolds(value(3, emptyPage));
-      setFeatured(value(4, emptyPage));
-      setNewest(value(5, emptyPage));
-      setBest(value(6, emptyPage));
-      setArticles(value(7, { items: [] }).items);
-    })();
+    Promise.allSettled([storefrontService.heroSlides(), storefrontService.homeSections()]).then(
+      ([heroResult, sectionResult]) => {
+        if (cancelled) return;
+        setHero({
+          slides: heroResult.status === "fulfilled" ? heroResult.value : [],
+          status: heroResult.status === "fulfilled" ? "ready" : "error",
+        });
+        setSections({
+          list: sectionResult.status === "fulfilled" ? sectionResult.value.sections : [],
+          status: sectionResult.status === "fulfilled" ? "ready" : "error",
+        });
+      },
+    );
     return () => {
       cancelled = true;
     };
   }, []);
 
-  useEffect(() => {
-    if (heroSlides.length < 2) return undefined;
-    timer.current = setInterval(() => {
-      if (!heroPaused && !document.hidden) {
-        setHeroIndex((index) => (index + 1) % heroSlides.length);
+  const needed = useMemo(() => {
+    const wanted = new Map();
+    sections.list.forEach((section) => {
+      const spec = SECTIONS[section.type];
+      if (spec?.kind === "products") {
+        wanted.set(spec.source, Math.max(wanted.get(spec.source) || 0, spec.limit));
       }
-    }, 6500);
-    return () => clearInterval(timer.current);
-  }, [heroPaused, heroSlides.length]);
+    });
+    return [...wanted.entries()];
+  }, [sections.list]);
 
-  const visible = (type) => !!sections.byType[type];
-  const titleOf = (type, fallback) => sections.byType[type]?.title || fallback;
-  const descOf = (type, fallback) => sections.byType[type]?.description || fallback;
+  useEffect(() => {
+    if (!needed.length) return undefined;
+    let cancelled = false;
+    needed.forEach(([source, limit]) => {
+      setLists((current) =>
+        current[source] ? current : { ...current, [source]: { items: [], status: "loading" } },
+      );
+      LOADERS[source](limit)
+        .then((result) => {
+          if (cancelled) return;
+          setLists((current) => ({
+            ...current,
+            [source]: { items: result.items, status: "ready" },
+          }));
+        })
+        .catch(() => {
+          // One failed list must not take the homepage with it.
+          if (cancelled) return;
+          setLists((current) => ({ ...current, [source]: { items: [], status: "error" } }));
+        });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [needed]);
 
-  const showcases = useMemo(() => {
-    const blocks = [];
-    if (visible(SECTION.MOLDS) && molds.items.length) {
-      blocks.push({
-        key: "molds",
-        title: titleOf(SECTION.MOLDS, "قوالب سيليكون"),
-        bannerTitle: titleOf(SECTION.MOLDS, "قوالب سيليكون"),
-        bannerDesc: descOf(SECTION.MOLDS, ""),
-        bannerCta: "تصفّح كل القوالب",
-        href: "/molds",
-        bg: SHOWCASE_BACKGROUNDS[0],
-        items: molds.items.map(shell.deco),
-      });
-    }
-    if (visible(SECTION.FEATURED) && featured.items.length) {
-      blocks.push({
-        key: "featured",
-        title: titleOf(SECTION.FEATURED, "منتجات مختارة"),
-        bannerTitle: titleOf(SECTION.FEATURED, "منتجات مختارة"),
-        bannerDesc: descOf(SECTION.FEATURED, ""),
-        bannerCta: "تصفّح المنتجات",
-        href: "/shop",
-        bg: SHOWCASE_BACKGROUNDS[1],
-        items: featured.items.slice(0, 4).map(shell.deco),
-      });
-    }
-    return blocks;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [molds, featured, sections, shell.deco]);
+  const banners = store.banners;
+  const heroPromos = banners.filter((banner) => banner.placement !== "home_strip").slice(0, 2);
+  const stripBanners = banners.filter((banner) => banner.placement === "home_strip");
 
-  const homeTabs = [];
-  if (visible(SECTION.NEW)) homeTabs.push({ key: "new", label: titleOf(SECTION.NEW, "منتجات جديدة") });
-  if (visible(SECTION.BEST)) homeTabs.push({ key: "best", label: titleOf(SECTION.BEST, "الأكثر مبيعاً") });
-  const activeTab = homeTabs.some((entry) => entry.key === tab) ? tab : homeTabs[0]?.key;
+  const views = (source) =>
+    (lists[source]?.items || []).map((product) => productView(product, money));
 
-  const textSection = sections.byType[SECTION.TEXT];
+  let stripIndex = 0;
 
-  const v = {
-    ...shell,
-    showHero: heroSlides.length > 0,
-    heroSlides: heroSlides.map((slide, index) => ({
-      ...slide,
-      opacity: index === heroIndex ? 1 : 0,
-      events: index === heroIndex ? "auto" : "none",
-    })),
-    heroDots: heroSlides.map((slide, index) => ({
-      go: () => setHeroIndex(index),
-      label: `الشريحة ${index + 1}`,
-      w: index === heroIndex ? "30px" : "8px",
-      bg: index === heroIndex ? "#C9A24B" : "rgba(255,255,255,.5)",
-    })),
-    heroPrev: () => setHeroIndex((index) => (index + heroSlides.length - 1) % heroSlides.length),
-    heroNext: () => setHeroIndex((index) => (index + 1) % heroSlides.length),
-    pauseHero: () => setHeroPaused(true),
-    resumeHero: () => setHeroPaused(false),
+  const rendered = sections.list
+    .map((section) => {
+      const spec = SECTIONS[section.type];
+      if (!spec) return null;
+      const title = section.title || spec.fallbackTitle;
 
-    showCategories: visible(SECTION.CATEGORIES) && shell.categories.length > 0,
-    categoriesTitle: titleOf(SECTION.CATEGORIES, "أقسام منتجاتنا"),
-    categoriesEyebrow: descOf(SECTION.CATEGORIES, "تسوّق حسب القسم"),
-    homeCategories: shell.categories.slice(
-      0,
-      sections.byType[SECTION.CATEGORIES]?.config?.limit || 12,
-    ),
+      if (spec.kind === "categories") {
+        if (!categories.length) return null;
+        const limit = section.config?.limit || 8;
+        return (
+          <section key={section.id} className="vs-container vs-section">
+            <SectionHead
+              eyebrow={section.description || null}
+              title={title}
+              moreHref={spec.more}
+            />
+            <div className="vs-grid vs-grid--cats">
+              {categories.slice(0, limit).map((category, index) => (
+                <CategoryCard key={category.slug} category={category} eager={index < 4} />
+              ))}
+            </div>
+          </section>
+        );
+      }
 
-    showPackages: visible(SECTION.PACKAGES) && packages.items.length > 0,
-    packagesTitle: titleOf(SECTION.PACKAGES, "البكجات"),
-    packagesEyebrow: descOf(SECTION.PACKAGES, "ابدأ من هنا"),
-    homeKits: packages.items.map((product) => ({
-      ...shell.deco(product),
-      contents: product.packageItems.slice(0, 6),
-    })),
+      if (spec.kind === "banner") {
+        const banner = stripBanners[stripIndex] || null;
+        stripIndex += 1;
+        if (!banner) return null;
+        return (
+          <section key={section.id} className="vs-container vs-section--tight">
+            <StripBanner banner={banner} />
+          </section>
+        );
+      }
 
-    promoTiles: visible(SECTION.PROMO)
-      ? shell.sideBanners.slice(0, 2).map((banner) => ({
-          id: banner.id,
-          href: banner.href,
-          eyebrow: banner.desc,
-          title: banner.title,
-          cta: banner.cta,
-          bg: banner.bg,
-        }))
-      : [],
+      if (spec.kind === "text") {
+        if (!section.title && !section.description) return null;
+        return (
+          <section key={section.id} className="vs-container vs-section">
+            <div className="vs-split__panel">
+              <h2 className="vs-split__title">{section.title}</h2>
+              {section.description && <p className="vs-split__desc">{section.description}</p>}
+              <Link to="/shop" className="vs-btn vs-btn--lg vs-split__cta">
+                تصفّح المتجر <ArrowForward size={16} />
+              </Link>
+            </div>
+          </section>
+        );
+      }
 
-    showcases,
+      const list = lists[spec.source];
+      if (!list || list.status === "error") return null;
 
-    homeTabs: homeTabs.map((entry) => ({
-      ...entry,
-      active: entry.key === activeTab ? 1 : 0,
-      weight: entry.key === activeTab ? 800 : 600,
-      color: entry.key === activeTab ? "#1E1B18" : "#9C958A",
-      pick: () => setTab(entry.key),
-    })),
-    homeTabItems: (activeTab === "best" ? best.items : newest.items).map(shell.deco),
-    homeTabHref: activeTab === "best" ? "/shop?sort=featured" : "/shop?sort=newest",
+      if (list.status === "loading") {
+        return (
+          <section key={section.id} className="vs-container vs-section">
+            <SectionHead title={title} description={section.description} />
+            <GridSkeleton count={spec.layout === "packages" ? 3 : 4} />
+          </section>
+        );
+      }
 
-    articles: articles.map((article) => ({ ...article, href: `/blog/${article.slug}` })),
-    cta: textSection
-      ? {
-          title: textSection.title || "تواصل معنا",
-          desc: textSection.description || textSection.config?.body || "",
-        }
-      : null,
-  };
+      const items = views(spec.source).slice(0, spec.limit);
+      // A section with nothing in it, or a lone card stranded in a wide row, is
+      // worse than no section at all.
+      if (items.length < 2) return null;
+
+      if (spec.layout === "split") {
+        return (
+          <section key={section.id} className="vs-container vs-section">
+            <div className="vs-split">
+              <div className="vs-split__panel">
+                <h2 className="vs-split__title">{title}</h2>
+                {section.description && <p className="vs-split__desc">{section.description}</p>}
+                <Link to={spec.more} className="vs-btn vs-btn--lg vs-split__cta">
+                  عرض الكل <ArrowForward size={16} />
+                </Link>
+              </div>
+              <div className="vs-split__grid">
+                <ProductGrid views={items.slice(0, 4)} variant="plain" eagerCount={0} />
+              </div>
+            </div>
+          </section>
+        );
+      }
+
+      return (
+        <section key={section.id} className="vs-container vs-section">
+          <SectionHead
+            title={title}
+            description={section.description}
+            moreHref={spec.more}
+          />
+          <ProductGrid views={items} variant={spec.layout} eagerCount={0} />
+        </section>
+      );
+    })
+    .filter(Boolean);
 
   return (
     <>
-      <HomeTop v={v} />
-      <TrustStrip v={v} />
-      <HomeBottom v={v} />
+      <div className="vs-container vs-herorow">
+        {hero.status === "loading" ? (
+          <div className="vs-skel vs-hero--skel" />
+        ) : (
+          <Hero slides={hero.slides} />
+        )}
+        {heroPromos.length > 0 && (
+          <div className="vs-promocol">
+            {heroPromos.map((banner, index) => (
+              <PromoTile key={banner.id} banner={banner} eager={index === 0} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {sections.status === "loading" && (
+        <section className="vs-container vs-section">
+          <GridSkeleton count={4} />
+        </section>
+      )}
+
+      {rendered}
+
+      <section className="vs-container vs-section--tight">
+        <TrustStrip />
+      </section>
     </>
   );
 }

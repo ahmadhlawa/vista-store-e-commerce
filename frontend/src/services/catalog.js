@@ -35,6 +35,10 @@ export function normalizeProduct(raw) {
     specs: (raw.specifications || []).map((spec) => [spec.name, spec.value]),
     options: raw.options || [],
     variants: raw.variants || [],
+    // Present on both projections: the list payload omits the option rows, so a
+    // card relies on the flag alone to decide direct-add vs. choose-an-option.
+    hasOptions: !!raw.has_options || (raw.options || []).length > 0,
+    packageItemCount: raw.package_item_count ?? (raw.package_items || []).length,
     packageItems: (raw.package_items || []).map((item) => ({
       id: item.id,
       productId: item.included_product_id,

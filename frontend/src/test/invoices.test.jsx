@@ -439,8 +439,10 @@ describe("storefront payment surface", () => {
     stubApi(cartRoutes);
     renderApp("/checkout");
 
-    await screen.findByText("طريقة الدفع");
-    await userEvent.click(screen.getByText("تحويل بنكي / يدوي"));
+    // The footer also names the accepted methods, so the option is selected
+    // inside the payment fieldset rather than anywhere the words appear.
+    const panel = (await screen.findByText("طريقة الدفع")).parentElement;
+    await userEvent.click(within(panel).getByText("تحويل بنكي / يدوي"));
 
     expect(screen.queryByText(/حساب رقم/)).not.toBeInTheDocument();
   });
@@ -456,8 +458,8 @@ describe("storefront payment surface", () => {
     });
     renderApp("/checkout");
 
-    await screen.findByText("طريقة الدفع");
-    await userEvent.click(screen.getByText("تحويل بنكي / يدوي"));
+    const panel = (await screen.findByText("طريقة الدفع")).parentElement;
+    await userEvent.click(within(panel).getByText("تحويل بنكي / يدوي"));
 
     expect(await screen.findByText("بنك فلسطين — حساب رقم 12345")).toBeInTheDocument();
   });

@@ -48,6 +48,20 @@ export function normalizeSettings(raw) {
   };
 }
 
+// Artwork-less records fall back to a Vista tone gradient rather than a blank
+// panel; the components render a real <img> whenever a URL exists so the
+// browser can lazy-load and size it.
+const HERO_FALLBACKS = [
+  "linear-gradient(115deg,#1f4e4a 0%,#2f6f68 55%,#c9a24b 150%)",
+  "linear-gradient(115deg,#3a2a22 0%,#7a5233 60%,#e8d8bd 155%)",
+  "linear-gradient(115deg,#2b2f3a 0%,#4c5468 55%,#d3cfe2 155%)",
+];
+
+const BANNER_FALLBACKS = [
+  "linear-gradient(150deg,#1f4e4a,#3d7d75)",
+  "linear-gradient(150deg,#4a3527,#8a6237)",
+];
+
 export function normalizeHeroSlide(raw, index) {
   return {
     id: raw.id,
@@ -56,11 +70,8 @@ export function normalizeHeroSlide(raw, index) {
     desc: raw.description || "",
     cta: raw.button_label || "",
     href: raw.button_url || "/shop",
-    bg: raw.image_url
-      ? `linear-gradient(115deg,rgba(20,20,20,.55),rgba(20,20,20,.15)),url("${raw.image_url}") center/cover no-repeat`
-      : ["linear-gradient(115deg,#1f4e4a 0%,#2f6f68 55%,#c9a24b 140%)",
-         "linear-gradient(115deg,#3a2a22 0%,#7a5233 60%,#e8d8bd 150%)",
-         "linear-gradient(115deg,#2b2f3a 0%,#4c5468 55%,#d3cfe2 150%)"][index % 3],
+    imageUrl: raw.image_url || null,
+    fallback: HERO_FALLBACKS[index % HERO_FALLBACKS.length],
   };
 }
 
@@ -72,11 +83,8 @@ export function normalizeBanner(raw, index) {
     cta: raw.subtitle ? "اكتشف المزيد" : "تصفّح",
     href: raw.link_url || "/shop",
     placement: raw.placement,
-    bg: raw.image_url
-      ? `linear-gradient(120deg,rgba(20,20,20,.55),rgba(20,20,20,.2)),url("${raw.image_url}") center/cover no-repeat`
-      : ["linear-gradient(120deg,#3a2a22,#7a5233)", "linear-gradient(120deg,#2b2f3a,#5b6478)"][
-          index % 2
-        ],
+    imageUrl: raw.image_url || null,
+    fallback: BANNER_FALLBACKS[index % BANNER_FALLBACKS.length],
   };
 }
 
@@ -91,6 +99,7 @@ export function normalizeArticle(raw) {
     author: raw.author_name || "",
     date: formatDate(raw.published_at),
     read: readingTime(raw.content || raw.excerpt),
+    imageUrl: raw.featured_image_url || null,
     bg: backgroundFor(raw.featured_image_url, raw.slug),
     seoTitle: raw.seo_title || raw.title,
     seoDescription: raw.seo_description || raw.excerpt || "",
