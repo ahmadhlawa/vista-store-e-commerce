@@ -84,8 +84,8 @@ page overflow.**
 | Cart and checkout usability | **Pass** — full COD order placed through the UI at 1440 px; totals, quantity stepper and delivery-area select all usable |
 | Preview notice | **Pass** — `role="status"` carrying «نسخة تجريبية — البيانات والأسعار للمعاينة» on all 9 public routes, and **absent from every admin route** |
 | No card-payment UI | **Pass** — checkout offers exactly two radios, «الدفع عند الاستلام» and «تحويل بنكي / يدوي». No `stripe`, `paypal`, `cvv`, `رقم البطاقة`, `فيزا` or `ماستركارد` string in any rendered route |
-| Invoice A4 print layout | **Pass** — see §4 |
-| Cancelled invoice watermark | **Pass** — see §4 |
+| Invoice A4 print layout | **Pass** — see §4, and §4a for the pagination fix that followed |
+| Cancelled invoice watermark | **Pass** — see §4; §4a extends it to every page of a multi-page invoice |
 | Public/Admin layout separation | **Pass** — no storefront footer, cart link or "add to cart" control appears on any admin route; the preview notice does not leak into admin |
 
 The `role="status"` node on `/admin/media` is the upload-types hint
@@ -143,6 +143,52 @@ Measured against the true A4 content box (182 × 269 mm = 688 × 1016 px at 96 d
 
 A 12-line invoice needing a second page is correct behaviour, not a defect: 1066 px of
 content simply exceeds the 1016 px A4 content box. Only the totals block spills.
+
+### 4a. Print pagination follow-up — 2026-08-02, commit `9c09d8e` onwards
+
+The spill above was accepted as "correct for the content height". On review it is not
+acceptable output: a subtotal on page 1 and an amount due on page 2 is an invoice a
+reader cannot check at a glance. This pass changed **only the print layout** — no
+redesign, no smaller type, no data change.
+
+**What changed**
+
+| Change | Why |
+| --- | --- |
+| Totals + customer notes + cancellation notice wrapped in one `.invoice-summary` with `break-inside: avoid` | They are one closing statement. When the remaining space is too small the whole block moves to the next page instead of splitting |
+| `.no-print` promoted from sheet-scoped to a global print rule, and applied to the page header and the cancel-invoice card | `visibility: hidden` blanked the admin chrome but left its boxes in flow. A tall box *below* the sheet pushed the document past A4 and printed an empty second page on **every** non-cancelled invoice |
+| `#invoice-sheet { overflow: visible }` under print | The sheet is `overflow: hidden` on screen to clip the rotated watermark; left in place it truncates anything past page 1 |
+| Watermark switched to `position: fixed` under print | It was painted once, inside the sheet. Pinned to the page box it marks **every** sheet of a multi-page cancelled invoice |
+| `tfoot: table-footer-group`, `tbody tr:first-child { break-before: avoid }` | Keeps the header row from being stranded and the first data row from being orphaned from it |
+
+Item rows still break freely across pages — that is a list, and it is what makes a
+one-page totals block possible.
+
+**Focused verification.** The real `InvoiceDetailPage` was rendered for four fixtures,
+the resulting document (markup + the component's own `PRINT_CSS`) written to disk, and
+each one paginated by locally installed Chrome
+(`--headless=new --print-to-pdf --print-to-pdf-no-header`, so the sheet's
+`@page { size: A4; margin: 14mm }` governs). Page assignment was read back out of the
+PDFs rather than eyeballed.
+
+| Fixture | Lines | A4 pages | Grand total on | Whole summary on | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| Short | 2 | **1** | page 1 | page 1 | ✅ one clean page — the empty second page is gone |
+| Twelve-line | 12 | **1** | page 1 | page 1 | ✅ the reported spill is fixed |
+| Twenty-four-line | 24 | 2 | page 2 | page 2 | ✅ rows continue, the block travels whole |
+| Cancelled (12 lines) | 12 | **1** | page 1 | page 1 | ✅ |
+| Cancelled (24 lines) | 24 | 2 | page 2 | page 2 | ✅ watermark on **both** pages |
+
+* **Table header repeats:** the `SKU` column header is present in the extracted text of
+  page 1 **and** page 2 of the 24-line PDF.
+* **Watermark:** the 76 px watermark type is present in the content stream of every page
+  of both cancelled PDFs, and of no page of any issued invoice.
+* **Type sizes unchanged:** the sheet still prints at 12 px body / 13 px table cells.
+  Nothing was shrunk to make content fit.
+
+Locked in by two frontend regression tests in `frontend/src/test/invoices.test.jsx`
+("keeps the closing totals block whole across a page break", "keeps the cancelled
+watermark on every printed page").
 
 ---
 
@@ -226,13 +272,18 @@ visual-QA pass.
 
 ## 7. Remaining visual issues
 
-1. **`preview_cli seed` cannot repair missing media objects** — §5 D2. Not visual in
-   itself, but its symptom is: a preview instance whose object store has been cleared
-   shows 25 blank product cards and the seeder reports everything fine. Worth fixing
-   before another preview is handed to a client.
-2. **A 12-line invoice spills its totals block onto a second A4 page** by ~50 px. Correct
-   behaviour for the content height; noted because the previous revision predicted the
-   first break would land past ~15 lines, and it actually lands at about 11.
+1. ~~**`preview_cli seed` cannot repair missing media objects**~~ — **fixed 2026-08-02.**
+   `StorageProvider` now exposes `exists()` and `restore()`; the seed verifies the storage
+   object as well as the ownership row and re-uploads a missing one **to its recorded
+   key**, so no second `MediaAsset` row appears and no already-published URL changes.
+   Verified against MySQL: one owned object deleted through the storage boundary, the next
+   seed reported `repair=1, skip=52, update=1`, the object came back byte-identical at the
+   same key, media rows stayed at 12, and a further seed was a plain no-op. Owner-edited
+   rows, rows uploaded to a different provider and keys outside the batch prefix are never
+   inspected or rewritten.
+2. ~~**A 12-line invoice spills its totals block onto a second A4 page**~~ — **fixed
+   2026-08-02, see §4a.** A short invoice is now one clean page, a 12-line invoice is one
+   clean page, and a 24-line invoice keeps the whole totals block together on page 2.
 3. **Emulated viewports, not physical devices.** Touch gestures, on-screen keyboards and
    browser chrome insets were not exercised.
 4. **Chrome only.** Firefox, WebKit and a visual-regression baseline are still missing —

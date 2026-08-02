@@ -1,5 +1,135 @@
 # Implementation status
 
+## Storage repair, invoice print pagination and live MySQL acceptance — 2026-08-02
+
+**Branch:** `feat/vista-preview-data-storage`. **Not merged, not pushed.** This closes the
+three technical gaps the visual QA left open. No feature was added.
+
+| Gap | State |
+| --- | --- |
+| Preview seed trusted the database row and reported "already uploaded" for a missing object | **Closed.** `StorageProvider` gained `exists()` and `restore()`; the seed now verifies the row **and** the object, and repairs the object at its recorded key |
+| A 12-line invoice split its totals block across an A4 page break | **Closed.** Print-layout only; short and 12-line invoices are now one clean page, and the closing block never splits |
+| MySQL runtime acceptance was BLOCKED on Docker | **Closed.** Run against the machine's own MySQL **8.0.46** in an isolated `vista_store_dev`; 22 of 22 acceptance steps passed |
+
+### 1. Storage repair
+
+`StorageProvider` is now a four-method boundary — `save`, `exists`, `restore`, `delete`.
+
+* `LocalStorageProvider.exists()` stats the file inside the media root and returns `False`
+  (never raises) for an empty key or one that resolves outside it.
+* `R2StorageProvider.exists()` was already present; it now **refuses to issue a request at
+  all** for a key outside `R2_OBJECT_PREFIX` and reports it absent. `restore()` refuses
+  such a key outright, the same rule `delete()` already enforced.
+* `restore(key, data, content_type=…)` deliberately does **not** mint a key. Writing back
+  to the recorded key is what lets the seed repair storage without touching the database
+  row — no duplicate `MediaAsset`, and no URL already published in a category, product,
+  hero slide or banner changes.
+
+`PreviewImporter._verify_media_object` runs for every owned, unedited media row and adds a
+new `repair` outcome to the plan. It refuses three cases before it looks at anything:
+an owner-edited row, a row uploaded to a different provider than the one now configured,
+and a key outside the batch's own media prefix — the last is never even probed. Because
+the placeholder bytes are deterministic, a repair reproduces the object byte for byte.
+
+Eight regression tests in `backend/tests/test_preview_importer.py` (row+object present →
+skip; object missing → repair; no second row or batch record; the repaired object is
+readable at its published URL and the category still points at it; an owner-edited row is
+never repaired; unrelated owner media untouched; a repair is itself idempotent) and six in
+`backend/tests/test_storage_providers.py` (local `exists`/`restore` round trip, `exists`
+false outside the media root, R2 `restore` keeps the key and URL, R2 `restore` refuses a
+foreign prefix, `exists` never probes a foreign key).
+
+### 2. Invoice print pagination
+
+Print CSS and the existing markup only — no redesign, no smaller type. Full result and
+the measured page table: [client/preview-visual-qa.md](client/preview-visual-qa.md) §4a.
+
+Three things were wrong, not one:
+
+1. The totals, notes and cancellation notice were three siblings, so a page break could
+   land between them. They are now one `.invoice-summary` with `break-inside: avoid`.
+2. `visibility: hidden` blanked the admin chrome but left its boxes in flow, so a tall
+   card *below* the sheet printed an **empty second page on every non-cancelled invoice**.
+   `.no-print` is now a global print rule and is applied to that chrome.
+3. `overflow: hidden` on the sheet — needed on screen to clip the watermark — truncated
+   anything past page 1 when printing. Print restores `overflow: visible`, and the
+   watermark is pinned to the page box instead, so it marks every page.
+
+Verified by rendering the real component for five fixtures and paginating each with local
+Chrome (`--headless=new --print-to-pdf`), then reading page assignment back out of the
+PDFs: short 1 page, 12-line 1 page, 24-line 2 pages with the whole totals block on page 2,
+cancelled 12-line 1 page, cancelled 24-line 2 pages with the watermark on **both**. The
+`SKU` column header appears on page 2 of the 24-line PDF, so the repeating `thead` holds.
+Two frontend regression tests lock it in.
+
+### 3. Live MySQL acceptance — PASSED
+
+MySQL **8.0.46**, `127.0.0.1:3306`, database `vista_store_dev`, application user
+`vista_store_dev_user` whose grants reach that database and nothing else. The application
+was never run as `root`. The SQLite-backed `uvicorn` was stopped first, and the MySQL URL
+was supplied as a process environment variable — `backend/.env` still points at SQLite.
+
+All 22 steps passed. Full table:
+[deployment/mysql-local-development.md](deployment/mysql-local-development.md).
+Highlights: Alembic reached **`0004_import_batches (head)`** on an empty database (30
+tables, all InnoDB/utf8mb4, 23 FKs); `create=54` then `skip=53, update=1`;
+`DECIMAL(12,2)` keeps `exponent == -2` and `SUM(price)` returns a `Decimal`; Arabic
+including `ﷺ` survives utf8mb4; the three `json` columns round-trip and none is indexed;
+a dangling FK and a duplicate slug are both refused; one COD order → **exactly one
+invoice**, six further status transitions minted **no** second invoice, cancelling
+restored stock `7 → 10` and preserved the invoice number; deleting one owned preview
+object then re-seeding gave `repair=1` with the media row count unchanged; purge dry run
+`delete=53`, applied `delete=66`, re-seed `create=54`.
+
+**One genuine test defect was fixed, and it was not a MySQL compatibility defect.** Four
+tests in `tests_mysql/test_mysql_preview.py` resolved their subject as "the first row of
+this table". Against the empty CI service container that is the row they created; against
+a real development database it is somebody else's — one failed outright. They now resolve
+every row through the `ImportBatchRecord` that owns it, which is the rule the importer
+itself uses. No application code needed a MySQL fix.
+
+**SQLite is unaffected:** the full backend suite still runs on SQLite with no MySQL server
+present, and `backend/.env` is unchanged.
+
+### Verification (all run at the end of this session)
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Backend suite + coverage | `pytest --cov=app --cov=scripts` | **275 passed**, **89 %** (5167 statements, 563 missed) |
+| MySQL integration suite | `pytest tests_mysql` against local MySQL 8.0.46 | **18 passed, 4 skipped** — the 4 need a second and third database |
+| Frontend suite | `npx vitest run` | **55 passed** (5 files) |
+| Frontend build | `npm run build` | clean — 88 modules, 407.80 kB JS / 111.62 kB gzip, 2.71 s |
+| Focused invoice print | real component → Chrome `--print-to-pdf` → PDF page analysis | **5/5 fixtures pass**; totals block never split |
+| Preview media repair | delete an owned object, re-seed, against MySQL | `repair=1`, object restored at the same key, no duplicate row |
+| Whitespace | `git diff --check` | clean |
+| Secret scan | pattern sweep over every tracked file | no credential value; `.env.mysql.local` confirmed ignored and untracked |
+| Runtime-file tracking | `git ls-files` filtered | only `.example` templates and `backend/data/vista-uploads/.gitkeep` |
+
+### Still blocked
+
+* **Live R2 smoke test — BLOCKED, unchanged.** No `R2_*` value is set in `backend/.env` or
+  in the environment, so no object has yet been written to a real bucket. The provider is
+  implemented and unit-tested against a stub, and this session extended that stub coverage
+  to `exists()` and `restore()`. Steps to finish:
+  [deployment/r2-preview-setup.md](deployment/r2-preview-setup.md) §3. Scope was not
+  changed to work around this.
+* **Four `tests_mysql` tests — BLOCKED on a database-creating account.** They need
+  `MYSQL_LIFECYCLE_URL` and `MYSQL_SEED_URL` pointing at two further schemas. The
+  `MYSQL_ADMIN_PASSWORD` recorded in `.env.mysql.local` is rejected by the server
+  (`ERROR 1045`), so the schemas could not be created. Exact variable names and the
+  `CREATE DATABASE` / `GRANT` statements:
+  [deployment/mysql-local-development.md](deployment/mysql-local-development.md).
+
+### Next, in order
+
+1. **Supply a working MySQL admin password**, create `vista_store_dev_lifecycle` and
+   `vista_store_dev_seed`, and clear the last four skips.
+2. **Supply R2 credentials** and run the live upload/read/delete smoke test.
+3. **Send the owner [client/data-needed-from-owner.md](client/data-needed-from-owner.md).**
+4. **Settle the currency before the first real order.**
+
+---
+
 ## Preview catalog, R2 storage and MySQL runtime — 2026-08-02
 
 **Branch:** `feat/vista-preview-data-storage`, cut from `feat/vista-store-initial-release`
@@ -12,7 +142,7 @@ the read-only `template-upstream`.
 | 2. Preview dataset | **Done** — `instance/preview/vista-social-preview.yaml`: 7 categories, 25 products, 12 media, 1 delivery area, 3 hero slides, 2 banners, 1 coupon |
 | 3. Preview batch lifecycle | **Done** — `import_batches` / `import_batch_records`, revision `0004`, `vista-preview validate/plan/seed/status/purge` |
 | 4. R2 storage provider | **Done as code**, **live verification BLOCKED** — no credentials in this environment |
-| 5. MySQL development runtime | **Done as configuration**, **live verification BLOCKED** — Docker not installed |
+| 5. MySQL development runtime | **Done as configuration**, live verification BLOCKED at the time — Docker not installed. **Since passed on 2026-08-02 against local MySQL 8.0.46**; see the section at the top of this file |
 | 6. Storefront preview notice | **Done** — `VITE_PREVIEW_NOTICE`, absent from the bundle when unset |
 | 7. Visual QA | **Done — 2026-08-02.** All 16 public and admin routes opened in real Chrome at 390 / 768 / 1440 px against the populated preview catalog; full product → cart → COD checkout → admin confirm → invoice → A4 print flow driven through the UI. One storefront defect found and fixed. [client/preview-visual-qa.md](client/preview-visual-qa.md) |
 
@@ -107,11 +237,14 @@ Re-verified after the fix:
 
 ### Next, in order
 
-1. **Give `StorageProvider` an `exists()` and make `_seed_media` re-upload a missing
-   object** — the one real code defect this visual QA surfaced and did not fix.
+*Items 1 and 3 were done on 2026-08-02 — see the section at the top of this file. Item 3
+was settled without Docker, against the machine's own MySQL 8.0.46.*
+
+1. ~~**Give `StorageProvider` an `exists()` and make `_seed_media` re-upload a missing
+   object**~~ — done.
 2. **Supply R2 credentials** and run the smoke test in
-   [deployment/r2-preview-setup.md](deployment/r2-preview-setup.md) §3.
-3. **Install Docker** and run the 13-step sequence in
+   [deployment/r2-preview-setup.md](deployment/r2-preview-setup.md) §3. *Still open.*
+3. ~~**Install Docker** and run the 13-step sequence~~ — done, without Docker, in
    [deployment/mysql-local-development.md](deployment/mysql-local-development.md).
 4. **Send the owner [client/data-needed-from-owner.md](client/data-needed-from-owner.md).**
    The preview catalog buys time; it does not replace a single item on that list.
