@@ -139,9 +139,12 @@ export default function ProductDetailPage() {
       };
     }),
     specs: product.specs.map(([k, value]) => ({ k, v: value })),
-    descriptionParagraphs: [product.description]
+    // A catalogue row may carry only the short line. Falling back to it keeps the
+    // description tab from rendering as an empty panel.
+    descriptionParagraphs: [product.description || product.short]
       .filter(Boolean)
       .flatMap((text) => text.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean)),
+    emptyTabText: "لا تتوفر تفاصيل إضافية لهذا المنتج.",
     mainBtnBg: soldOut ? "#B7B1A7" : "#1F4E4A",
     mainBtnLabel: soldOut
       ? "غير متوفر حالياً"

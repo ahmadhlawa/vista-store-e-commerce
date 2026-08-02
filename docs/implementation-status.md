@@ -14,7 +14,7 @@ the read-only `template-upstream`.
 | 4. R2 storage provider | **Done as code**, **live verification BLOCKED** — no credentials in this environment |
 | 5. MySQL development runtime | **Done as configuration**, **live verification BLOCKED** — Docker not installed |
 | 6. Storefront preview notice | **Done** — `VITE_PREVIEW_NOTICE`, absent from the bundle when unset |
-| 7. Visual QA | **NOT DONE** — no browser tooling available. [client/preview-visual-qa.md](client/preview-visual-qa.md) records what was and was not verified |
+| 7. Visual QA | **Done — 2026-08-02.** All 16 public and admin routes opened in real Chrome at 390 / 768 / 1440 px against the populated preview catalog; full product → cart → COD checkout → admin confirm → invoice → A4 print flow driven through the UI. One storefront defect found and fixed. [client/preview-visual-qa.md](client/preview-visual-qa.md) |
 
 ### Verification (all run in this session)
 
@@ -64,16 +64,51 @@ Both have regression tests.
   unavailable; no install under `%ProgramFiles%\Docker` or `%LOCALAPPDATA%\Docker`).
   Nothing was installed to work around it and no existing MySQL server was contacted. The
   13-step sequence is written and ready: [deployment/mysql-local-development.md](deployment/mysql-local-development.md).
-* **Visual QA — NOT DONE.** No Playwright, no Puppeteer, no Chrome or Edge on `PATH`, no
-  browser tool in the harness. Nothing has been looked at. The route table in
-  [client/preview-visual-qa.md](client/preview-visual-qa.md) is all ✗ and must stay that
-  way until someone runs it.
+Visual QA was the third blocked item here. **It is no longer blocked** — see the
+2026-08-02 pass below.
+
+### Visual QA — done 2026-08-02
+
+Driven with the locally installed Chrome over the DevTools Protocol from the backend
+virtualenv (`websockets` + `httpx`, both already present). No Playwright, no Puppeteer and
+no browser download.
+
+| Check | Result |
+| --- | --- |
+| 16 routes × 390 / 768 / 1440 px | **48/48 inspected**, `dir="rtl"` and **0 px horizontal overflow** everywhere |
+| Product → cart → COD checkout | **Pass** — `ORD-260802-7868`, 190 ₪, through the UI |
+| Admin login → confirm → invoice | **Pass** — exactly one invoice per order; a `confirmed → processing → confirmed` round trip minted no duplicate |
+| Invoice A4 print | **Pass** — 1-line invoice = one A4 page; no admin chrome prints; repeated table header on page 2 confirmed with `pdftotext` on the real 24-line PDF |
+| Cancelled watermark | **Pass** — diagonal «ملغاة» prints without obscuring the figures |
+| No card-payment UI | **Pass** — two radios only, COD and manual transfer |
+| Public/Admin separation | **Pass** — no storefront chrome and no preview notice on any admin route |
+
+**One storefront defect found and fixed:** the product-detail «الوصف» and «المواصفات»
+tabs rendered empty white panels, because 23 of 25 preview products carry no
+`description` and 22 of 25 carry no specifications. The description now falls back to
+`short_description` and both panels have an empty state.
+
+**One environment defect found, repaired, and reported rather than fixed:** all 12 preview
+media objects were missing from `backend/data/vista-uploads/` and returned HTTP 404, so
+every card, hero and banner painted blank. The deterministic placeholder bytes were
+rewritten under their recorded keys. `preview_cli seed` **cannot** repair this — it decides
+from the database row alone and reports "already uploaded" for objects that do not exist.
+Fixing that needs an `exists()` on the `StorageProvider` boundary, which was out of scope
+for a visual-QA pass.
+
+Re-verified after the fix:
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Backend suite | `python -m pytest` | **260 passed**, 1 warning |
+| Frontend suite | `npx vitest run` | **53 passed** (5 files) |
+| Frontend build | `npm run build` | clean — 88 modules, `index-CAGMzJi6.js` 406.03 kB (gzip 110.98 kB), 4.27 s |
+| Whitespace | `git diff --check` | clean |
 
 ### Next, in order
 
-1. **Do the visual QA** at 390 / 768 / 1440 px with the preview catalog loaded — commands
-   are at the bottom of [client/preview-visual-qa.md](client/preview-visual-qa.md). Print
-   an invoice for the graduation package order; that is where the first page break lands.
+1. **Give `StorageProvider` an `exists()` and make `_seed_media` re-upload a missing
+   object** — the one real code defect this visual QA surfaced and did not fix.
 2. **Supply R2 credentials** and run the smoke test in
    [deployment/r2-preview-setup.md](deployment/r2-preview-setup.md) §3.
 3. **Install Docker** and run the 13-step sequence in

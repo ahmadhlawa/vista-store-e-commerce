@@ -85,6 +85,9 @@ export function ProductPage({ v }) {
         <div style={sx`background:#fff;border:1px solid #E9E3DA;border-top:0;border-radius:0 0 14px 14px;padding:26px`}>
           {v.tabDesc && (
             <div style={sx`display:flex;flex-direction:column;gap:14px;max-width:760px`}>
+              {pd.descriptionParagraphs.length === 0 && (
+                <p style={sx`margin:0;font-size:14.5px;line-height:1.95;color:#7C766D`}>{pd.emptyTabText}</p>
+              )}
               {pd.descriptionParagraphs.map((text, i) => (
                 <p key={i} style={sx`margin:0;font-size:14.5px;line-height:1.95;color:#4A453E`}>{text}</p>
               ))}
@@ -92,6 +95,9 @@ export function ProductPage({ v }) {
           )}
           {v.tabSpecs && (
             <div style={sx`display:flex;flex-direction:column;max-width:620px`}>
+              {pd.specs.length === 0 && (
+                <p style={sx`margin:0;font-size:14.5px;line-height:1.95;color:#7C766D`}>{pd.emptyTabText}</p>
+              )}
               {pd.specs.map((s) => (
                 <div key={s.k} style={sx`display:flex;justify-content:space-between;gap:16px;padding:13px 0;border-bottom:1px solid #F0EBE3;font-size:14px`}><span style={sx`color:#7C766D`}>{s.k}</span><strong style={sx`font-weight:700`}>{s.v}</strong></div>
               ))}
