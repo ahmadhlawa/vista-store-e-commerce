@@ -5,34 +5,23 @@
 // src/services/*. What is left here is navigation structure and static copy that
 // belongs to the storefront layout itself.
 
+// Primary navigation. Every destination here is a route that always has
+// something to show; the narrower tools live in the footer instead.
 export const navLinks = [
   { label: "الرئيسية", href: "/" },
-  { label: "أقسام منتجاتنا", href: "/shop" },
-  { label: "بكجات", href: "/packages" },
-  { label: "قوالب سيليكون", href: "/molds" },
-  { label: "حاسبة نسب المواد", href: "/tools/calculator" },
-  { label: "المدونة", href: "/blog" },
+  { label: "كل المنتجات", href: "/shop" },
+  { label: "العروض", href: "/offers" },
+  { label: "البكجات", href: "/packages" },
   { label: "تواصل معنا", href: "/contact" },
 ];
 
 export const footerLinks = {
-  links: {
-    title: "روابط",
-    items: [
-      ["حاسبة نسب الريزن", "/tools/calculator"],
-      ["سياسة التبديل والإرجاع", "/page/return-policy"],
-      ["سياسة الشحن", "/page/shipping-policy"],
-      ["سياسة الخصوصية", "/page/privacy-policy"],
-      ["الشروط والأحكام", "/page/terms"],
-      ["تواصل معنا", "/contact"],
-    ],
-  },
   shop: {
     title: "التسوّق",
     items: [
       ["كل المنتجات", "/shop"],
       ["العروض", "/offers"],
-      ["بكجات", "/packages"],
+      ["البكجات", "/packages"],
       ["قوالب سيليكون", "/molds"],
       ["المدونة", "/blog"],
     ],
@@ -41,9 +30,19 @@ export const footerLinks = {
     title: "خدمة العملاء",
     items: [
       ["عربة التسوّق", "/cart"],
-      ["إتمام الطلب", "/checkout"],
+      ["تتبّع الطلب", "/track-order"],
+      ["حاسبة نسب المواد", "/tools/calculator"],
+      ["تواصل معنا", "/contact"],
+    ],
+  },
+  policies: {
+    title: "معلومات",
+    items: [
       ["من نحن", "/page/about"],
-      ["الأسئلة الشائعة", "/contact"],
+      ["سياسة الشحن", "/page/shipping-policy"],
+      ["سياسة التبديل والإرجاع", "/page/return-policy"],
+      ["سياسة الخصوصية", "/page/privacy-policy"],
+      ["الشروط والأحكام", "/page/terms"],
     ],
   },
 };
