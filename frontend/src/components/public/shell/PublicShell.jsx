@@ -7,6 +7,7 @@ import Header from "./Header.jsx";
 import Footer from "./Footer.jsx";
 import MobileTabBar from "./MobileTabBar.jsx";
 import CategoryRail from "../navigation/CategoryRail.jsx";
+import { CategoryHoverProvider } from "../navigation/CategoryHover.jsx";
 import ShellOverlays from "../overlays/ShellOverlays.jsx";
 
 /**
@@ -35,28 +36,30 @@ export default function PublicShell() {
 
   return (
     <div className="vs-public">
-      <a className="vs-skip" href="#vs-content">
-        تخطَّ إلى المحتوى
-      </a>
-      <PreviewNotice />
-      <Header />
-      <CategoryRail />
+      <CategoryHoverProvider>
+        <a className="vs-skip" href="#vs-content">
+          تخطَّ إلى المحتوى
+        </a>
+        <PreviewNotice />
+        <Header />
+        <CategoryRail />
 
-      <main className="vs-main" id="vs-content">
-        {store.loadError && (
-          <div className="vs-container" style={{ paddingTop: 16 }}>
-            <div role="alert" className="vs-inline-alert">
-              تعذّر تحميل بيانات المتجر من الخادم. تأكد من تشغيل واجهة FastAPI ثم أعد تحميل
-              الصفحة.
+        <main className="vs-main" id="vs-content">
+          {store.loadError && (
+            <div className="vs-container" style={{ paddingTop: 16 }}>
+              <div role="alert" className="vs-inline-alert">
+                تعذّر تحميل بيانات المتجر من الخادم. تأكد من تشغيل واجهة FastAPI ثم أعد تحميل
+                الصفحة.
+              </div>
             </div>
-          </div>
-        )}
-        <Outlet />
-      </main>
+          )}
+          <Outlet />
+        </main>
 
-      <Footer />
-      <MobileTabBar />
-      <ShellOverlays />
+        <Footer />
+        <MobileTabBar />
+        <ShellOverlays />
+      </CategoryHoverProvider>
     </div>
   );
 }

@@ -26,10 +26,12 @@ export function Drawer({
   bodyClass = "",
   className = "",
   id,
+  hoverProps = null,
+  autoFocus = true,
   children,
 }) {
   useScrollLock(open);
-  const ref = useFocusTrap(open, { onEscape: onClose });
+  const ref = useFocusTrap(open, { onEscape: onClose, autoFocus });
   if (!open) return null;
 
   return (
@@ -44,6 +46,7 @@ export function Drawer({
         className={`vs-drawer vs-drawer--${side}${wide ? " vs-drawer--wide" : ""}${
           className ? ` ${className}` : ""
         }`}
+        {...(hoverProps || {})}
       >
         <div className="vs-drawer__head">
           {head}

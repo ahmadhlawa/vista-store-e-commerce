@@ -471,10 +471,14 @@ img.vs-logo__img {
    viewport, which is also the side `.vs-drawer--right` comes in from. */
 /* A light shelf, not a second navigation bar: white, one hairline, no shadow
    worth noticing, and the only saturated thing on it is the trigger. */
+/* Top to bottom of the viewport, not "below the header": the header, the nav
+   band and the page all stop at the rail's left edge (`.vs-public` reserves
+   `--vs-rail-w` as padding), so a rail that started under them would leave an
+   empty corner and read as a detached strip. */
 .vs-catbar {
   position: fixed;
   right: 0;
-  top: calc(var(--vs-header-h) + var(--vs-nav-h));
+  top: 0;
   bottom: 0;
   z-index: var(--vs-z-rail);
   width: var(--vs-rail-w);
@@ -608,10 +612,24 @@ img.vs-logo__img {
   opacity: 1;
 }
 
+/* While its drawer is open the rail has to stay lit: it is the edge the panel
+   is attached to, and dimming it under the scrim would break that join. Still
+   below the drawer itself. */
+.vs-catbar[data-open="true"] {
+  z-index: calc(var(--vs-z-drawer) - 1);
+}
+
 /* ── category drawer ───────────────────────────────────────────────────── */
 
-.vs-drawer--cats {
+/* Opens against the rail rather than over it, so the two read as one surface.
+   `--vs-rail-w` is 0 below 900px, where the rail is gone and the drawer goes
+   back to the viewport edge. Doubled class so this beats `.vs-drawer--right`,
+   which is defined in a later stylesheet. */
+.vs-drawer.vs-drawer--cats {
   width: var(--vs-drawer-cat-w);
+  right: var(--vs-rail-w);
+  top: 0;
+  bottom: 0;
 }
 
 .vs-catdrawer__list,

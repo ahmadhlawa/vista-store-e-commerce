@@ -2,6 +2,7 @@ import { NavLink } from "react-router-dom";
 import { OVERLAY, useStore } from "../../../app/StoreProvider.jsx";
 import { useActiveCategorySlug, useCategoryNav } from "../../../hooks/useStorefront.js";
 import { MenuIcon, TagIcon } from "../shell/icons.jsx";
+import { useCategoryHover } from "./CategoryHover.jsx";
 
 /**
  * The fixed category rail at the far right of the desktop viewport.
@@ -19,6 +20,7 @@ export default function CategoryRail() {
   const { overlay, openOverlay, closeAll } = useStore();
   const activeSlug = useActiveCategorySlug();
   const categories = useCategoryNav(activeSlug);
+  const { hoverProps, claimAsClick } = useCategoryHover();
 
   if (!categories.length) return null;
   const open = overlay === OVERLAY.CATEGORIES;
@@ -27,11 +29,15 @@ export default function CategoryRail() {
   // into the catalogue, and it is labelled so it sits alongside the header nav
   // without either becoming ambiguous.
   return (
-    <nav className="vs-catbar" aria-label="أقسام المتجر">
+    <nav className="vs-catbar" aria-label="أقسام المتجر" data-open={open} {...hoverProps}>
       <button
         type="button"
         className="vs-catbar__trigger"
-        onClick={() => (open ? closeAll() : openOverlay(OVERLAY.CATEGORIES))}
+        onClick={() => {
+          claimAsClick();
+          if (open) closeAll();
+          else openOverlay(OVERLAY.CATEGORIES);
+        }}
         aria-expanded={open}
         aria-controls="vs-catdrawer"
         aria-label="تصنيفات المنتجات"

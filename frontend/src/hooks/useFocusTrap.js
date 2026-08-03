@@ -16,7 +16,7 @@ const visible = (element) =>
  * Keeps Tab inside `ref` while `active`, moves focus in on open and returns it
  * to whatever was focused before — the trigger, in every real case.
  */
-export function useFocusTrap(active, { onEscape } = {}) {
+export function useFocusTrap(active, { onEscape, autoFocus = true } = {}) {
   const ref = useRef(null);
   const opener = useRef(null);
   const escapeRef = useRef(onEscape);
@@ -30,12 +30,16 @@ export function useFocusTrap(active, { onEscape } = {}) {
     const items = () => Array.from(node?.querySelectorAll(FOCUSABLE) || []).filter(visible);
 
     // A drawer with no focusable child still has to take focus off the page
-    // behind it, so the container itself becomes the target.
-    const first = items()[0];
-    if (first) first.focus();
-    else if (node) {
-      node.setAttribute("tabindex", "-1");
-      node.focus();
+    // behind it, so the container itself becomes the target. `autoFocus: false`
+    // is for a panel the pointer opened on its own: Tab is still trapped once
+    // the visitor moves into it, but nothing is taken from them first.
+    if (autoFocus) {
+      const first = items()[0];
+      if (first) first.focus();
+      else if (node) {
+        node.setAttribute("tabindex", "-1");
+        node.focus();
+      }
     }
 
     const onKeyDown = (event) => {
@@ -65,7 +69,12 @@ export function useFocusTrap(active, { onEscape } = {}) {
     return () => {
       node?.removeEventListener("keydown", onKeyDown);
       const previous = opener.current;
-      if (previous && typeof previous.focus === "function" && document.contains(previous)) {
+      if (
+        autoFocus &&
+        previous &&
+        typeof previous.focus === "function" &&
+        document.contains(previous)
+      ) {
         previous.focus();
       }
     };

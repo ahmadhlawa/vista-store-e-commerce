@@ -3,6 +3,7 @@ import { useStore } from "../../../app/StoreProvider.jsx";
 import { useActiveCategorySlug, useCategoryNav } from "../../../hooks/useStorefront.js";
 import { Drawer } from "../overlays/Overlay.jsx";
 import { ArrowForward, ChevronDown, TagIcon } from "../shell/icons.jsx";
+import { useCategoryHover } from "./CategoryHover.jsx";
 
 /**
  * The category panel, opened from the rail trigger on desktop and from the header
@@ -15,12 +16,17 @@ export default function CategoryDrawer({ open, onClose }) {
   const { navOpenCat, setNavOpenCat } = useStore();
   const activeSlug = useActiveCategorySlug();
   const categories = useCategoryNav(activeSlug);
+  const { hoverProps, openedByHover } = useCategoryHover();
 
   return (
     <Drawer
       open={open}
       onClose={onClose}
       side="right"
+      // Hover carries on into the drawer, so the pair reads as one surface; a
+      // drawer the pointer merely brushed past must not take the keyboard.
+      hoverProps={hoverProps}
+      autoFocus={!openedByHover}
       id="vs-catdrawer"
       className="vs-drawer--cats"
       label="تصنيفات المنتجات"
