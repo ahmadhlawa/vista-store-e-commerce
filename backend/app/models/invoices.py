@@ -25,6 +25,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -69,6 +70,9 @@ class Invoice(TimestampMixin, Base):
         nullable=False,
         index=True,
     )
+    # ``active`` is stored only for the one current invoice; archived rows use NULL.
+    # The nullable unique pair is portable across SQLite and MySQL.
+    active_invoice_marker: Mapped[str | None] = mapped_column(String(16), nullable=True)
     replacement_invoice_id: Mapped[int | None] = mapped_column(
         ForeignKey("invoices.id", ondelete="RESTRICT"), unique=True, nullable=True
     )
@@ -173,6 +177,12 @@ class Invoice(TimestampMixin, Base):
         CheckConstraint("subtotal >= 0", name="ck_invoices_subtotal_non_negative"),
         CheckConstraint("grand_total >= 0", name="ck_invoices_grand_total_non_negative"),
         CheckConstraint("tax_amount >= 0", name="ck_invoices_tax_non_negative"),
+        CheckConstraint(
+            "(status = 'active' AND active_invoice_marker = 'active') "
+            "OR (status <> 'active' AND active_invoice_marker IS NULL)",
+            name="ck_invoices_active_invoice_marker",
+        ),
+        UniqueConstraint("order_id", "active_invoice_marker", name="uq_invoices_order_active_marker"),
     )
 
     @property

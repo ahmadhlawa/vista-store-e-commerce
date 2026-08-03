@@ -133,10 +133,12 @@ def test_a_replaced_invoice_and_its_active_replacement_can_share_an_order(
     db.commit()
 
     first.status = InvoiceStatus.REPLACED.value
+    first.active_invoice_marker = None
     replacement = Invoice(
         invoice_number="INV-999999",
         order_id=order.id,
         status=InvoiceStatus.ACTIVE.value,
+        active_invoice_marker=InvoiceStatus.ACTIVE.value,
         order_number=order.order_number,
         payment_method=order.payment_method,
         store_name="Store",

@@ -34,6 +34,7 @@ def _order() -> Order:
 def _invoice(order: Order, **changes: object) -> Invoice:
     values: dict[str, object] = {
         "invoice_number": "INV-PERSIST-1",
+        "active_invoice_marker": "active",
         "order": order,
         "order_number": order.order_number,
         "payment_method": "cash_on_delivery",
@@ -106,6 +107,7 @@ def test_replaced_invoices_can_be_retained_with_payment_state(db: Session) -> No
     archived = _invoice(
         order,
         status="replaced",
+        active_invoice_marker=None,
         invoice_number="INV-PERSIST-OLD",
         replacement_invoice=active,
         payment_status="paid",
@@ -117,6 +119,22 @@ def test_replaced_invoices_can_be_retained_with_payment_state(db: Session) -> No
 
     assert archived.replacement_invoice_id == active.id
     assert active.replaces_invoice is archived
+
+
+def test_database_permits_only_one_active_invoice_per_order(db: Session) -> None:
+    """A second active marker must fail while a replaced invoice remains retained."""
+    assert "active_invoice_marker" in Base.metadata.tables["invoices"].c
+
+    order = _order()
+    db.add_all(
+        (
+            _invoice(order, invoice_number="INV-ACTIVE-ONE", active_invoice_marker="active"),
+            _invoice(order, invoice_number="INV-ACTIVE-TWO", active_invoice_marker="active"),
+        )
+    )
+    with pytest.raises(IntegrityError):
+        db.commit()
+    db.rollback()
 
 
 def test_order_activity_persists_immutable_audit_payloads(db: Session) -> None:
@@ -182,6 +200,7 @@ def test_order_invoice_view_selects_the_active_invoice_deterministically(db: Ses
         order,
         invoice_number="INV-REPLACED",
         status=InvoiceStatus.REPLACED.value,
+        active_invoice_marker=None,
         replacement_invoice=active,
     )
     db.add_all((active, archived))
@@ -290,6 +309,7 @@ def test_upgrade_from_0004_retains_and_backfills_legacy_order_and_invoice(
     assert order["is_locked"] is True
     assert invoice["invoice_number"] == "INV-LEGACY"
     assert invoice["status"] == "active"
+    assert invoice["active_invoice_marker"] == "active"
     assert invoice["payment_status"] == "unpaid"
     assert invoice["remaining_amount"] == Decimal("10.00")
     with engine.connect() as connection:
@@ -430,6 +450,7 @@ def test_downgrade_with_replacement_history_refuses_to_stamp_invalid_0004(
                 "invoice_number": "INV-HISTORY-ACTIVE",
                 "status": "active",
                 "replacement_invoice_id": 301,
+                "active_invoice_marker": "active",
             },
         )
 
@@ -437,5 +458,5 @@ def test_downgrade_with_replacement_history_refuses_to_stamp_invalid_0004(
         command.downgrade(config, "0004_import_batches")
     command.upgrade(config, "head")
     with engine.connect() as connection:
-        assert connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0005_order_invoice_workflow"
+        assert connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0006_active_invoice_marker"
     engine.dispose()

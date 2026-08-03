@@ -84,7 +84,13 @@ def get_for_order(db: Session, order_id: int) -> Invoice | None:
     return db.execute(
         select(Invoice)
         .options(selectinload(Invoice.items))
-        .where(Invoice.order_id == order_id, Invoice.status == InvoiceStatus.ACTIVE.value)
+        .where(
+            Invoice.order_id == order_id,
+            Invoice.status == InvoiceStatus.ACTIVE.value,
+            Invoice.active_invoice_marker == InvoiceStatus.ACTIVE.value,
+        )
+        .order_by(Invoice.id.desc())
+        .limit(1)
     ).scalar_one_or_none()
 
 
@@ -115,6 +121,7 @@ def issue_for_order(db: Session, order: Order) -> Invoice:
         invoice_number=next_invoice_number(db, prefix),
         order_id=order.id,
         status=InvoiceStatus.ISSUED.value,
+        active_invoice_marker=InvoiceStatus.ACTIVE.value,
         issued_at=utcnow(),
         order_number=order.order_number,
         payment_method=order.payment_method,
@@ -180,6 +187,7 @@ def cancel_for_order(
         return invoice
 
     invoice.status = InvoiceStatus.CANCELLED.value
+    invoice.active_invoice_marker = None
     invoice.cancelled_at = utcnow()
     invoice.cancellation_reason = (reason or "").strip()[:500] or None
     invoice.cancelled_by_admin_id = admin.id if admin else None

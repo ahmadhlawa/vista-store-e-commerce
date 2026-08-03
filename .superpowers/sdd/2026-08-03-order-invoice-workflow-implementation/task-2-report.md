@@ -47,3 +47,15 @@
 - Red: focused additions failed for missing lifecycle values, cascading activity deletion, and incorrect legacy mappings.
 - Green: `pytest -q tests/test_order_invoice_persistence.py` -> 9 passed.
 - The broad `tests/test_invoices.py` regression command exceeded 120 seconds without emitting a failure and was stopped; this is a verification limitation, not a passing result.
+
+## Round 2 fixes
+
+- Added revision `0006_active_invoice_marker`. A nullable `active_invoice_marker` is `active` only for the current invoice, and the portable unique pair `(order_id, active_invoice_marker)` permits retained archived/replaced rows while rejecting a second active invoice.
+- Added a database check requiring active rows to carry the marker and all non-active rows to carry `NULL`.
+- Invoice issuance sets the marker; cancellation clears it. The compatibility lookup filters by the active marker, orders deterministically, and limits to one row to remain safe against pre-constraint malformed data.
+- The migration refuses to apply if existing duplicate active invoices require an operator decision rather than silently choosing or deleting history.
+
+### Round 2 tests
+
+- Red: active-marker model/migration assertions failed before implementation.
+- Green: `pytest -q tests/test_order_invoice_persistence.py tests/test_invoices.py::test_a_replaced_invoice_and_its_active_replacement_can_share_an_order` -> 11 passed.
