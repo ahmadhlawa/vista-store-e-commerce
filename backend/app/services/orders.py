@@ -8,21 +8,124 @@ none of them do.
 from __future__ import annotations
 
 import secrets
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import date, datetime
 from decimal import Decimal
+from enum import Enum
+from typing import Any, Protocol
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.enums import OrderStatus, PaymentMethod
 from app.db.base import utcnow
-from app.models import AdminUser, Order, OrderItem, OrderStatusHistory, Product, ProductVariant
+from app.models import (
+    AdminUser,
+    Order,
+    OrderActivity,
+    OrderItem,
+    OrderStatusHistory,
+    Product,
+    ProductVariant,
+)
 from app.services import audit as audit_service
 from app.services import invoices as invoices_service
 from app.services.errors import DomainError, NotFoundError
 from app.services.pricing import PricedCart, money, price_cart
 
 ORDER_NUMBER_PREFIX = "ORD"
+
+
+class OrderItemLike(Protocol):
+    quantity: int
+    unit_price: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class OrderTotals:
+    line_totals: tuple[Decimal, ...]
+    subtotal: Decimal
+    discount_amount: Decimal
+    delivery_fee: Decimal
+    total_amount: Decimal
+
+
+def _nonnegative_money(value: Decimal | int | float | str, *, field: str) -> Decimal:
+    raw = Decimal(str(value))
+    if raw < 0:
+        raise DomainError(f"{field} cannot be negative.", code=f"negative_{field}")
+    return money(raw)
+
+
+def calculate_order_totals(
+    items: Sequence[OrderItemLike],
+    discount_amount: Decimal,
+    delivery_fee: Decimal,
+) -> OrderTotals:
+    """Calculate persisted order money values from quantized line totals."""
+    line_totals: list[Decimal] = []
+    for item in items:
+        if item.quantity <= 0:
+            raise DomainError("Quantity must be positive.", code="invalid_quantity")
+        unit_price = _nonnegative_money(item.unit_price, field="unit_price")
+        line_totals.append(money(unit_price * item.quantity))
+
+    subtotal = money(sum(line_totals, Decimal("0.00")))
+    discount = _nonnegative_money(discount_amount, field="discount_amount")
+    delivery = _nonnegative_money(delivery_fee, field="delivery_fee")
+    total = money(max(Decimal("0.00"), subtotal - discount + delivery))
+    return OrderTotals(tuple(line_totals), subtotal, discount, delivery, total)
+
+
+_ACTIVITY_SECRET_KEYS = frozenset({"password", "password_hash", "secret", "token", "jwt"})
+
+
+def _stable_activity_value(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return str(money(value))
+    if isinstance(value, Enum):
+        return _stable_activity_value(value.value)
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Mapping):
+        stable: dict[str, Any] = {}
+        for key, nested in value.items():
+            if not isinstance(key, str) or key.lower() in _ACTIVITY_SECRET_KEYS:
+                raise DomainError("Activity data contains an unsafe field.", code="invalid_activity_data")
+            stable[key] = _stable_activity_value(nested)
+        return stable
+    if isinstance(value, (list, tuple)):
+        return [_stable_activity_value(item) for item in value]
+    raise DomainError("Activity data must contain stable business values.", code="invalid_activity_data")
+
+
+def record_order_activity(
+    db: Session,
+    *,
+    order_id: int,
+    invoice_id: int | None,
+    actor_admin_id: int | None,
+    event_type: str,
+    before_data: Mapping[str, Any] | None,
+    after_data: Mapping[str, Any] | None,
+    reason: str | None,
+) -> OrderActivity:
+    """Append a detached, JSON-safe audit event in the caller's transaction."""
+    event = OrderActivity(
+        order_id=order_id,
+        invoice_id=invoice_id,
+        actor_admin_id=actor_admin_id,
+        event_type=event_type,
+        before_data=_stable_activity_value(before_data) if before_data is not None else None,
+        after_data=_stable_activity_value(after_data) if after_data is not None else None,
+        reason=(reason or "").strip() or None,
+    )
+    db.add(event)
+    db.flush()
+    return event
 
 # Statuses that mean stock is currently committed to the order.
 _STOCK_HELD_STATUSES = {

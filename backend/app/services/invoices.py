@@ -16,22 +16,85 @@ Three rules the rest of the codebase depends on:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.enums import InvoiceStatus, OrderStatus
+from app.core.enums import AdminRole, InvoiceStatus, OrderStatus, PaymentStatus
 from app.db.base import utcnow
 from app.models import AdminUser, Invoice, InvoiceItem, InvoiceSequence, Order
 from app.models.invoices import DEFAULT_INVOICE_PREFIX
 from app.services import store_settings as settings_service
-from app.services.errors import ConflictError, NotFoundError
+from app.services.errors import ConflictError, DomainError, NotFoundError, PermissionDeniedError
 from app.services.pricing import ZERO, money
 
 # Zero-padding for the numeric part: INV-000001. Six digits keeps a million invoices
 # aligned in a printed list; past that the number simply grows.
 NUMBER_WIDTH = 6
+
+
+@dataclass(frozen=True, slots=True)
+class PaymentUpdate:
+    paid_amount: Decimal
+    refunded_amount: Decimal
+    remaining_amount: Decimal
+    status: PaymentStatus
+
+
+def _nonnegative_payment_amount(value: Decimal, *, field: str) -> Decimal:
+    raw = Decimal(str(value))
+    if raw < 0:
+        raise DomainError(f"{field} cannot be negative.", code=f"negative_{field}")
+    return money(raw)
+
+
+def derive_payment_status(
+    total_amount: Decimal,
+    paid_amount: Decimal,
+    refunded_amount: Decimal,
+) -> PaymentStatus:
+    """Derive, rather than trust, the persisted payment status."""
+    total = _nonnegative_payment_amount(total_amount, field="total_amount")
+    paid = _nonnegative_payment_amount(paid_amount, field="paid_amount")
+    refunded = _nonnegative_payment_amount(refunded_amount, field="refunded_amount")
+    if paid > total or refunded > paid:
+        raise DomainError("Payment amounts are outside the invoice bounds.", code="payment_out_of_bounds")
+    if refunded > 0:
+        return PaymentStatus.REFUNDED if refunded == paid else PaymentStatus.PARTIALLY_REFUNDED
+    if paid == 0:
+        return PaymentStatus.UNPAID
+    return PaymentStatus.PAID if paid == total else PaymentStatus.PARTIAL
+
+
+def validate_payment_update(
+    *,
+    total_amount: Decimal,
+    current_paid_amount: Decimal,
+    paid_amount: Decimal,
+    refunded_amount: Decimal,
+    actor_role: str,
+    reason: str | None,
+) -> PaymentUpdate:
+    """Validate a payment snapshot before an invoice service persists it."""
+    total = _nonnegative_payment_amount(total_amount, field="total_amount")
+    current_paid = _nonnegative_payment_amount(current_paid_amount, field="current_paid_amount")
+    paid = _nonnegative_payment_amount(paid_amount, field="paid_amount")
+    refunded = _nonnegative_payment_amount(refunded_amount, field="refunded_amount")
+    status = derive_payment_status(total, paid, refunded)
+    correction_or_refund = paid < current_paid or refunded > 0
+
+    if actor_role != AdminRole.SUPER_ADMIN.value and correction_or_refund:
+        raise PermissionDeniedError(
+            "Only a super admin may correct a payment or record a refund.",
+            code="payment_correction_forbidden",
+        )
+    if actor_role == AdminRole.SUPER_ADMIN.value and correction_or_refund and not (reason or "").strip():
+        raise DomainError("A reason is required for a payment correction or refund.", code="reason_required")
+
+    remaining = money(max(Decimal("0.00"), total - (paid - refunded)))
+    return PaymentUpdate(paid, refunded, remaining, status)
 
 
 def _normalize_prefix(raw: str | None) -> str:
