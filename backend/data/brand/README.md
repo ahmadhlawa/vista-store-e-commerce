@@ -5,11 +5,29 @@ Kept separate from `backend/data/vista-uploads/`, which is the runtime media roo
 Admin writes into and Git ignores. Mixing the two would put customer-uploaded product
 photos into source control and make a brand asset disappear on a fresh clone.
 
-## Current contents: none
+## Current contents
 
-No asset could be collected. The supplied Facebook page is login-walled, so its profile
-image and cover were never publicly served — see `docs/client/facebook-source-audit.md`.
-No image was taken from any other page, and none was generated as a stand-in.
+| File | Received | Notes |
+| --- | --- | --- |
+| `vista-logo.jpeg` | 2026-08-03, from the owner | 1000×1000 JPEG, stored byte for byte |
+
+The logo was supplied directly by the owner and is archived here unaltered — not
+redrawn, retraced, recoloured or re-encoded. The same bytes are served as a static
+asset from `frontend/public/brand/vista-logo.jpeg`, and the Vista instance's
+`StoreSettings.logo_url` points at `/brand/vista-logo.jpeg`.
+
+The header reads `logo_url` and nothing else: with no logo configured it shows the
+store name as text, exactly as before. The asset is never a built-in default, so
+another client instance built from this template is never branded as Vista.
+
+Its sampled colours are the storefront's brand tokens: primary `#484397`
+(deep blue-purple), accent `#FFC50A` (yellow), on white.
+
+Still wanted: a **vector or transparent-background** original. This one is a JPEG, so
+it carries a white box rather than transparency — visible against any non-white
+surface, and it is the version that prints on invoices.
+
+Nothing here was taken from a social page, and nothing was generated as a stand-in.
 
 ## What to put here
 

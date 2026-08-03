@@ -20,39 +20,52 @@
   --vs-header-h: 76px;
   --vs-nav-h: 52px;
   --vs-rail-h: 0px;
+  /* The fixed category rail at the far right. It is a real gutter, not an
+     overlay: `--vs-rail-gutter` is what the page reserves for it, so the rail
+     can never sit on top of content. Both drop to 0 on mobile, where the rail
+     is replaced by a header trigger. */
+  --vs-rail-w: 68px;
+  --vs-rail-gutter: var(--vs-rail-w);
+  --vs-drawer-cat-w: 340px;
   /* What a sticky element must clear. Kept as one token so page-level sticky
      panels never re-derive it. */
   --vs-sticky-top: calc(var(--vs-header-h) + var(--vs-nav-h) + 16px);
 
   /* ── surfaces ────────────────────────────────────────────────────────── */
-  --vs-page: #fbf9f6;
+  /* White and a warm off-white, with two pale supporting tints mixed from the
+     brand colours so the page stays Vista's even where no brand element shows. */
+  --vs-page: #fbfaf7;
   --vs-surface: #ffffff;
-  --vs-surface-2: #f4f1ec;
-  --vs-surface-3: #efeae1;
-  --vs-surface-dark: #1a1815;
-  --vs-surface-dark-2: #241f1a;
+  --vs-surface-2: color-mix(in srgb, var(--vs-primary) 5%, #f7f6f2);
+  --vs-surface-3: color-mix(in srgb, var(--vs-accent) 12%, #f4f2ec);
+  --vs-surface-dark: color-mix(in srgb, var(--vs-primary) 22%, #14131c);
+  --vs-surface-dark-2: color-mix(in srgb, var(--vs-primary) 32%, #1a1826);
 
   /* ── borders ─────────────────────────────────────────────────────────── */
-  --vs-border: #e9e3da;
-  --vs-border-strong: #dcd3c6;
-  --vs-border-dark: #35312b;
+  --vs-border: color-mix(in srgb, var(--vs-primary) 10%, #e7e5e0);
+  --vs-border-strong: color-mix(in srgb, var(--vs-primary) 22%, #dcd9d2);
+  --vs-border-dark: color-mix(in srgb, var(--vs-primary) 30%, #2f2d38);
 
   /* ── text ────────────────────────────────────────────────────────────── */
-  --vs-ink: #1e1b18;
-  --vs-ink-2: #4a453e;
-  --vs-ink-3: #7c766d;
-  --vs-ink-4: #9c958a;
+  --vs-ink: #1c1b21;
+  --vs-ink-2: #47454f;
+  --vs-ink-3: #77747f;
+  --vs-ink-4: #9a97a2;
   --vs-ink-invert: #ffffff;
 
-  /* ── brand (StoreProvider overrides --vs-primary/-accent/-success) ───── */
-  --vs-primary: #1f4e4a;
-  --vs-primary-dark: #163a37;
-  --vs-primary-mid: #27615c;
-  --vs-primary-soft: #f1f5f4;
-  --vs-accent: #c9a24b;
-  --vs-accent-dark: #b08c3c;
-  --vs-accent-soft: #f7f0df;
-  --vs-success: #2e7d5b;
+  /* ── brand ───────────────────────────────────────────────────────────── */
+  /* Sampled from the owner's Vista logo: a deep blue-purple and the sign
+     yellow. StoreProvider writes `--vs-brand-*` from StoreSettings, so a store
+     restyles itself from Admin; the sampled values are only the fallback. Every
+     other tone is mixed from these two, so a brand colour is stated once. */
+  --vs-primary: var(--vs-brand-primary, #484397);
+  --vs-primary-dark: color-mix(in srgb, var(--vs-primary) 78%, #000);
+  --vs-primary-mid: color-mix(in srgb, var(--vs-primary) 82%, #fff);
+  --vs-primary-soft: color-mix(in srgb, var(--vs-primary) 8%, #fff);
+  --vs-accent: var(--vs-brand-accent, #ffc50a);
+  --vs-accent-dark: color-mix(in srgb, var(--vs-accent) 82%, #6b4a00);
+  --vs-accent-soft: color-mix(in srgb, var(--vs-accent) 18%, #fff);
+  --vs-success: var(--vs-brand-success, #2e7d5b);
   --vs-danger: #c0392b;
   --vs-danger-soft: #fbf1ef;
   --vs-warn: #8a6a1f;
@@ -103,7 +116,9 @@
   /* Square by default so a package sitting in a mixed catalogue grid lines up
      with the products around it; the dedicated package grid widens it. */
   --vs-ar-package: 1 / 1;
-  --vs-ar-hero: 16 / 7;
+  /* A wide advertising banner. The ratio — not a pixel height — is what the
+     hero reserves, so the box is correct before the image decodes. */
+  --vs-ar-hero: 21 / 8;
 }
 
 @media (max-width: 1279px) {
@@ -113,6 +128,8 @@
     --vs-cols-pkg: 3;
     --vs-grid-gap: 18px;
     --vs-fs-h1: 30px;
+    --vs-rail-w: 60px;
+    --vs-ar-hero: 2 / 1;
   }
 }
 
@@ -135,7 +152,13 @@
     --vs-tabbar-h: 64px;
     --vs-fs-h1: 26px;
     --vs-fs-h2: 20px;
-    --vs-ar-hero: 4 / 5;
+    /* An intentional mobile crop rather than a squeezed desktop banner. */
+    --vs-ar-hero: 5 / 6;
+    /* The fixed rail leaves the layout entirely below 900: its trigger moves
+       into the header, so no width is reserved and nothing is covered. */
+    --vs-rail-w: 0px;
+    --vs-rail-gutter: 0px;
+    --vs-drawer-cat-w: min(92vw, 400px);
   }
 }
 

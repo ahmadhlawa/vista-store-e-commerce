@@ -74,11 +74,15 @@ contact:
   facebook_url: "https://www.facebook.com/people/Vista-Store-%D9%85%D8%AA%D8%AC%D8%B1-%D9%81%D9%8A%D8%B3%D8%AA%D8%A7/61582596333597/"
 
 theme:
-  # PENDING — these are the template's neutral defaults, NOT a Vista Store palette.
-  # No brand colour could be sampled, because no page imagery was accessible.
-  # Replace once the owner supplies the brand colours or the logo.
-  primary_color: "#1F4E4A"
-  secondary_color: "#C9A24B"
+  # CONFIRMED — sampled from the logo file the owner supplied on 2026-08-03, which
+  # is archived unaltered at backend/data/brand/vista-logo.jpeg. These are the two
+  # colours the artwork actually uses, not an interpretation of them.
+  #   #484397  the deep blue-purple of the bag and the wordmark
+  #   #FFC50A  the yellow of the sign panel
+  primary_color: "#484397"
+  secondary_color: "#FFC50A"
+  # No third brand colour appears in the logo. Success/confirmation states keep a
+  # neutral green, because yellow-on-white cannot carry a readable status message.
   accent_color: "#2E7D5B"
 
 # The line of business is unknown, so no feature is switched off on a guess.
@@ -97,18 +101,22 @@ home_sections:
     type: "categories"
     title: "تسوّق حسب القسم"
     sort_order: 0
-  - key: "featured"
-    type: "featured_products"
-    title: "منتجات مختارة"
-    sort_order: 1
-  - key: "new"
-    type: "new_products"
-    title: "وصل حديثاً"
-    sort_order: 2
+  # The owner's running order for the homepage: categories, then one product
+  # section, then the packages (sort_order 2, in the preview dataset), then the
+  # featured/offer row. Admin can still reorder any of it — this is only what a
+  # fresh instance starts with.
   - key: "bestsellers"
     type: "bestsellers"
     title: "الأكثر مبيعاً"
+    sort_order: 1
+  - key: "featured"
+    type: "featured_products"
+    title: "منتجات مختارة"
     sort_order: 3
+  - key: "new"
+    type: "new_products"
+    title: "وصل حديثاً"
+    sort_order: 4
 
 # Created empty, for the owner to write. The storefront footer links to all of
 # these, so omitting one would leave a customer at a dead end. The `lead` text

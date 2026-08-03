@@ -3,11 +3,14 @@ import { publicApi } from "../api/publicApi.js";
 import { backgroundFor } from "../utils/placeholder.js";
 import { formatDate, readingTime } from "../utils/format.js";
 
+// Vista's own colours, sampled from the owner's logo, so the storefront is on
+// brand from the first paint. The API's StoreSettings still wins the moment it
+// arrives — these only cover the gap before it does, and a failed bootstrap.
 export const FALLBACK_SETTINGS = {
-  store_name: "Store",
+  store_name: "Vista Store",
   currency_symbol: "₪",
-  primary_color: "#1F4E4A",
-  secondary_color: "#C9A24B",
+  primary_color: "#484397",
+  secondary_color: "#FFC50A",
   accent_color: "#2E7D5B",
   maintenance_mode: false,
 };
