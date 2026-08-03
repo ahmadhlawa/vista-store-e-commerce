@@ -59,3 +59,15 @@
 
 - Red: active-marker model/migration assertions failed before implementation.
 - Green: `pytest -q tests/test_order_invoice_persistence.py tests/test_invoices.py::test_a_replaced_invoice_and_its_active_replacement_can_share_an_order` -> 11 passed.
+
+## Round 3 fixes
+
+- Made the active-marker check NULL-safe: an active invoice now requires both a non-null marker and the literal `active`; non-active rows require `NULL`.
+- Added revision `0007_active_invoice_marker_null_safe` so already-upgraded 0006 databases receive the corrected check and active marker server default. Fresh 0006 upgrades use the same corrected expression.
+- The marker column uses a server default for ordinary active inserts and SQLAlchemy `evaluates_none()` so an explicitly supplied `NULL` reaches the database and is rejected instead of silently taking the default.
+- Revision 0007 normalizes a single legacy active/null marker before adding the stricter check, but rejects duplicate active rows rather than discarding or guessing historical data.
+
+### Round 3 tests
+
+- Red: an active invoice with an explicit null marker committed before the NULL-safe check.
+- Green: `pytest -q tests/test_order_invoice_persistence.py tests/test_invoices.py::test_a_replaced_invoice_and_its_active_replacement_can_share_an_order` -> 12 passed.

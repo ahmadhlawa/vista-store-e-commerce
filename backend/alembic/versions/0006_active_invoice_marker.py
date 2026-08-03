@@ -33,12 +33,18 @@ def upgrade() -> None:
         op.execute("PRAGMA foreign_keys=OFF")
 
     with op.batch_alter_table("invoices") as batch:
-        batch.add_column(sa.Column("active_invoice_marker", sa.String(length=16), nullable=True))
-    op.execute("UPDATE invoices SET active_invoice_marker = 'active' WHERE status = 'active'")
+        batch.add_column(
+            sa.Column("active_invoice_marker", sa.String(length=16), nullable=True, server_default="active")
+        )
+    op.execute(
+        "UPDATE invoices SET active_invoice_marker = "
+        "CASE WHEN status = 'active' THEN 'active' ELSE NULL END"
+    )
     with op.batch_alter_table("invoices") as batch:
         batch.create_check_constraint(
             "ck_invoices_active_invoice_marker",
-            "(status = 'active' AND active_invoice_marker = 'active') "
+            "(status = 'active' AND active_invoice_marker IS NOT NULL "
+            "AND active_invoice_marker = 'active') "
             "OR (status <> 'active' AND active_invoice_marker IS NULL)",
         )
         batch.create_unique_constraint(

@@ -137,6 +137,15 @@ def test_database_permits_only_one_active_invoice_per_order(db: Session) -> None
     db.rollback()
 
 
+def test_database_rejects_an_active_invoice_without_its_marker(db: Session) -> None:
+    """SQL CHECK semantics must not allow NULL to bypass the active-invoice invariant."""
+    order = _order()
+    db.add(_invoice(order, active_invoice_marker=None))
+    with pytest.raises(IntegrityError):
+        db.commit()
+    db.rollback()
+
+
 def test_order_activity_persists_immutable_audit_payloads(db: Session) -> None:
     """Removing audit snapshots or their reason would erase the edit trail."""
     assert "order_activities" in Base.metadata.tables
@@ -440,7 +449,13 @@ def test_downgrade_with_replacement_history_refuses_to_stamp_invalid_0004(
         }
         connection.execute(
             metadata.tables["invoices"].insert(),
-            {**base_invoice, "id": 301, "invoice_number": "INV-HISTORY-OLD", "status": "replaced"},
+            {
+                **base_invoice,
+                "id": 301,
+                "invoice_number": "INV-HISTORY-OLD",
+                "status": "replaced",
+                "active_invoice_marker": None,
+            },
         )
         connection.execute(
             metadata.tables["invoices"].insert(),
@@ -458,5 +473,5 @@ def test_downgrade_with_replacement_history_refuses_to_stamp_invalid_0004(
         command.downgrade(config, "0004_import_batches")
     command.upgrade(config, "head")
     with engine.connect() as connection:
-        assert connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0006_active_invoice_marker"
+        assert connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0007_active_invoice_marker_null_safe"
     engine.dispose()
