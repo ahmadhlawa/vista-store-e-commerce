@@ -16,7 +16,7 @@ from enum import Enum
 from typing import Any, Protocol
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.enums import OrderSource, OrderStatus, PaymentMethod
 from app.db.base import utcnow
@@ -31,8 +31,8 @@ from app.models import (
 )
 from app.services import audit as audit_service
 from app.services import invoices as invoices_service
-from app.services.errors import DomainError, NotFoundError
-from app.services.pricing import PricedCart, money, price_cart
+from app.services.errors import DomainError, NotFoundError, PermissionDeniedError
+from app.services.pricing import PricedLine, money, price_cart, price_lines
 
 ORDER_NUMBER_PREFIX = "ORD"
 
@@ -211,6 +211,30 @@ class OrderDraft:
     customer_notes: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class AdminOrderItemDraft:
+    product_id: int
+    variant_id: int | None
+    quantity: int
+    unit_price: Decimal | None
+
+
+@dataclass(frozen=True, slots=True)
+class AdminOrderEditDraft:
+    customer_name: str
+    customer_phone: str
+    customer_email: str | None
+    address: str
+    payment_method: str
+    customer_notes: str | None
+    admin_notes: str | None
+    discount: Decimal
+    delivery_fee: Decimal
+    status: str
+    reason: str | None
+    items: tuple[AdminOrderItemDraft, ...]
+
+
 def generate_order_number(db: Session) -> str:
     """Human readable and unique: ORD-260731-4821."""
     stamp = utcnow().strftime("%y%m%d")
@@ -222,9 +246,9 @@ def generate_order_number(db: Session) -> str:
     raise DomainError("تعذّر توليد رقم طلب فريد، حاول مرة أخرى.", code="order_number_exhausted")
 
 
-def _apply_stock_delta(priced: PricedCart, sign: int) -> None:
+def _apply_stock_delta(lines: Sequence[PricedLine], sign: int) -> None:
     """sign=-1 reserves stock, sign=+1 gives it back."""
-    for line in priced.lines:
+    for line in lines:
         if not line.product.track_inventory:
             continue
         delta = sign * line.quantity
@@ -302,7 +326,7 @@ def create_order(db: Session, draft: OrderDraft) -> Order:
         )
     )
 
-    _apply_stock_delta(priced, sign=-1)
+    _apply_stock_delta(priced.lines, sign=-1)
     if priced.coupon is not None:
         priced.coupon.used_count += 1
 
@@ -414,6 +438,257 @@ def get_by_number(db: Session, order_number: str) -> Order:
     ).scalar_one_or_none()
     if order is None:
         raise NotFoundError("الطلب غير موجود.", code="order_not_found")
+    return order
+
+
+_PATCHABLE_INCOMPLETE_STATUSES = frozenset(
+    {
+        OrderStatus.NEW.value,
+        OrderStatus.REVIEWING.value,
+        OrderStatus.PREPARING.value,
+        OrderStatus.OUT_FOR_DELIVERY.value,
+        OrderStatus.CANCELLED.value,
+    }
+)
+
+
+def _item_key(product_id: int, variant_id: int | None) -> tuple[int, int | None]:
+    return product_id, variant_id
+
+
+def _item_snapshot(item: OrderItem) -> dict[str, Any]:
+    return {
+        "id": item.id,
+        "product_id": item.product_id,
+        "variant_id": item.variant_id,
+        "product_name": item.product_name,
+        "quantity": item.quantity,
+        "unit_price": item.unit_price,
+        "line_total": item.line_total,
+    }
+
+
+def edit_incomplete_website_order(
+    db: Session,
+    *,
+    order_id: int,
+    draft: AdminOrderEditDraft,
+    admin: AdminUser,
+) -> Order:
+    """Replace an editable website-order draft and append its operational audit trail."""
+    order = db.execute(
+        select(Order)
+        .options(selectinload(Order.items))
+        .where(Order.id == order_id)
+        .with_for_update()
+    ).scalar_one_or_none()
+    if order is None:
+        raise NotFoundError("Ø§Ù„Ø·Ù„Ø¨ ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯.", code="order_not_found")
+    if order.status == OrderStatus.CANCELLED.value:
+        raise DomainError("Ù„Ø§ ÙŠÙ…ÙƒÙ† ØªØ¹Ø¯ÙŠÙ„ Ø·Ù„Ø¨ Ù…Ù„ØºÙ‰.", code="order_cancelled")
+    if order.is_locked or order.status == OrderStatus.COMPLETED.value:
+        raise DomainError("Ù„Ø§ ÙŠÙ…ÙƒÙ† ØªØ¹Ø¯ÙŠÙ„ Ø·Ù„Ø¨ Ù…Ù‚ÙÙ„.", code="order_locked")
+    if order.source != OrderSource.WEBSITE.value:
+        raise PermissionDeniedError(
+            "ÙŠÙ…ÙƒÙ† ØªØ¹Ø¯ÙŠÙ„ Ø·Ù„Ø¨Ø§Øª Ø§Ù„Ù…ÙˆÙ‚Ø¹ ÙÙ‚Ø·.", code="order_source_not_editable"
+        )
+    if draft.status == OrderStatus.COMPLETED.value:
+        raise DomainError(
+            "Ø¥ÙƒÙ…Ø§Ù„ Ø§Ù„Ø·Ù„Ø¨ ÙŠØªØ·Ù„Ø¨ ØªØ£ÙƒÙŠØ¯Ø§Ù‹ Ù…Ù†ÙØµÙ„Ø§Ù‹.",
+            code="completion_requires_confirmation",
+        )
+    if draft.status not in _PATCHABLE_INCOMPLETE_STATUSES:
+        raise DomainError("Ø§Ù†ØªÙ‚Ø§Ù„ Ø­Ø§Ù„Ø© Ø§Ù„Ø·Ù„Ø¨ ØºÙŠØ± Ù…Ø³Ù…ÙˆØ­.", code="invalid_status_transition")
+    if not draft.items:
+        raise DomainError("Ø§Ù„Ø·Ù„Ø¨ ÙŠØ¬Ø¨ Ø£Ù† ÙŠØ­ØªÙˆÙŠ Ø¹Ù„Ù‰ Ù…Ù†ØªØ¬ ÙˆØ§Ø­Ø¯ Ø¹Ù„Ù‰ Ø§Ù„Ø£Ù‚Ù„.", code="empty_order")
+
+    requested_keys = [_item_key(item.product_id, item.variant_id) for item in draft.items]
+    if len(set(requested_keys)) != len(requested_keys):
+        raise DomainError("Ù„Ø§ ÙŠÙ…ÙƒÙ† ØªÙƒØ±Ø§Ø± Ø§Ù„Ù…Ù†ØªØ¬ ÙÙŠ Ø§Ù„Ø·Ù„Ø¨.", code="duplicate_order_item")
+
+    old_items = list(order.items)
+    old_discount = money(order.discount)
+    old_delivery_fee = money(order.delivery_fee)
+    old_by_key = {
+        _item_key(item.product_id, item.variant_id): item
+        for item in old_items
+        if item.product_id is not None
+    }
+    old_keys = set(old_by_key)
+    requested_by_key = {_item_key(item.product_id, item.variant_id): item for item in draft.items}
+    quantity_changed = [
+        key
+        for key in old_keys & set(requested_by_key)
+        if old_by_key[key].quantity != requested_by_key[key].quantity
+    ]
+    price_changed = [
+        key
+        for key in old_keys & set(requested_by_key)
+        if requested_by_key[key].unit_price is not None
+        and money(old_by_key[key].unit_price) != money(requested_by_key[key].unit_price)
+    ]
+    customer_before = {
+        "customer_name": order.customer_name,
+        "customer_phone": order.customer_phone,
+        "customer_email": order.customer_email,
+        "address": order.address,
+        "customer_notes": order.customer_notes,
+        "payment_method": order.payment_method,
+    }
+    customer_after = {
+        "customer_name": draft.customer_name.strip(),
+        "customer_phone": draft.customer_phone.strip(),
+        "customer_email": (draft.customer_email or "").strip() or None,
+        "address": draft.address.strip(),
+        "customer_notes": (draft.customer_notes or "").strip() or None,
+        "payment_method": draft.payment_method,
+    }
+    material_change = any(
+        (
+            old_keys != set(requested_by_key),
+            quantity_changed,
+            price_changed,
+            money(order.discount) != money(draft.discount),
+            money(order.delivery_fee) != money(draft.delivery_fee),
+            customer_before != customer_after,
+            order.status != draft.status,
+        )
+    )
+    reason = (draft.reason or "").strip() or None
+    if material_change and reason is None:
+        raise DomainError("Ø³Ø¨Ø¨ Ø§Ù„ØªØ¹Ø¯ÙŠÙ„ Ù…Ø·Ù„ÙˆØ¨.", code="edit_reason_required")
+
+    # Return the existing reservation before validating the replacement against stock;
+    # the same order's previously reserved units remain available to its new draft.
+    _restore_stock(db, order)
+    priced_lines = price_lines(
+        db, [(item.product_id, item.variant_id, item.quantity) for item in draft.items]
+    )
+    new_items: list[OrderItem] = []
+    for requested, priced in zip(draft.items, priced_lines, strict=True):
+        old = old_by_key.get(_item_key(requested.product_id, requested.variant_id))
+        unit_price = money(
+            requested.unit_price
+            if requested.unit_price is not None
+            else (old.unit_price if old is not None else priced.unit_price)
+        )
+        new_items.append(
+            OrderItem(
+                product_id=priced.product.id,
+                variant_id=priced.variant.id if priced.variant else None,
+                item_kind="catalog",
+                product_name=old.product_name if old is not None else priced.product.name,
+                original_product_name=(
+                    old.original_product_name if old is not None else priced.product.name
+                ),
+                sku=old.sku if old is not None else priced.sku,
+                original_sku=old.original_sku if old is not None else priced.sku,
+                variant_description=(
+                    old.variant_description if old is not None else priced.variant_description
+                ),
+                original_variant_description=(
+                    old.original_variant_description
+                    if old is not None
+                    else priced.variant_description
+                ),
+                original_unit_price=(
+                    old.original_unit_price if old is not None else priced.unit_price
+                ),
+                unit_price=unit_price,
+                quantity=requested.quantity,
+                line_total=money(unit_price * requested.quantity),
+            )
+        )
+    totals = calculate_order_totals(new_items, draft.discount, draft.delivery_fee)
+    for item, line_total in zip(new_items, totals.line_totals, strict=True):
+        item.line_total = line_total
+
+    _apply_stock_delta(priced_lines, sign=-1)
+    order.items[:] = new_items
+    order.subtotal = totals.subtotal
+    order.discount = totals.discount_amount
+    order.delivery_fee = totals.delivery_fee
+    order.total = totals.total_amount
+    for field, value in customer_after.items():
+        setattr(order, field, value)
+    old_notes = order.admin_notes
+    order.admin_notes = (draft.admin_notes or "").strip() or None
+
+    for key in set(requested_by_key) - old_keys:
+        record_order_activity(
+            db, order_id=order.id, invoice_id=None, actor_admin_id=admin.id,
+            event_type="order_item_added", before_data=None,
+            after_data={"line": _item_snapshot(next(item for item in new_items if _item_key(item.product_id, item.variant_id) == key))}, reason=reason,
+        )
+    for key in old_keys - set(requested_by_key):
+        record_order_activity(
+            db, order_id=order.id, invoice_id=None, actor_admin_id=admin.id,
+            event_type="order_item_removed", before_data={"line": _item_snapshot(old_by_key[key])},
+            after_data=None, reason=reason,
+        )
+    new_by_key = {_item_key(item.product_id, item.variant_id): item for item in new_items}
+    for key in quantity_changed:
+        record_order_activity(
+            db, order_id=order.id, invoice_id=None, actor_admin_id=admin.id,
+            event_type="order_item_quantity_changed",
+            before_data={"line": _item_snapshot(old_by_key[key])},
+            after_data={"line": _item_snapshot(new_by_key[key])}, reason=reason,
+        )
+    for key in price_changed:
+        record_order_activity(
+            db, order_id=order.id, invoice_id=None, actor_admin_id=admin.id,
+            event_type="order_item_price_changed",
+            before_data={"line": _item_snapshot(old_by_key[key])},
+            after_data={"line": _item_snapshot(new_by_key[key])}, reason=reason,
+        )
+    for event_type, before, after, field in (
+        ("order_discount_changed", old_discount, totals.discount_amount, "discount_amount"),
+        ("order_delivery_fee_changed", old_delivery_fee, totals.delivery_fee, "delivery_fee"),
+    ):
+        if money(before) != money(after):
+            record_order_activity(
+                db, order_id=order.id, invoice_id=None, actor_admin_id=admin.id,
+                event_type=event_type, before_data={field: before}, after_data={field: after}, reason=reason,
+            )
+    if customer_before != customer_after:
+        record_order_activity(
+            db, order_id=order.id, invoice_id=None, actor_admin_id=admin.id,
+            event_type="order_customer_updated", before_data={"customer": customer_before},
+            after_data={"customer": customer_after}, reason=reason,
+        )
+    if old_notes != order.admin_notes:
+        record_order_activity(
+            db, order_id=order.id, invoice_id=None, actor_admin_id=admin.id,
+            event_type="order_notes_updated", before_data={"admin_notes": old_notes},
+            after_data={"admin_notes": order.admin_notes}, reason=reason,
+        )
+    old_status = order.status
+    if old_status != draft.status:
+        order.status = draft.status
+        if draft.status == OrderStatus.CANCELLED.value:
+            _restore_stock(db, order)
+            order.is_locked = True
+            order.locked_at = utcnow()
+        db.add(
+            OrderStatusHistory(
+                order_id=order.id,
+                old_status=old_status,
+                new_status=draft.status,
+                admin_user_id=admin.id,
+                note=reason,
+            )
+        )
+        record_order_activity(
+            db, order_id=order.id, invoice_id=None, actor_admin_id=admin.id,
+            event_type="order_status_changed", before_data={"status": old_status},
+            after_data={"status": draft.status}, reason=reason,
+        )
+    order.updated_at = utcnow()
+    audit_service.record(
+        db, admin=admin, action="order.edited", entity_type="order", entity_id=order.id,
+        meta={"order_number": order.order_number},
+    )
+    db.flush()
     return order
 
 

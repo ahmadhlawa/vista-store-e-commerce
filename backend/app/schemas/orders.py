@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import re
+from typing import Literal
 
 from pydantic import EmailStr, Field, field_validator
 
-from app.core.enums import OrderSource, OrderStatus, PaymentMethod
+from app.core.enums import OrderSource, OrderStatus, PaymentMethod, PaymentStatus
 from app.schemas.common import APIModel, Money, UTCDateTime
 from app.schemas.invoices import InvoiceSummary
 
@@ -82,6 +83,15 @@ class OrderItemOut(APIModel):
     line_total: Money
 
 
+class OrderAdminItemOut(OrderItemOut):
+    item_kind: str = "catalog"
+    manual_description: str | None = None
+    original_product_name: str | None = None
+    original_sku: str | None = None
+    original_variant_description: str | None = None
+    original_unit_price: Money | None = None
+
+
 class OrderStatusHistoryOut(APIModel):
     id: int
     old_status: OrderStatus | None = None
@@ -123,11 +133,13 @@ class OrderAdminListOut(APIModel):
     id: int
     order_number: str
     status: OrderStatus
+    source: OrderSource
     customer_name: str
     customer_phone: str
     delivery_area_name: str | None = None
     total: Money
     payment_method: PaymentMethod
+    payment_status: PaymentStatus
     items_count: int = 0
     created_at: UTCDateTime
 
@@ -136,6 +148,8 @@ class OrderAdminOut(APIModel):
     id: int
     order_number: str
     status: OrderStatus
+    source: OrderSource
+    source_note: str | None = None
     customer_name: str
     customer_phone: str
     customer_email: EmailStr | None = None
@@ -148,15 +162,61 @@ class OrderAdminOut(APIModel):
     total: Money
     coupon_code: str | None = None
     payment_method: PaymentMethod
+    payment_status: PaymentStatus
     customer_notes: str | None = None
     admin_notes: str | None = None
     created_at: UTCDateTime
     updated_at: UTCDateTime
-    items: list[OrderItemOut] = Field(default_factory=list)
+    items: list[OrderAdminItemOut] = Field(default_factory=list)
     status_history: list[OrderStatusHistoryOut] = Field(default_factory=list)
+    activities: list["OrderActivityOut"] = Field(default_factory=list)
+    active_invoice: InvoiceSummary | None = None
+    invoices: list[InvoiceSummary] = Field(default_factory=list)
     # None until the order is first confirmed. Present and `cancelled` afterwards, even
     # once the order itself is cancelled — the invoice is never removed.
     invoice: InvoiceSummary | None = None
+
+
+class OrderActivityOut(APIModel):
+    id: int
+    invoice_id: int | None = None
+    actor_admin_id: int | None = None
+    event_type: str
+    before_data: dict | None = None
+    after_data: dict | None = None
+    reason: str | None = None
+    created_at: UTCDateTime
+
+
+class AdminOrderItemInput(APIModel):
+    kind: Literal["catalog"] = "catalog"
+    product_id: int
+    variant_id: int | None = None
+    quantity: int = Field(gt=0, le=999)
+    unit_price: Money | None = Field(default=None, ge=0)
+
+
+class OrderAdminUpdate(APIModel):
+    customer_name: str = Field(min_length=3, max_length=150)
+    customer_phone: str = Field(min_length=7, max_length=40)
+    customer_email: EmailStr | None = None
+    address: str = Field(min_length=6, max_length=1000)
+    payment_method: PaymentMethod
+    customer_notes: str | None = Field(default=None, max_length=1000)
+    admin_notes: str | None = Field(default=None, max_length=2000)
+    discount: Money = Field(ge=0)
+    delivery_fee: Money = Field(ge=0)
+    status: OrderStatus
+    reason: str | None = Field(default=None, max_length=500)
+    items: list[AdminOrderItemInput] = Field(min_length=1, max_length=100)
+
+    @field_validator("customer_phone")
+    @classmethod
+    def _normalize_phone(cls, value: str) -> str:
+        cleaned = re.sub(r"[\s\-()]", "", value)
+        if not PHONE_PATTERN.match(cleaned):
+            raise ValueError("phone number must contain 7 to 15 digits")
+        return cleaned
 
 
 class OrderStatusUpdate(APIModel):
