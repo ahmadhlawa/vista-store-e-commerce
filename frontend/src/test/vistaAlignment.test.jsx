@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { categoryFixture, renderApp, storefrontRoutes, stubApi } from "./utils.jsx";
+import {
+  categoryFixture,
+  renderApp,
+  settingsFixture,
+  storefrontRoutes,
+  stubApi,
+} from "./utils.jsx";
 
 /** A root category with children, so the drawer's nesting has something to expand. */
 const parentCategory = {
@@ -197,6 +203,169 @@ describe("homepage hero", () => {
     expect(active()).toBe(0);
     await new Promise((resolve) => setTimeout(resolve, 120));
     expect(active()).toBe(0);
+  });
+});
+
+describe("hero advertisement copy", () => {
+  /** One finished advertisement, one slide the Admin gave supporting copy. */
+  const mixedSlides = [
+    {
+      id: 11,
+      title: "إعلان جاهز",
+      subtitle: "",
+      description: "",
+      button_label: "",
+      button_url: "",
+      image_url: "/media/preview/complete-ad.png",
+      sort_order: 0,
+    },
+    {
+      id: 12,
+      title: "عنوان الشريحة",
+      subtitle: "عنوان فرعي",
+      description: "نص كتبه المسؤول في لوحة التحكم.",
+      button_label: "تسوّق",
+      button_url: "/shop",
+      image_url: "/media/preview/with-copy.png",
+      sort_order: 1,
+    },
+  ];
+
+  const routesFor = (slides) => ({
+    ...storefrontRoutes,
+    "/api/v1/hero-slides": slides,
+    "/api/v1/home-sections": [],
+  });
+
+  it("shows an image-only advertisement with nothing printed over it", async () => {
+    stubApi(routesFor(mixedSlides));
+    renderApp("/");
+
+    await waitFor(() => expect(document.querySelectorAll(".vs-hero__slide")).toHaveLength(2));
+    const [advert, withCopy] = document.querySelectorAll(".vs-hero__slide");
+
+    // The artwork carries its own typography: no heading, no paragraph, no
+    // eyebrow, no button and no darkening veil laid over it.
+    expect(advert.querySelector(".vs-hero__body")).toBeNull();
+    expect(advert.querySelector(".vs-hero__veil")).toBeNull();
+    expect(advert.querySelector(".vs-hero__cta")).toBeNull();
+    expect(screen.queryByText("إعلان جاهز")).not.toBeInTheDocument();
+    // The title is still the image's alt text, so the slide is not silent.
+    expect(advert.querySelector("img")).toHaveAttribute("alt", "إعلان جاهز");
+
+    // The slide the owner actually wrote copy for keeps all of it.
+    expect(withCopy.querySelector(".vs-hero__body")).not.toBeNull();
+    expect(withCopy.querySelector(".vs-hero__veil")).not.toBeNull();
+    expect(within(withCopy).getByText("نص كتبه المسؤول في لوحة التحكم.")).toBeInTheDocument();
+    // Queried by class: an inactive slide is aria-hidden, so its button is
+    // deliberately out of the accessibility tree until the slide comes round.
+    expect(withCopy.querySelector(".vs-hero__cta")).toHaveAttribute("href", "/shop");
+    expect(document.querySelectorAll(".vs-hero__body")).toHaveLength(1);
+  });
+
+  it("keeps the copy of a slide that has no artwork to speak for it", async () => {
+    stubApi(
+      routesFor([
+        {
+          id: 13,
+          title: "بدون صورة",
+          subtitle: "",
+          description: "",
+          button_label: "",
+          button_url: "",
+          image_url: null,
+          sort_order: 0,
+        },
+      ]),
+    );
+    renderApp("/");
+
+    await waitFor(() => expect(document.querySelector(".vs-hero")).not.toBeNull());
+    // Suppressing the title here would leave a blank gradient.
+    expect(screen.getByText("بدون صورة")).toBeInTheDocument();
+  });
+
+  it("runs the hero band outside the page container", async () => {
+    stubApi(routesFor(mixedSlides));
+    renderApp("/");
+
+    await waitFor(() => expect(document.querySelector(".vs-hero")).not.toBeNull());
+    const row = document.querySelector(".vs-herorow");
+    expect(row.classList.contains("vs-container")).toBe(false);
+    expect(row.closest(".vs-container")).toBeNull();
+  });
+});
+
+describe("category rail imagery", () => {
+  const withImage = {
+    ...categoryFixture,
+    id: 21,
+    name: "هدايا مخصصة",
+    slug: "custom-gifts",
+    image_url: "/media/preview/tile-gifts.png",
+  };
+  const withoutImage = { ...categoryFixture, id: 22, name: "سكارف", slug: "scarves", image_url: null };
+
+  it("uses the category's own picture, and a neutral icon when there is none", async () => {
+    stubApi({ ...storefrontRoutes, "/api/v1/categories": [withImage, withoutImage] });
+    renderApp("/");
+
+    await waitFor(() => expect(rail().querySelectorAll(".vs-catbar__item")).toHaveLength(2));
+    const [first, second] = rail().querySelectorAll(".vs-catbar__item");
+
+    expect(first.querySelector("img")).toHaveAttribute("src", "/media/preview/tile-gifts.png");
+    expect(second.querySelector("img")).toBeNull();
+    expect(second.querySelector(".vs-catbar__ico")).not.toBeNull();
+
+    // No tinted square ever stands in for a picture the store does not have.
+    expect(rail().querySelectorAll(".vs-media--fallback")).toHaveLength(0);
+    // Labels and tooltips survive the change.
+    expect(second).toHaveAccessibleName("سكارف");
+    expect(second).toHaveAttribute("title", "سكارف");
+  });
+
+  it("applies the same rule inside the drawer", async () => {
+    stubApi({ ...storefrontRoutes, "/api/v1/categories": [withImage, withoutImage] });
+    renderApp("/");
+
+    await waitFor(() => expect(rail()).not.toBeNull());
+    await userEvent.click(within(rail()).getByRole("button", { name: "تصنيفات المنتجات" }));
+
+    const panel = drawer();
+    expect(panel.querySelectorAll(".vs-catdrawer__thumb img")).toHaveLength(1);
+    expect(panel.querySelectorAll(".vs-catdrawer__thumb svg")).toHaveLength(1);
+    expect(panel.querySelectorAll(".vs-media--fallback")).toHaveLength(0);
+  });
+});
+
+describe("store logo", () => {
+  const branded = {
+    ...storefrontRoutes,
+    "/api/v1/store/settings": { ...settingsFixture, logo_url: "/brand/store-logo.png" },
+  };
+
+  it("clips the logo to a fixed viewport and leaves the file untouched", async () => {
+    stubApi(branded);
+    renderApp("/");
+
+    // The header's, not the footer's — both render the same file.
+    await waitFor(() => expect(document.querySelector(".vs-header .vs-logo__img")).not.toBeNull());
+    const logo = document.querySelector(".vs-header .vs-logo__img");
+    expect(logo.closest(".vs-logo__box")).not.toBeNull();
+    expect(logo).toHaveAttribute("alt", "متجر الاختبار");
+    expect(logo).toHaveAttribute("src", "/brand/store-logo.png");
+    // Nothing measurable here — no canvas in jsdom — so the fit must not have
+    // written any geometry of its own: the stylesheet's `contain` still rules.
+    expect(logo.getAttribute("style")).toBeNull();
+  });
+
+  it("still shows the store name when no logo is configured", async () => {
+    stubApi(storefrontRoutes);
+    renderApp("/");
+
+    await waitFor(() => expect(document.querySelector(".vs-logo")).not.toBeNull());
+    expect(document.querySelector(".vs-logo__box")).toBeNull();
+    expect(document.querySelector(".vs-logo__name")).toHaveTextContent("متجر الاختبار");
   });
 });
 

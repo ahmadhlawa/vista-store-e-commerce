@@ -1,5 +1,35 @@
 # Implementation status
 
+## Storefront visual correction: header, logo, rail, hero, theme — 2026-08-03
+
+**Branch:** `fix/vista-reference-alignment`. **Not merged, not pushed.** One
+focused correction pass on the owner's screenshot feedback. No route, feature or
+component was added or removed, and the storefront was not redesigned. Full
+measurements and the browser evidence: [qa/vista-reference-alignment.md](qa/vista-reference-alignment.md) § Pass 2.
+
+| Complaint | Result |
+| --- | --- |
+| The white header band is too tall and visually empty | Desktop header **128px → 110px** (64px identity + 46px navigation). Logo, search and cart now share one horizontal axis (mid-lines all at 31.5px). The empty stretch was the search field stopping at 620px in a store with no phone number; its cap is now one token, `--vs-search-max`, at 820px. Sticky behaviour and every control kept |
+| The logo's own whitespace makes the mark tiny | The file is untouched. Header and footer clip it to a fixed viewport and `useLogoFit` scales the image inside so the artwork fills it. Visible mark **29.3 × 14.4 → 87.9 × 43.2** at desktop (3.0×) and **20.7 × 10.2 → 65.0 × 32.0** at 390/768 (3.1×), aspect ratio exact. `StoreSettings.logo_url` is still the only source |
+| The rail reads as a second navigation bar of purple blocks | White, 64px, a hairline and a near-invisible shadow. The one saturated element is the dark-purple trigger. Items are the categories' own pictures — 8 of 8 at 1440, 0 gradient stand-ins — with a neutral line icon where a category has no image, and a pale-yellow active state |
+| The hero looks like a rounded card in a padded container | The band left the container: radius **22 → 0**, gutters and the 20px above it removed. It now takes **100%** of the storefront width at every viewport (was 93% at 1440, 73% at 1920), stopping exactly at the rail's edge. A new `--vs-hero-max-h` keeps a 1856px band from becoming a 700px wall |
+| Advertisements are overprinted with a second headline | A slide with an image and no supporting copy (no subtitle, description or button) is treated as a finished advertisement: image only, no veil, no CTA; its title stays the Admin label and the `alt` text. No column, no migration, no hard-coded slide id. The preview dataset now carries one such slide |
+| Too much solid purple | The homepage editorial panel went from a purple slab to a white surface with one Vista-yellow rule; its button took the purple instead. The package badge stopped using the template's original teal and now derives from `--vs-primary`. Navigation band shortened, section rhythm tightened 68/40 → 56/34 |
+
+**Verification.** Frontend Vitest **106/106** (7 new tests), production build
+clean, `backend/tests/test_preview_dataset.py` **18/18** — the only backend-side
+change was one record in `instance/preview/vista-social-preview.yaml`; no backend
+Python file was touched. Chrome sweep at 390 / 768 / 1440 / 1920 plus the
+scrolled header, the image-only slide, the collapsed rail, the category drawer,
+the mobile menu and `/admin`: **no horizontal overflow anywhere, and 0 elements
+carrying a `vs-` class on any admin route.**
+
+**Still blocked on the owner.** The preview artwork is eight variations of one
+purple-to-gold gradient, so at 40px the rail's thumbnails read as coloured
+squares rather than as distinguishable categories. No image was generated or
+downloaded. Real category photographs and a trimmed, transparent logo are what
+close the remaining distance to the reference.
+
 ## Storage repair, invoice print pagination and live MySQL acceptance — 2026-08-02
 
 **Branch:** `feat/vista-preview-data-storage`. **Not merged, not pushed.** This closes the
