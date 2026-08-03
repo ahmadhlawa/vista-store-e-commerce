@@ -341,6 +341,9 @@ def test_upgrade_from_0004_retains_and_backfills_legacy_order_and_invoice(
     command.upgrade(config, "head")
     metadata = MetaData()
     metadata.reflect(engine, only=["orders", "invoices"])
+    assert {"issued_by_admin_id", "issued_by_admin_name", "issued_by_admin_email"} <= set(
+        metadata.tables["invoices"].c.keys()
+    )
     with engine.connect() as connection:
         order = connection.execute(
             select(metadata.tables["orders"]).where(metadata.tables["orders"].c.id == 41)
@@ -510,5 +513,5 @@ def test_downgrade_with_replacement_history_refuses_to_stamp_invalid_0004(
         command.downgrade(config, "0004_import_batches")
     command.upgrade(config, "head")
     with engine.connect() as connection:
-        assert connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0008_order_activity_immutable_triggers"
+        assert connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0009_invoice_issuer_snapshot"
     engine.dispose()

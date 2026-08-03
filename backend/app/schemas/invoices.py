@@ -83,6 +83,9 @@ class InvoiceOut(APIModel):
     remaining_amount: Money
     payment_details: str | None = None
     invoice_notes: str | None = None
+    issued_by_admin_id: int | None = None
+    issued_by_admin_name: str | None = None
+    issued_by_admin_email: EmailStr | None = None
 
     cancelled_at: UTCDateTime | None = None
     cancellation_reason: str | None = None

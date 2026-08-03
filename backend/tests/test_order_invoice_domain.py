@@ -306,6 +306,42 @@ def test_completion_records_activity_and_invoice_uses_validated_payment_amounts(
     assert invoice_event.actor_admin_id == normal_admin.id
 
 
+def test_invoice_issuer_snapshot_survives_admin_profile_changes(
+    db: Session, category, normal_admin
+) -> None:
+    product = make_product(db, category_id=category.id, price="10.00")
+    order = orders_service.create_order(
+        db,
+        orders_service.OrderDraft(
+            customer_name="Customer",
+            customer_phone="0590000000",
+            address="Address",
+            items=[(product.id, None, 1)],
+        ),
+    )
+    orders_service.complete_order(
+        db,
+        order_id=order.id,
+        payment_method="cash_on_delivery",
+        paid_amount=Decimal("0.00"),
+        payment_details=None,
+        invoice_notes=None,
+        admin=normal_admin,
+    )
+    db.commit()
+
+    normal_admin.full_name = "Renamed Admin"
+    normal_admin.email = "renamed@example.com"
+    db.commit()
+    db.expire_all()
+
+    invoice = invoices_service.get_for_order(db, order.id)
+    assert invoice is not None
+    assert invoice.issued_by_admin_id == normal_admin.id
+    assert invoice.issued_by_admin_name == "Test Admin"
+    assert invoice.issued_by_admin_email == "admin@example.com"
+
+
 def test_failed_completion_cannot_be_committed_as_a_partial_order(
     db: Session, category, normal_admin
 ) -> None:

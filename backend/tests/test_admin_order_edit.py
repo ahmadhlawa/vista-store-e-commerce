@@ -273,12 +273,15 @@ def test_notes_change_requires_reason_and_records_material_activity(
 
 
 def test_both_roles_complete_an_order_once_with_an_immutable_final_invoice(
-    client: TestClient, db: Session, admin_token: str, super_token: str
+    client: TestClient, db: Session, admin_token: str, super_token: str, normal_admin, super_admin
 ) -> None:
     product = make_product(db, slug="completion-snapshot", name="Final price", price="10.00")
     first_order_id: int | None = None
 
-    for suffix, token in (("admin", admin_token), ("super", super_token)):
+    for suffix, token, actor in (
+        ("admin", admin_token, normal_admin),
+        ("super", super_token, super_admin),
+    ):
         order = _create_order(client, product, suffix=suffix)
         first_order_id = first_order_id or order["id"]
         completed = client.post(
@@ -308,6 +311,9 @@ def test_both_roles_complete_an_order_once_with_an_immutable_final_invoice(
         assert invoice["remaining_amount"] == 5.0
         assert invoice["payment_details"] == "Cash received"
         assert invoice["invoice_notes"] == "Final internal note"
+        assert invoice["issued_by_admin_id"] == actor.id
+        assert invoice["issued_by_admin_name"] == actor.full_name
+        assert invoice["issued_by_admin_email"] == actor.email
         assert invoice["items"][0]["unit_price"] == 10.0
 
         retried = client.post(

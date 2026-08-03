@@ -150,6 +150,11 @@ class Invoice(TimestampMixin, Base):
     payment_details: Mapped[str | None] = mapped_column(Text, nullable=True)
     invoice_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Value snapshot: account edits or deletion cannot rewrite the issuer identity.
+    issued_by_admin_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    issued_by_admin_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    issued_by_admin_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     # ── cancellation ─────────────────────────────────────────────────────────
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     cancellation_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)

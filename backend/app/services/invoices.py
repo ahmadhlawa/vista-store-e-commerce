@@ -237,6 +237,9 @@ def issue_for_order(
         remaining_amount=payment.remaining_amount,
         payment_details=(payment_details or "").strip() or None,
         invoice_notes=(invoice_notes or "").strip() or None,
+        issued_by_admin_id=admin.id if admin else None,
+        issued_by_admin_name=admin.full_name if admin else None,
+        issued_by_admin_email=admin.email if admin else None,
     )
 
     for item in order.items:
