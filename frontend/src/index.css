@@ -1,71 +1,159 @@
-/* Global styles ported from the Storefront design (helmet block). */
-* { box-sizing: border-box }
-html, body { margin: 0; padding: 0; background: #FBF9F6; overflow-x: hidden }
-body { font-family: 'Cairo', system-ui, sans-serif; color: #1E1B18; -webkit-font-smoothing: antialiased }
-a { color: #1F4E4A; text-decoration: none }
-a:hover { color: #163A37 }
-button, input, select, textarea { font-family: inherit }
-:focus-visible { outline: 2px solid #1F4E4A; outline-offset: 2px; border-radius: 6px }
-::selection { background: #C9A24B; color: #fff }
-input::placeholder, textarea::placeholder { color: #A39C90 }
-::-webkit-scrollbar { height: 8px; width: 8px }
-::-webkit-scrollbar-thumb { background: #E1DACE; border-radius: 8px }
+/* Application-wide base only.
+ *
+ * The public storefront's design system lives in src/styles/public/, scoped to
+ * `.vs-public`. What is left here is the document reset both areas need and the
+ * few layout variables the admin workspace reads. Storefront rules must not be
+ * added back to this file: /admin renders outside `.vs-public` and would
+ * inherit them. */
 
-:root { --pad: 28px; --cols: 4; --catcols: 5; --kits: 4; --heroG: minmax(0, 1.62fr) minmax(0, .86fr); --scG: minmax(300px, .62fr) minmax(0, 1.38fr); --herohGap: 460px; --h1: 44px; --h2: 27px; --desk: flex; --deskb: block; --mob: none; --nav: flex; --shop: 250px minmax(0, 1fr); --pdp: 1.05fr 1fr; --foot: 1.6fr 1fr 1fr 1.2fr; --sec: 64px; --art: 4; --wide: flex; --adminG: 230px minmax(0, 1fr); --adminNav: block }
-@media (max-width: 1240px) { :root { --catcols: 4; --wide: none; --pad: 22px; --scG: minmax(260px, .7fr) minmax(0, 1.3fr) } }
-@media (max-width: 1080px) { :root { --cols: 3; --art: 3; --catcols: 3; --kits: 3; --heroG: 1fr; --scG: 1fr; --h1: 36px; --h2: 24px; --shop: 220px minmax(0, 1fr); --foot: 1.4fr 1fr 1fr } }
-@media (max-width: 900px) { :root { --desk: none; --deskb: none; --mob: flex; --nav: none; --cols: 2; --art: 2; --catcols: 2; --kits: 2; --h1: 29px; --h2: 21px; --pad: 16px; --herohGap: 400px; --shop: 1fr; --pdp: 1fr; --foot: 1fr 1fr; --sec: 44px; --adminG: 1fr; --adminNav: none } }
-@media (max-width: 560px) { :root { --catcols: 2; --kits: 1; --art: 1; --h1: 25px; --h2: 19px; --herohGap: 340px; --foot: 1fr; --pad: 14px } }
+* {
+  box-sizing: border-box;
+}
 
-@keyframes fadeUp { from { opacity: 0; transform: translateY(14px) } to { opacity: 1; transform: none } }
-@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
-@keyframes slideIn { from { transform: translateX(-100%) } to { transform: none } }
-@keyframes popIn { from { opacity: 0; transform: scale(.96) translateY(8px) } to { opacity: 1; transform: none } }
-@keyframes toastIn { from { opacity: 0; transform: translateY(16px) } to { opacity: 1; transform: none } }
-@keyframes shimmer { 0% { background-position: -420px 0 } 100% { background-position: 420px 0 } }
-@keyframes spin { to { transform: rotate(360deg) } }
-@keyframes pulse { 0%, 100% { transform: scale(1) } 45% { transform: scale(1.35) } }
-@media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important } }
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #fbf9f6;
+  /* `clip`, not `hidden`: `overflow-x: hidden` makes the body a scroll
+     container, which silently disables every `position: sticky` inside it —
+     the storefront header included. `clip` keeps the same safety net against a
+     stray horizontal overflow without creating that scroll container. */
+  overflow-x: clip;
+}
 
-/* Hover / focus states ported from the design's style-hover / style-focus
-   attributes. !important mirrors the prototype runtime, where hover styles
-   were merged over the element's inline styles. */
-.hv-white:hover { color: #fff !important }
-.hv-teal-text:hover { color: #1F4E4A !important }
-.hv-teal-dark:hover { background: #163A37 !important }
-.hv-sand:hover { background: #F4F1EC !important }
-.hv-sand-border:hover { background: #F4F1EC !important; border-color: #DCD3C6 !important }
-.hv-gold:hover { background: #D8B463 !important }
-.hv-gold-lift:hover { background: #D8B463 !important; transform: translateY(-2px) !important }
-.hv-gold-fill:hover { background: #C9A24B !important; color: #1E1B18 !important }
-.hv-gold-text:hover { color: #C9A24B !important }
-.hv-glass:hover { background: rgba(255, 255, 255, .28) !important }
-.hv-lift:hover { transform: translateY(-4px) !important; box-shadow: 0 10px 24px rgba(30, 27, 24, .09) !important }
-.hv-lift3:hover { transform: translateY(-3px) !important }
-.hv-zoom:hover { transform: scale(1.07) !important }
-.hv-zoom6:hover { transform: scale(1.06) !important }
-.hv-fill-teal:hover { background: #1F4E4A !important; color: #fff !important }
-.hv-fill-green:hover { background: #2E7D5B !important; color: #fff !important }
-.hv-border-teal:hover { border-color: #1F4E4A !important }
-.hv-danger:hover { color: #C0392B !important; border-color: #E3C4BE !important }
-.hv-red-text:hover { color: #C0392B !important }
-.hv-reveal:hover { color: rgba(30, 27, 24, .55) !important }
-.hv-show:hover { opacity: 1 !important }
-.hv-card:hover { transform: translateY(-4px) !important; box-shadow: 0 10px 26px rgba(30, 27, 24, .10) !important; border-color: #DCD3C6 !important }
-.fx-teal:focus { border-color: #1F4E4A !important; background: #fff !important }
+/* The storefront header is sticky, so anchored navigation has to clear it. */
+html {
+  scroll-padding-top: 140px;
+}
 
-/* Category tile — the veil and its caption reveal on card hover, matching the
-   design where the hover layer covers the whole tile. */
-.cat-tile:hover { transform: translateY(-4px) !important; box-shadow: 0 16px 34px rgba(30, 27, 24, .13) !important }
-.cat-tile:hover .cat-veil { background: rgba(21, 19, 17, .42) !important; backdrop-filter: blur(3px) !important }
-.cat-tile:hover .cat-more { opacity: 1 !important; transform: none !important }
+@media (max-width: 899px) {
+  html {
+    scroll-padding-top: 72px;
+  }
+}
 
-/* Starter-kit card — hovering the card dims the image and slides the pack
-   contents up. */
-.kit-card:hover { transform: translateY(-4px) !important; box-shadow: 0 16px 36px rgba(30, 27, 24, .12) !important; border-color: #DCD3C6 !important }
-.kit-card:hover .kit-veil { background: rgba(21, 19, 17, .30) !important }
-.kit-card:hover .kit-reveal { opacity: 1 !important; transform: none !important }
+body {
+  font-family: "Cairo", system-ui, sans-serif;
+  color: #1e1b18;
+  -webkit-font-smoothing: antialiased;
+}
 
-/* Showcase banners flanking the category rows. */
-.hv-sc-teal:hover { transform: translateY(-3px) !important; box-shadow: 0 18px 40px rgba(31, 78, 74, .24) !important }
-.hv-sc-clay:hover { transform: translateY(-3px) !important; box-shadow: 0 18px 40px rgba(74, 53, 39, .24) !important }
+a {
+  color: #1f4e4a;
+  text-decoration: none;
+}
+
+a:hover {
+  color: #163a37;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid #1f4e4a;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+::selection {
+  background: #c9a24b;
+  color: #fff;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #a39c90;
+}
+
+::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #e1dace;
+  border-radius: 8px;
+}
+
+/* Admin workspace layout switches. */
+:root {
+  --pad: 28px;
+  --desk: flex;
+  --mob: none;
+  --adminG: 230px minmax(0, 1fr);
+  --adminNav: block;
+}
+
+@media (max-width: 1240px) {
+  :root {
+    --pad: 22px;
+  }
+}
+
+@media (max-width: 900px) {
+  :root {
+    --desk: none;
+    --mob: flex;
+    --pad: 16px;
+    --adminG: 1fr;
+    --adminNav: none;
+  }
+}
+
+@media (max-width: 560px) {
+  :root {
+    --pad: 14px;
+  }
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

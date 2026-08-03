@@ -3,11 +3,14 @@ import { publicApi } from "../api/publicApi.js";
 import { backgroundFor } from "../utils/placeholder.js";
 import { formatDate, readingTime } from "../utils/format.js";
 
+// Vista's own colours, sampled from the owner's logo, so the storefront is on
+// brand from the first paint. The API's StoreSettings still wins the moment it
+// arrives — these only cover the gap before it does, and a failed bootstrap.
 export const FALLBACK_SETTINGS = {
-  store_name: "Store",
+  store_name: "Vista Store",
   currency_symbol: "₪",
-  primary_color: "#1F4E4A",
-  secondary_color: "#C9A24B",
+  primary_color: "#484397",
+  secondary_color: "#FFC50A",
   accent_color: "#2E7D5B",
   maintenance_mode: false,
 };
@@ -16,7 +19,10 @@ export function normalizeSettings(raw) {
   const settings = { ...FALLBACK_SETTINGS, ...(raw || {}) };
   return {
     raw: settings,
-    storeName: settings.store_name,
+    // The storefront is Arabic and RTL, so the Arabic name wins wherever the owner has
+    // set one; the latin name stays the fallback.
+    storeName: settings.store_name_ar || settings.store_name,
+    storeNameLatin: settings.store_name,
     tagline: settings.store_tagline || "",
     logoUrl: settings.logo_url || null,
     faviconUrl: settings.favicon_url || null,
@@ -39,10 +45,35 @@ export function normalizeSettings(raw) {
     seoTitle: settings.seo_title || settings.store_name,
     seoDescription: settings.seo_description || "",
     maintenanceMode: !!settings.maintenance_mode,
+    // Blank until the owner supplies real account details. The checkout shows nothing
+    // rather than inventing transfer instructions.
+    manualPaymentInstructions: settings.manual_payment_instructions || "",
   };
 }
 
+// Artwork-less records fall back to a Vista tone gradient rather than a blank
+// panel; the components render a real <img> whenever a URL exists so the
+// browser can lazy-load and size it.
+const HERO_FALLBACKS = [
+  "linear-gradient(115deg,#1f4e4a 0%,#2f6f68 55%,#c9a24b 150%)",
+  "linear-gradient(115deg,#3a2a22 0%,#7a5233 60%,#e8d8bd 155%)",
+  "linear-gradient(115deg,#2b2f3a 0%,#4c5468 55%,#d3cfe2 155%)",
+];
+
+const BANNER_FALLBACKS = [
+  "linear-gradient(150deg,#1f4e4a,#3d7d75)",
+  "linear-gradient(150deg,#4a3527,#8a6237)",
+];
+
 export function normalizeHeroSlide(raw, index) {
+  // What decides whether copy is printed over the artwork: an eyebrow, a
+  // paragraph or a button — the fields an owner fills in *in addition to*
+  // naming the slide. A slide with an image and nothing but a name is a
+  // finished advertisement whose artwork already carries its own typography;
+  // its title stays the slide's label in Admin and the image's alt text, and
+  // nothing is overprinted on it. A slide with no image has only its copy, so
+  // that always shows — otherwise the slide would be a blank gradient.
+  const supporting = !!(raw.subtitle || raw.description || raw.button_label);
   return {
     id: raw.id,
     title: raw.title,
@@ -50,11 +81,9 @@ export function normalizeHeroSlide(raw, index) {
     desc: raw.description || "",
     cta: raw.button_label || "",
     href: raw.button_url || "/shop",
-    bg: raw.image_url
-      ? `linear-gradient(115deg,rgba(20,20,20,.55),rgba(20,20,20,.15)),url("${raw.image_url}") center/cover no-repeat`
-      : ["linear-gradient(115deg,#1f4e4a 0%,#2f6f68 55%,#c9a24b 140%)",
-         "linear-gradient(115deg,#3a2a22 0%,#7a5233 60%,#e8d8bd 150%)",
-         "linear-gradient(115deg,#2b2f3a 0%,#4c5468 55%,#d3cfe2 150%)"][index % 3],
+    imageUrl: raw.image_url || null,
+    overlay: supporting || !raw.image_url,
+    fallback: HERO_FALLBACKS[index % HERO_FALLBACKS.length],
   };
 }
 
@@ -66,11 +95,8 @@ export function normalizeBanner(raw, index) {
     cta: raw.subtitle ? "اكتشف المزيد" : "تصفّح",
     href: raw.link_url || "/shop",
     placement: raw.placement,
-    bg: raw.image_url
-      ? `linear-gradient(120deg,rgba(20,20,20,.55),rgba(20,20,20,.2)),url("${raw.image_url}") center/cover no-repeat`
-      : ["linear-gradient(120deg,#3a2a22,#7a5233)", "linear-gradient(120deg,#2b2f3a,#5b6478)"][
-          index % 2
-        ],
+    imageUrl: raw.image_url || null,
+    fallback: BANNER_FALLBACKS[index % BANNER_FALLBACKS.length],
   };
 }
 
@@ -85,6 +111,7 @@ export function normalizeArticle(raw) {
     author: raw.author_name || "",
     date: formatDate(raw.published_at),
     read: readingTime(raw.content || raw.excerpt),
+    imageUrl: raw.featured_image_url || null,
     bg: backgroundFor(raw.featured_image_url, raw.slug),
     seoTitle: raw.seo_title || raw.title,
     seoDescription: raw.seo_description || raw.excerpt || "",

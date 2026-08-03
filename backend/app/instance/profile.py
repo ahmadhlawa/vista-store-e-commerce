@@ -134,6 +134,9 @@ class StaticPageProfile(_Strict):
 
 class StoreProfile(_Strict):
     name: str = Field(min_length=1, max_length=150)
+    # The Arabic display name, when the business writes its name both ways. The
+    # storefront and the invoice prefer this one; `name` stays the fallback.
+    display_name_ar: str | None = Field(default=None, max_length=150)
     tagline: str | None = Field(default=None, max_length=200)
     locale: str = "ar"
     timezone: str = "UTC"

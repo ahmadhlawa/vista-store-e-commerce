@@ -6,6 +6,7 @@ from pydantic import EmailStr, Field, field_validator
 
 from app.core.enums import OrderStatus, PaymentMethod
 from app.schemas.common import APIModel, Money, UTCDateTime
+from app.schemas.invoices import InvoiceSummary
 
 PHONE_PATTERN = re.compile(r"^\+?\d{7,15}$")
 
@@ -147,6 +148,9 @@ class OrderAdminOut(APIModel):
     updated_at: UTCDateTime
     items: list[OrderItemOut] = Field(default_factory=list)
     status_history: list[OrderStatusHistoryOut] = Field(default_factory=list)
+    # None until the order is first confirmed. Present and `cancelled` afterwards, even
+    # once the order itself is cancelled — the invoice is never removed.
+    invoice: InvoiceSummary | None = None
 
 
 class OrderStatusUpdate(APIModel):

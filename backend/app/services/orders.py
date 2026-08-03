@@ -18,6 +18,7 @@ from app.core.enums import OrderStatus, PaymentMethod
 from app.db.base import utcnow
 from app.models import AdminUser, Order, OrderItem, OrderStatusHistory, Product, ProductVariant
 from app.services import audit as audit_service
+from app.services import invoices as invoices_service
 from app.services.errors import DomainError, NotFoundError
 from app.services.pricing import PricedCart, money, price_cart
 
@@ -169,6 +170,14 @@ def change_status(
         _restore_stock(db, order)
 
     order.status = new_status
+    # Invoicing rides on the same transaction as the status change, so an order can
+    # never be left confirmed-but-uninvoiced or cancelled-with-a-live-invoice.
+    if new_status == OrderStatus.CONFIRMED.value:
+        # Idempotent: an order that was confirmed before keeps its original invoice.
+        invoices_service.issue_for_order(db, order)
+    elif new_status == OrderStatus.CANCELLED.value:
+        invoices_service.cancel_for_order(db, order, admin=admin, reason=note)
+
     order.updated_at = utcnow()
     db.add(
         OrderStatusHistory(

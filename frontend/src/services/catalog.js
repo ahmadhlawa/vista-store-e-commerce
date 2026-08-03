@@ -29,12 +29,19 @@ export function normalizeProduct(raw) {
     short: raw.short_description || "",
     description: raw.description || "",
     imageUrl: raw.primary_image_url || null,
+    // Present on the list projection too, so a card can cross-fade to it on
+    // hover without fetching the product's detail payload.
+    secondaryImageUrl: raw.secondary_image_url || null,
     bg: backgroundFor(raw.primary_image_url, seed),
     gallery: galleryFor(raw.images, seed),
     images: raw.images || [],
     specs: (raw.specifications || []).map((spec) => [spec.name, spec.value]),
     options: raw.options || [],
     variants: raw.variants || [],
+    // Present on both projections: the list payload omits the option rows, so a
+    // card relies on the flag alone to decide direct-add vs. choose-an-option.
+    hasOptions: !!raw.has_options || (raw.options || []).length > 0,
+    packageItemCount: raw.package_item_count ?? (raw.package_items || []).length,
     packageItems: (raw.package_items || []).map((item) => ({
       id: item.id,
       productId: item.included_product_id,

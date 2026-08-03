@@ -79,6 +79,7 @@ def _settings_updates(row: StoreSettings, profile: InstanceProfile) -> dict[str,
     """The settings fields bootstrap would fill, skipping anything owner-edited."""
     desired: dict[str, object | None] = {
         "store_name": profile.store.name,
+        "store_name_ar": profile.store.display_name_ar,
         "store_tagline": profile.store.tagline,
         "currency_code": profile.store.currency_code,
         "currency_symbol": profile.store.currency_symbol,

@@ -1,0 +1,143 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Vista Store — instance profile
+#
+# NON-SECRET by design. Validated, committed, and safe to hand to the client. It
+# must never contain a database password, DATABASE_URL, JWT secret, storage
+# credential or admin password; validation rejects any key that looks like one.
+#
+#   cd backend
+#   .venv\Scripts\python.exe -m scripts.instance_cli validate --profile ../instance/vista-store.yaml
+#   .venv\Scripts\python.exe -m scripts.instance_cli plan     --profile ../instance/vista-store.yaml
+#   .venv\Scripts\python.exe -m scripts.instance_cli apply    --profile ../instance/vista-store.yaml
+#
+# ── ONLY VERIFIED DATA ───────────────────────────────────────────────────────
+# The supplied Facebook page is login-walled (docs/client/facebook-source-audit.md),
+# so the ONLY confirmed facts are the two business names and the page URL.
+#
+# Every field marked PENDING below is deliberately absent or left at the template
+# default. Nothing here is a guess. Do not fill a PENDING field with a plausible
+# value — fill it from what the owner actually sends, and update
+# docs/client/data-needed-from-owner.md when you do.
+# ─────────────────────────────────────────────────────────────────────────────
+
+profile_schema_version: 1
+
+# The Golden Template release this instance was created from.
+template_version: "0.3.0-rc.1"
+
+client_slug: "vista-store"
+
+store:
+  # CONFIRMED — both names come from the supplied Facebook page's title.
+  name: "Vista Store"
+  display_name_ar: "متجر فيستا"
+
+  # PENDING — no tagline is known. The owner supplies one; until then the
+  # storefront simply shows none.
+  tagline: null
+
+  locale: "ar"
+  # PENDING — timezone not confirmed. UTC is the neutral default and is only used
+  # for display; it does not affect stored timestamps, which are always UTC.
+  timezone: "UTC"
+
+  # PENDING — currency NOT confirmed. These are the template defaults, carried over
+  # unverified. Confirm with the owner before the store takes a real order; a wrong
+  # currency on an issued invoice cannot be corrected in place.
+  currency_code: "ILS"
+  currency_symbol: "₪"
+
+  seo_title: "Vista Store | متجر فيستا"
+  # PENDING — no description is known, and inventing one would put unverified
+  # claims about the business into search results.
+  seo_description: null
+
+domain:
+  # PENDING — no domain has been supplied.
+  primary: null
+  aliases: []
+
+contact:
+  # PENDING, every one of them. Blank means blank: the storefront hides a contact
+  # row rather than showing a placeholder number a customer might actually dial.
+  phone: null
+  whatsapp: null
+  email: null
+  address: null
+  working_hours: null
+  # CONFIRMED — the profile supplied by the client, read publicly on 2026-08-02.
+  # See docs/client/social-source-audit.md. The address and phone number visible on
+  # that profile are deliberately NOT copied here: they are owner contact details and
+  # must come from the owner, not from a social post.
+  instagram_url: "https://www.instagram.com/vistastore.ps"
+  # CONFIRMED — the page supplied by the client.
+  facebook_url: "https://www.facebook.com/people/Vista-Store-%D9%85%D8%AA%D8%AC%D8%B1-%D9%81%D9%8A%D8%B3%D8%AA%D8%A7/61582596333597/"
+
+theme:
+  # CONFIRMED — sampled from the logo file the owner supplied on 2026-08-03, which
+  # is archived unaltered at backend/data/brand/vista-logo.jpeg. These are the two
+  # colours the artwork actually uses, not an interpretation of them.
+  #   #484397  the deep blue-purple of the bag and the wordmark
+  #   #FFC50A  the yellow of the sign panel
+  primary_color: "#484397"
+  secondary_color: "#FFC50A"
+  # No third brand colour appears in the logo. Success/confirmation states keep a
+  # neutral green, because yellow-on-white cannot carry a readable status message.
+  accent_color: "#2E7D5B"
+
+# The line of business is unknown, so no feature is switched off on a guess.
+# Disabling one only changes what a fresh instance starts with; it deletes nothing,
+# so these can be narrowed once the owner describes the catalog.
+features:
+  packages: true
+  silicone_molds: true
+  articles: true
+  coupons: true
+
+# Structure only. Every section starts empty and is filled from Admin — no section
+# here carries invented Vista Store copy.
+home_sections:
+  - key: "categories"
+    type: "categories"
+    title: "تسوّق حسب القسم"
+    sort_order: 0
+  # The owner's running order for the homepage: categories, then one product
+  # section, then the packages (sort_order 2, in the preview dataset), then the
+  # featured/offer row. Admin can still reorder any of it — this is only what a
+  # fresh instance starts with.
+  - key: "bestsellers"
+    type: "bestsellers"
+    title: "الأكثر مبيعاً"
+    sort_order: 1
+  - key: "featured"
+    type: "featured_products"
+    title: "منتجات مختارة"
+    sort_order: 3
+  - key: "new"
+    type: "new_products"
+    title: "وصل حديثاً"
+    sort_order: 4
+
+# Created empty, for the owner to write. The storefront footer links to all of
+# these, so omitting one would leave a customer at a dead end. The `lead` text
+# below describes what each page is for; it is not a policy and makes no claim
+# about how Vista Store actually operates.
+static_pages:
+  - slug: "about"
+    title: "من نحن"
+    lead: "عرّف العملاء بالمتجر."
+  - slug: "privacy-policy"
+    title: "سياسة الخصوصية"
+    lead: "كيف تُعالَج بيانات العملاء."
+  - slug: "return-policy"
+    title: "سياسة التبديل والإرجاع"
+    lead: "مدة الإرجاع وشروطه."
+  - slug: "terms"
+    title: "الشروط والأحكام"
+    lead: "شروط استخدام المتجر."
+  - slug: "shipping-policy"
+    title: "سياسة الشحن"
+    lead: "مناطق التوصيل ومدده."
+  - slug: "contact"
+    title: "تواصل معنا"
+    lead: "طرق التواصل مع المتجر."

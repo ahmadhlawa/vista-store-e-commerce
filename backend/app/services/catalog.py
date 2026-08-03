@@ -149,6 +149,9 @@ def product_payload(product: Product, *, include_relations: bool) -> dict[str, A
         "is_new": product.is_new,
         "is_bestseller": product.is_bestseller,
         "primary_image_url": product.primary_image_url,
+        "secondary_image_url": product.secondary_image_url,
+        "has_options": bool(product.options),
+        "package_item_count": len(product.package_items),
     }
     if not include_relations:
         return payload

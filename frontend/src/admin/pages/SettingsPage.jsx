@@ -8,6 +8,7 @@ const GROUPS = [
     title: "هوية المتجر",
     fields: [
       ["store_name", "اسم المتجر"],
+      ["store_name_ar", "الاسم بالعربية (يُعرض في المتجر والفاتورة)"],
       ["store_tagline", "الوصف المختصر"],
       ["logo_url", "رابط الشعار"],
       ["favicon_url", "رابط أيقونة المتصفح"],
@@ -56,12 +57,42 @@ const GROUPS = [
     fields: [["seo_title", "عنوان SEO"]],
     textareas: [["seo_description", "وصف SEO"]],
   },
+  {
+    title: "الدفع اليدوي",
+    note: "تظهر هذه التعليمات للعميل الذي يختار «تحويل بنكي / يدوي». اتركها فارغة حتى تصل تفاصيل الحساب من صاحب المتجر — لا يعرض المتجر أي تعليمات ما دامت فارغة. لا يوجد دفع إلكتروني بالبطاقة في هذه النسخة.",
+    textareas: [["manual_payment_instructions", "تعليمات التحويل"]],
+  },
+  {
+    title: "الفوترة",
+    note: "تصدر الفاتورة تلقائياً عند تأكيد الطلب. غيّر البادئة قبل إصدار أول فاتورة: الفواتير الصادرة تحتفظ ببادئتها، وتغييرها لاحقاً ينتج سلسلتين مختلفتين.",
+    fields: [["invoice_prefix", "بادئة رقم الفاتورة (مثل INV)"]],
+    textareas: [["invoice_notes", "ملاحظات أسفل الفاتورة"]],
+  },
+  {
+    title: "البيانات القانونية والضريبة",
+    note: "لا تملأ هذه الحقول إلا بتأكيد خطي من صاحب المتجر — تُطبع على فواتير العملاء. الضريبة معطّلة افتراضياً، وعند تعطيلها يساوي إجمالي الفاتورة إجمالي الطلب تماماً.",
+    fields: [
+      ["legal_business_name", "الاسم القانوني للنشاط"],
+      ["registration_number", "رقم التسجيل التجاري"],
+      ["tax_number", "الرقم الضريبي"],
+    ],
+    numbers: [["tax_rate", "نسبة الضريبة ٪"]],
+    checkboxes: [
+      ["tax_enabled", "تفعيل الضريبة على الفواتير"],
+      ["prices_include_tax", "الأسعار المعروضة شاملة الضريبة"],
+    ],
+  },
 ];
 
-const EDITABLE = GROUPS.flatMap((group) => [
+const TEXT_KEYS = GROUPS.flatMap((group) => [
   ...(group.fields || []).map(([key]) => key),
   ...(group.textareas || []).map(([key]) => key),
 ]);
+const NUMBER_KEYS = GROUPS.flatMap((group) => (group.numbers || []).map(([key]) => key));
+const BOOLEAN_KEYS = [
+  "maintenance_mode",
+  ...GROUPS.flatMap((group) => (group.checkboxes || []).map(([key]) => key)),
+];
 
 export default function SettingsPage() {
   const feedback = useFeedback();
@@ -73,10 +104,15 @@ export default function SettingsPage() {
       .getSettings()
       .then((row) => {
         const values = {};
-        EDITABLE.forEach((key) => {
+        TEXT_KEYS.forEach((key) => {
           values[key] = row[key] ?? "";
         });
-        values.maintenance_mode = !!row.maintenance_mode;
+        NUMBER_KEYS.forEach((key) => {
+          values[key] = row[key] ?? 0;
+        });
+        BOOLEAN_KEYS.forEach((key) => {
+          values[key] = !!row[key];
+        });
         setForm(values);
       })
       .catch((error) => feedback.error(error.message || "تعذّر تحميل الإعدادات."));
@@ -86,13 +122,20 @@ export default function SettingsPage() {
   const save = async () => {
     setSaving(true);
     try {
-      const payload = { maintenance_mode: !!form.maintenance_mode };
-      EDITABLE.forEach((key) => {
+      const payload = {};
+      TEXT_KEYS.forEach((key) => {
         const value = typeof form[key] === "string" ? form[key].trim() : form[key];
         payload[key] = value === "" ? null : value;
       });
-      // These three are required strings on the server; never send null.
-      ["store_name", "currency_code", "currency_symbol"].forEach((key) => {
+      NUMBER_KEYS.forEach((key) => {
+        payload[key] = Number(form[key]) || 0;
+      });
+      BOOLEAN_KEYS.forEach((key) => {
+        payload[key] = !!form[key];
+      });
+      // Required strings on the server; never send null. invoice_prefix joins them —
+      // clearing it would leave new invoices with no series at all.
+      ["store_name", "currency_code", "currency_symbol", "invoice_prefix"].forEach((key) => {
         if (!payload[key]) delete payload[key];
       });
       await adminApi.updateSettings(payload);
@@ -119,7 +162,10 @@ export default function SettingsPage() {
 
       {GROUPS.map((group) => (
         <div key={group.title} style={{ ...card, ...sx`margin-bottom:16px` }}>
-          <h2 style={sx`margin:0 0 14px;font-size:16px;font-weight:800`}>{group.title}</h2>
+          <h2 style={sx`margin:0 0 ${group.note ? "8px" : "14px"};font-size:16px;font-weight:800`}>{group.title}</h2>
+          {group.note && (
+            <p style={sx`margin:0 0 14px;font-size:12.5px;color:#7C766D;line-height:1.9`}>{group.note}</p>
+          )}
           <div style={sx`display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px`}>
             {(group.fields || []).map(([key, title]) => (
               <Field key={key} title={title}>
@@ -131,11 +177,35 @@ export default function SettingsPage() {
                 />
               </Field>
             ))}
+            {(group.numbers || []).map(([key, title]) => (
+              <Field key={key} title={title}>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.001"
+                  value={form[key] ?? 0}
+                  onChange={(event) => update(key, event.target.value)}
+                  style={input}
+                />
+              </Field>
+            ))}
           </div>
           {(group.textareas || []).map(([key, title]) => (
             <Field key={key} title={title}>
               <textarea rows="3" value={form[key] ?? ""} onChange={(event) => update(key, event.target.value)} style={textarea} />
             </Field>
+          ))}
+          {(group.checkboxes || []).map(([key, title]) => (
+            <label key={key} style={sx`display:flex;align-items:center;gap:10px;margin-top:12px;font-size:14px;font-weight:700;cursor:pointer`}>
+              <input
+                type="checkbox"
+                checked={!!form[key]}
+                onChange={(event) => update(key, event.target.checked)}
+                style={sx`width:18px;height:18px;accent-color:#1F4E4A`}
+              />
+              {title}
+            </label>
           ))}
         </div>
       ))}

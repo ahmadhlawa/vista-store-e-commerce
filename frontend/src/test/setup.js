@@ -31,6 +31,23 @@ beforeEach(() => {
   window.localStorage.clear();
   window.sessionStorage.clear();
   window.scrollTo = vi.fn();
+
+  // jsdom ships no matchMedia. The default answers "no" to every query, which
+  // puts components on their desktop, full-motion path; a test that cares about
+  // a breakpoint or reduced motion replaces `window.__mediaMatches`.
+  window.__mediaMatches = () => false;
+  window.matchMedia = (query) => ({
+    media: query,
+    get matches() {
+      return window.__mediaMatches(query);
+    },
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  });
 });
 
 afterEach(() => {

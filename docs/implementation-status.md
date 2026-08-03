@@ -1,4 +1,362 @@
-# Implementation status — full-stack commerce MVP
+# Implementation status
+
+## Storefront visual correction: header, logo, rail, hero, theme — 2026-08-03
+
+**Branch:** `fix/vista-reference-alignment`. **Not merged, not pushed.** One
+focused correction pass on the owner's screenshot feedback. No route, feature or
+component was added or removed, and the storefront was not redesigned. Full
+measurements and the browser evidence: [qa/vista-reference-alignment.md](qa/vista-reference-alignment.md) § Pass 2.
+
+| Complaint | Result |
+| --- | --- |
+| The white header band is too tall and visually empty | Desktop header **128px → 110px** (64px identity + 46px navigation). Logo, search and cart now share one horizontal axis (mid-lines all at 31.5px). The empty stretch was the search field stopping at 620px in a store with no phone number; its cap is now one token, `--vs-search-max`, at 820px. Sticky behaviour and every control kept |
+| The logo's own whitespace makes the mark tiny | The file is untouched. Header and footer clip it to a fixed viewport and `useLogoFit` scales the image inside so the artwork fills it. Visible mark **29.3 × 14.4 → 87.9 × 43.2** at desktop (3.0×) and **20.7 × 10.2 → 65.0 × 32.0** at 390/768 (3.1×), aspect ratio exact. `StoreSettings.logo_url` is still the only source |
+| The rail reads as a second navigation bar of purple blocks | White, 64px, a hairline and a near-invisible shadow. The one saturated element is the dark-purple trigger. Items are the categories' own pictures — 8 of 8 at 1440, 0 gradient stand-ins — with a neutral line icon where a category has no image, and a pale-yellow active state |
+| The hero looks like a rounded card in a padded container | The band left the container: radius **22 → 0**, gutters and the 20px above it removed. It now takes **100%** of the storefront width at every viewport (was 93% at 1440, 73% at 1920), stopping exactly at the rail's edge. A new `--vs-hero-max-h` keeps a 1856px band from becoming a 700px wall |
+| Advertisements are overprinted with a second headline | A slide with an image and no supporting copy (no subtitle, description or button) is treated as a finished advertisement: image only, no veil, no CTA; its title stays the Admin label and the `alt` text. No column, no migration, no hard-coded slide id. The preview dataset now carries one such slide |
+| Too much solid purple | The homepage editorial panel went from a purple slab to a white surface with one Vista-yellow rule; its button took the purple instead. The package badge stopped using the template's original teal and now derives from `--vs-primary`. Navigation band shortened, section rhythm tightened 68/40 → 56/34 |
+
+**Verification.** Frontend Vitest **106/106** (7 new tests), production build
+clean, `backend/tests/test_preview_dataset.py` **18/18** — the only backend-side
+change was one record in `instance/preview/vista-social-preview.yaml`; no backend
+Python file was touched. Chrome sweep at 390 / 768 / 1440 / 1920 plus the
+scrolled header, the image-only slide, the collapsed rail, the category drawer,
+the mobile menu and `/admin`: **no horizontal overflow anywhere, and 0 elements
+carrying a `vs-` class on any admin route.**
+
+**Still blocked on the owner.** The preview artwork is eight variations of one
+purple-to-gold gradient, so at 40px the rail's thumbnails read as coloured
+squares rather than as distinguishable categories. No image was generated or
+downloaded. Real category photographs and a trimmed, transparent logo are what
+close the remaining distance to the reference.
+
+## Storage repair, invoice print pagination and live MySQL acceptance — 2026-08-02
+
+**Branch:** `feat/vista-preview-data-storage`. **Not merged, not pushed.** This closes the
+three technical gaps the visual QA left open. No feature was added.
+
+| Gap | State |
+| --- | --- |
+| Preview seed trusted the database row and reported "already uploaded" for a missing object | **Closed.** `StorageProvider` gained `exists()` and `restore()`; the seed now verifies the row **and** the object, and repairs the object at its recorded key |
+| A 12-line invoice split its totals block across an A4 page break | **Closed.** Print-layout only; short and 12-line invoices are now one clean page, and the closing block never splits |
+| MySQL runtime acceptance was BLOCKED on Docker | **Closed.** Run against the machine's own MySQL **8.0.46** in an isolated `vista_store_dev`; 22 of 22 acceptance steps passed |
+
+### 1. Storage repair
+
+`StorageProvider` is now a four-method boundary — `save`, `exists`, `restore`, `delete`.
+
+* `LocalStorageProvider.exists()` stats the file inside the media root and returns `False`
+  (never raises) for an empty key or one that resolves outside it.
+* `R2StorageProvider.exists()` was already present; it now **refuses to issue a request at
+  all** for a key outside `R2_OBJECT_PREFIX` and reports it absent. `restore()` refuses
+  such a key outright, the same rule `delete()` already enforced.
+* `restore(key, data, content_type=…)` deliberately does **not** mint a key. Writing back
+  to the recorded key is what lets the seed repair storage without touching the database
+  row — no duplicate `MediaAsset`, and no URL already published in a category, product,
+  hero slide or banner changes.
+
+`PreviewImporter._verify_media_object` runs for every owned, unedited media row and adds a
+new `repair` outcome to the plan. It refuses three cases before it looks at anything:
+an owner-edited row, a row uploaded to a different provider than the one now configured,
+and a key outside the batch's own media prefix — the last is never even probed. Because
+the placeholder bytes are deterministic, a repair reproduces the object byte for byte.
+
+Eight regression tests in `backend/tests/test_preview_importer.py` (row+object present →
+skip; object missing → repair; no second row or batch record; the repaired object is
+readable at its published URL and the category still points at it; an owner-edited row is
+never repaired; unrelated owner media untouched; a repair is itself idempotent) and six in
+`backend/tests/test_storage_providers.py` (local `exists`/`restore` round trip, `exists`
+false outside the media root, R2 `restore` keeps the key and URL, R2 `restore` refuses a
+foreign prefix, `exists` never probes a foreign key).
+
+### 2. Invoice print pagination
+
+Print CSS and the existing markup only — no redesign, no smaller type. Full result and
+the measured page table: [client/preview-visual-qa.md](client/preview-visual-qa.md) §4a.
+
+Three things were wrong, not one:
+
+1. The totals, notes and cancellation notice were three siblings, so a page break could
+   land between them. They are now one `.invoice-summary` with `break-inside: avoid`.
+2. `visibility: hidden` blanked the admin chrome but left its boxes in flow, so a tall
+   card *below* the sheet printed an **empty second page on every non-cancelled invoice**.
+   `.no-print` is now a global print rule and is applied to that chrome.
+3. `overflow: hidden` on the sheet — needed on screen to clip the watermark — truncated
+   anything past page 1 when printing. Print restores `overflow: visible`, and the
+   watermark is pinned to the page box instead, so it marks every page.
+
+Verified by rendering the real component for five fixtures and paginating each with local
+Chrome (`--headless=new --print-to-pdf`), then reading page assignment back out of the
+PDFs: short 1 page, 12-line 1 page, 24-line 2 pages with the whole totals block on page 2,
+cancelled 12-line 1 page, cancelled 24-line 2 pages with the watermark on **both**. The
+`SKU` column header appears on page 2 of the 24-line PDF, so the repeating `thead` holds.
+Two frontend regression tests lock it in.
+
+### 3. Live MySQL acceptance — PASSED
+
+MySQL **8.0.46**, `127.0.0.1:3306`, database `vista_store_dev`, application user
+`vista_store_dev_user` whose grants reach that database and nothing else. The application
+was never run as `root`. The SQLite-backed `uvicorn` was stopped first, and the MySQL URL
+was supplied as a process environment variable — `backend/.env` still points at SQLite.
+
+All 22 steps passed. Full table:
+[deployment/mysql-local-development.md](deployment/mysql-local-development.md).
+Highlights: Alembic reached **`0004_import_batches (head)`** on an empty database (30
+tables, all InnoDB/utf8mb4, 23 FKs); `create=54` then `skip=53, update=1`;
+`DECIMAL(12,2)` keeps `exponent == -2` and `SUM(price)` returns a `Decimal`; Arabic
+including `ﷺ` survives utf8mb4; the three `json` columns round-trip and none is indexed;
+a dangling FK and a duplicate slug are both refused; one COD order → **exactly one
+invoice**, six further status transitions minted **no** second invoice, cancelling
+restored stock `7 → 10` and preserved the invoice number; deleting one owned preview
+object then re-seeding gave `repair=1` with the media row count unchanged; purge dry run
+`delete=53`, applied `delete=66`, re-seed `create=54`.
+
+**One genuine test defect was fixed, and it was not a MySQL compatibility defect.** Four
+tests in `tests_mysql/test_mysql_preview.py` resolved their subject as "the first row of
+this table". Against the empty CI service container that is the row they created; against
+a real development database it is somebody else's — one failed outright. They now resolve
+every row through the `ImportBatchRecord` that owns it, which is the rule the importer
+itself uses. No application code needed a MySQL fix.
+
+**SQLite is unaffected:** the full backend suite still runs on SQLite with no MySQL server
+present, and `backend/.env` is unchanged.
+
+### Verification (all run at the end of this session)
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Backend suite + coverage | `pytest --cov=app --cov=scripts` | **275 passed**, **89 %** (5167 statements, 563 missed) |
+| MySQL integration suite | `pytest tests_mysql` against local MySQL 8.0.46 | **18 passed, 4 skipped** — the 4 need a second and third database |
+| Frontend suite | `npx vitest run` | **55 passed** (5 files) |
+| Frontend build | `npm run build` | clean — 88 modules, 407.80 kB JS / 111.62 kB gzip, 2.71 s |
+| Focused invoice print | real component → Chrome `--print-to-pdf` → PDF page analysis | **5/5 fixtures pass**; totals block never split |
+| Preview media repair | delete an owned object, re-seed, against MySQL | `repair=1`, object restored at the same key, no duplicate row |
+| Whitespace | `git diff --check` | clean |
+| Secret scan | pattern sweep over every tracked file | no credential value; `.env.mysql.local` confirmed ignored and untracked |
+| Runtime-file tracking | `git ls-files` filtered | only `.example` templates and `backend/data/vista-uploads/.gitkeep` |
+
+### Still blocked
+
+* **Live R2 smoke test — BLOCKED, unchanged.** No `R2_*` value is set in `backend/.env` or
+  in the environment, so no object has yet been written to a real bucket. The provider is
+  implemented and unit-tested against a stub, and this session extended that stub coverage
+  to `exists()` and `restore()`. Steps to finish:
+  [deployment/r2-preview-setup.md](deployment/r2-preview-setup.md) §3. Scope was not
+  changed to work around this.
+* **Four `tests_mysql` tests — BLOCKED on a database-creating account.** They need
+  `MYSQL_LIFECYCLE_URL` and `MYSQL_SEED_URL` pointing at two further schemas. The
+  `MYSQL_ADMIN_PASSWORD` recorded in `.env.mysql.local` is rejected by the server
+  (`ERROR 1045`), so the schemas could not be created. Exact variable names and the
+  `CREATE DATABASE` / `GRANT` statements:
+  [deployment/mysql-local-development.md](deployment/mysql-local-development.md).
+
+### Next, in order
+
+1. **Supply a working MySQL admin password**, create `vista_store_dev_lifecycle` and
+   `vista_store_dev_seed`, and clear the last four skips.
+2. **Supply R2 credentials** and run the live upload/read/delete smoke test.
+3. **Send the owner [client/data-needed-from-owner.md](client/data-needed-from-owner.md).**
+4. **Settle the currency before the first real order.**
+
+---
+
+## Preview catalog, R2 storage and MySQL runtime — 2026-08-02
+
+**Branch:** `feat/vista-preview-data-storage`, cut from `feat/vista-store-initial-release`
+at `db16863`. **Not merged, not pushed** — this repository has no `origin` remote, only
+the read-only `template-upstream`.
+
+| Phase | State |
+| --- | --- |
+| 1. Social source audit | **Done** — Instagram readable, Facebook still login-walled. [client/social-source-audit.md](client/social-source-audit.md) |
+| 2. Preview dataset | **Done** — `instance/preview/vista-social-preview.yaml`: 7 categories, 25 products, 12 media, 1 delivery area, 3 hero slides, 2 banners, 1 coupon |
+| 3. Preview batch lifecycle | **Done** — `import_batches` / `import_batch_records`, revision `0004`, `vista-preview validate/plan/seed/status/purge` |
+| 4. R2 storage provider | **Done as code**, **live verification BLOCKED** — no credentials in this environment |
+| 5. MySQL development runtime | **Done as configuration**, live verification BLOCKED at the time — Docker not installed. **Since passed on 2026-08-02 against local MySQL 8.0.46**; see the section at the top of this file |
+| 6. Storefront preview notice | **Done** — `VITE_PREVIEW_NOTICE`, absent from the bundle when unset |
+| 7. Visual QA | **Done — 2026-08-02.** All 16 public and admin routes opened in real Chrome at 390 / 768 / 1440 px against the populated preview catalog; full product → cart → COD checkout → admin confirm → invoice → A4 print flow driven through the UI. One storefront defect found and fixed. [client/preview-visual-qa.md](client/preview-visual-qa.md) |
+
+### Verification (all run in this session)
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Backend suite + coverage | `pytest --cov=app` | **260 passed**, **91 %** (baseline 193), 5:07 |
+| Frontend suite | `npx vitest run` | **53 passed** (baseline 47) |
+| Frontend build | `npm run build` | clean, 405.68 kB JS / 110.91 kB gzip |
+| Preview notice toggle | two builds | string present when configured, **absent from the bundle** when not |
+| MySQL portability gate | `python -m scripts.mysql_compat --verbose` | **8 checks, 0 failures, 0 warnings**, head `0004_import_batches`, 29 tables |
+| Alembic on a clean database | `alembic upgrade head` | `0001 → 0002 → 0003 → 0004` |
+| Preview seed / idempotency | `vista-preview seed` ×3 | `create=54`, then `skip=53, update=1` twice — the single update is the batch's own seed counter |
+| Preview purge, dry run | `vista-preview purge` | `delete=53`, nothing written |
+| Preview purge, applied | `vista-preview purge --confirm` | `delete=66` (53 rows + 12 storage objects + the batch); status then reports the batch gone |
+| Re-seed after purge | `vista-preview seed` | `create=54`, `seed_count` back to 1 |
+| **Live storefront over HTTP** | operator script, uvicorn + seeded SQLite | **39/39 checks** |
+| **Routes through the real Vite dev server** | 19 SPA routes + 8 proxied API paths + media | **28/28 reachable** |
+| Whitespace | `git diff --check` | clean |
+| Tracked-file hygiene | `git ls-files` filtered | no `.env`, `*.db`, `node_modules/`, `dist/`, `.venv/`, coverage artefacts; the only `.env*` files tracked are six `.example` templates |
+| Secret scan | pattern sweep over every tracked file | no credential value — every hit is a variable name, an empty default or a test stub |
+
+The live pass proved, among other things: a client-supplied `unit_price` of 1 is ignored
+and the order totals 190; `payment_method: card` is refused with 422; confirming the order
+issued exactly one invoice, `INV-000001`, matching the order total; the preview coupon
+discounts server-side; and the preview delivery area is the only one, labelled and priced
+at zero.
+
+### Two defects found and fixed while exercising live data
+
+1. **A sale was being mistaken for an owner edit.** `stock_quantity` was in the row
+   fingerprint, so buying a preview product made it look edited — `purge` then skipped it
+   with a misleading reason and left it behind. Stock is now excluded.
+2. **`--force` bypassed the never-delete guard.** The refusal that protects a product an
+   order references ran only on the not-edited branch, so a forced purge of an edited row
+   walked straight past it. The guard now runs first, for every row, and no flag overrides
+   it.
+
+Both have regression tests.
+
+### Blocked, and honestly so
+
+* **Live R2 smoke test — BLOCKED.** `backend/.env` carries the `R2_*` keys empty and no
+  `R2_*` variable is set in the environment. The provider is implemented and unit-tested
+  against a stub; **no object has ever been written to a real bucket.** Exact steps to
+  finish: [deployment/r2-preview-setup.md](deployment/r2-preview-setup.md).
+* **MySQL runtime acceptance — BLOCKED.** Docker is not installed (`docker --version`
+  unavailable; no install under `%ProgramFiles%\Docker` or `%LOCALAPPDATA%\Docker`).
+  Nothing was installed to work around it and no existing MySQL server was contacted. The
+  13-step sequence is written and ready: [deployment/mysql-local-development.md](deployment/mysql-local-development.md).
+Visual QA was the third blocked item here. **It is no longer blocked** — see the
+2026-08-02 pass below.
+
+### Visual QA — done 2026-08-02
+
+Driven with the locally installed Chrome over the DevTools Protocol from the backend
+virtualenv (`websockets` + `httpx`, both already present). No Playwright, no Puppeteer and
+no browser download.
+
+| Check | Result |
+| --- | --- |
+| 16 routes × 390 / 768 / 1440 px | **48/48 inspected**, `dir="rtl"` and **0 px horizontal overflow** everywhere |
+| Product → cart → COD checkout | **Pass** — `ORD-260802-7868`, 190 ₪, through the UI |
+| Admin login → confirm → invoice | **Pass** — exactly one invoice per order; a `confirmed → processing → confirmed` round trip minted no duplicate |
+| Invoice A4 print | **Pass** — 1-line invoice = one A4 page; no admin chrome prints; repeated table header on page 2 confirmed with `pdftotext` on the real 24-line PDF |
+| Cancelled watermark | **Pass** — diagonal «ملغاة» prints without obscuring the figures |
+| No card-payment UI | **Pass** — two radios only, COD and manual transfer |
+| Public/Admin separation | **Pass** — no storefront chrome and no preview notice on any admin route |
+
+**One storefront defect found and fixed:** the product-detail «الوصف» and «المواصفات»
+tabs rendered empty white panels, because 23 of 25 preview products carry no
+`description` and 22 of 25 carry no specifications. The description now falls back to
+`short_description` and both panels have an empty state.
+
+**One environment defect found, repaired, and reported rather than fixed:** all 12 preview
+media objects were missing from `backend/data/vista-uploads/` and returned HTTP 404, so
+every card, hero and banner painted blank. The deterministic placeholder bytes were
+rewritten under their recorded keys. `preview_cli seed` **cannot** repair this — it decides
+from the database row alone and reports "already uploaded" for objects that do not exist.
+Fixing that needs an `exists()` on the `StorageProvider` boundary, which was out of scope
+for a visual-QA pass.
+
+Re-verified after the fix:
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Backend suite | `python -m pytest` | **260 passed**, 1 warning |
+| Frontend suite | `npx vitest run` | **53 passed** (5 files) |
+| Frontend build | `npm run build` | clean — 88 modules, `index-CAGMzJi6.js` 406.03 kB (gzip 110.98 kB), 4.27 s |
+| Whitespace | `git diff --check` | clean |
+
+### Next, in order
+
+*Items 1 and 3 were done on 2026-08-02 — see the section at the top of this file. Item 3
+was settled without Docker, against the machine's own MySQL 8.0.46.*
+
+1. ~~**Give `StorageProvider` an `exists()` and make `_seed_media` re-upload a missing
+   object**~~ — done.
+2. **Supply R2 credentials** and run the smoke test in
+   [deployment/r2-preview-setup.md](deployment/r2-preview-setup.md) §3. *Still open.*
+3. ~~**Install Docker** and run the 13-step sequence~~ — done, without Docker, in
+   [deployment/mysql-local-development.md](deployment/mysql-local-development.md).
+4. **Send the owner [client/data-needed-from-owner.md](client/data-needed-from-owner.md).**
+   The preview catalog buys time; it does not replace a single item on that list.
+5. **Settle the currency before the first real order.** Still unverified, still expensive
+   to change once an invoice exists.
+
+### The exact command to remove the preview
+
+```
+cd backend
+.venv\Scripts\python.exe -m scripts.preview_cli purge            # dry run
+.venv\Scripts\python.exe -m scripts.preview_cli purge --confirm  # apply
+```
+
+---
+
+## Vista Store client instance — 2026-08-02
+
+**Branch:** `feat/vista-store-initial-release` · **Not merged, not pushed.**
+
+Built from the Golden Commerce Template at `dba6a67` (v0.3.0-rc.1) — see
+[template-origin.md](template-origin.md). Everything below the horizontal rule is the
+template's own history and is left as written.
+
+| Phase | State |
+| --- | --- |
+| 1. Clone and provenance | **Done** — independent repo, history preserved, `template-upstream` remote, no `origin` |
+| 2. Facebook source audit | **Done** — page login-walled; only the bilingual name confirmed; gaps documented |
+| 3. Client identity | **Done** — `instance/vista-store.yaml`, verified values only |
+| 4. Catalog data | **Done, and empty by design** — no product was verifiable, so none was invented |
+| 5. Payments | **Done** — COD + manual only; card/online rejected with 422; no card UI anywhere |
+| 6. Invoices | **Done** — models, migration `0003`, service, admin API, admin screens, print layout |
+| 7. Local storage | **Done** — Vista media root, Git-ignored; seed brand assets kept separate |
+| 8. Local instance | **Done** — 26/26 live checks on a clean SQLite instance |
+| 9. Visual QA | **NOT DONE** — no browser tooling available. Manual checklist in [client/local-acceptance.md](client/local-acceptance.md) |
+| 10. cPanel readiness | **Done as documentation** — checklist, handoff, env template, release script. No deployment performed |
+
+### Verification
+
+- Backend `pytest --cov=app`: **193 passed**, 91% coverage (baseline 134)
+- Frontend `vitest run`: **47 passed** (baseline 24)
+- `npm run build`: clean — 87 modules, 405 kB JS / 111 kB gzip
+- `python -m scripts.mysql_compat --verbose`: 8 checks, 0 failures, 0 warnings
+- Live acceptance against a running server: 26/26
+
+No existing test was weakened or skipped.
+
+### Commits
+
+```
+c5dace2  feat(vista): client identity, local instance and cPanel readiness
+8fdf4f5  feat(admin): invoice list, printable invoice sheet and payment visibility
+08ecfe7  feat(invoices): issue an immutable invoice when an order is confirmed
+8e87c2a  docs: record template provenance and the Facebook source audit
+```
+
+### Next, in order
+
+1. **Send the owner [client/data-needed-from-owner.md](client/data-needed-from-owner.md).**
+   Nothing else unblocks the store. Items 1–8 are hard blockers: without a delivery area
+   no customer can complete checkout.
+2. **Send the host [deployment/cpanel-capability-checklist.md](deployment/cpanel-capability-checklist.md).**
+   Questions A1, A2 and A4 decide whether cPanel deployment is possible at all.
+3. **Do the visual QA** in a real browser at 390 / 768 / 1440px. Test the printed invoice
+   with more than 15 line items — that is where the first page break happens.
+4. **Settle the currency and the invoice prefix** before the first confirmed order. Both
+   become expensive once invoices exist.
+5. Then load the real catalog and branding, and re-run acceptance against it.
+
+### Decisions worth remembering
+
+- **Facebook was not worked around.** No search fallback, no similarly-named page, no
+  plausible placeholder. A blank field is a real blank.
+- **No Passenger/WSGI adapter was written** — it would be untested against an environment
+  nobody has described yet, which is worse than nothing.
+- **Invoice cancellation routes through order cancellation**, so the two can never
+  disagree and stock restoration stays in a single code path.
+- **One invoice per order is a database constraint**, not only a service-level check.
+
+---
+
+# Template history — full-stack commerce MVP
 
 **Authoritative handoff document.** Rewritten 2026-08-01 at the end of the continuation
 session. Every figure below was produced by a command run in that session against this
@@ -329,6 +687,8 @@ docs/known-limitations.md
 3. **Search** — normalised `LIKE` over `Product.search_text`; correct, but not a full-text
    index.
 4. **R2 storage** — interface boundary only; `save()` and `delete()` raise.
+   *Superseded 2026-08-02:* implemented on `feat/vista-preview-data-storage`, unit-tested
+   against a stub, **never run against a real bucket**. See the top of this file.
 
 `maintenance_mode` was the fifth entry here. It is complete as of 0.3.0-rc.1 — backend
 gate, Arabic RTL storefront screen, and tests at both layers.

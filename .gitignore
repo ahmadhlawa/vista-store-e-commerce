@@ -46,4 +46,16 @@ Thumbs.db
 # `uploads/` rule would make that re-inclusion impossible, so it is not used.
 backend/data/uploads/*
 !backend/data/uploads/.gitkeep
+# Vista's runtime media root. Uploads made through Admin are instance data, never
+# source; the tracked seed/brand assets live in backend/data/brand instead.
+backend/data/vista-uploads/*
+!backend/data/vista-uploads/.gitkeep
 backups/
+
+# Release packages built by scripts/make_release_package.py
+release/
+
+
+
+.env.mysql.local
+.env.mysql.app.local

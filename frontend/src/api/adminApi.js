@@ -68,6 +68,14 @@ export const adminApi = {
   updateOrderNotes: (id, adminNotes) =>
     api.patch(`/admin/orders/${id}/notes`, { admin_notes: adminNotes }, authed),
 
+  // Invoices are read-only by design: they are issued by the backend when an order is
+  // confirmed, and the only write here is a cancellation.
+  listInvoices: (params) => api.get("/admin/invoices", withParams(params)),
+  getInvoice: (invoiceNumber) => api.get(`/admin/invoices/${invoiceNumber}`, authed),
+  getOrderInvoice: (orderId) => api.get(`/admin/orders/${orderId}/invoice`, authed),
+  cancelInvoice: (invoiceNumber, reason) =>
+    api.post(`/admin/invoices/${invoiceNumber}/cancel`, { reason }, authed),
+
   listArticles: (params) => api.get("/admin/articles", withParams(params)),
   createArticle: (payload) => api.post("/admin/articles", payload, authed),
   updateArticle: (id, payload) => api.patch(`/admin/articles/${id}`, payload, authed),

@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models import Article, AuditLog, MediaAsset, StaticPage, StoreSettings
-from app.services.placeholder_image import gradient_png
+from app.services.placeholder_image import gradient_png, vista_preview_png
 from tests.conftest import auth
 
 
@@ -278,6 +278,12 @@ def test_generated_placeholder_is_a_valid_png() -> None:
     length = struct.unpack(">I", data[start - 8 : start - 4])[0]
     raw = zlib.decompress(data[start : start + length])
     assert len(raw) == height * (1 + width * 3)
+
+
+def test_vista_preview_placeholder_is_a_valid_distinct_png() -> None:
+    data = vista_preview_png(80, 48, (91, 62, 133), (228, 179, 60), "gifts")
+    assert data.startswith(b"\x89PNG\r\n\x1a\n")
+    assert data != gradient_png(80, 48, (91, 62, 133), (228, 179, 60))
 
 
 # ── audit log ────────────────────────────────────────────────────────────────

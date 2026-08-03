@@ -5,6 +5,7 @@ from app.api.v1.endpoints import (
     admin_catalog,
     admin_commerce,
     admin_content,
+    admin_invoices,
     admin_media,
     admin_users,
     auth,
@@ -30,5 +31,6 @@ api_router.include_router(auth.router)
 api_router.include_router(admin_catalog.router)
 api_router.include_router(admin_content.router)
 api_router.include_router(admin_commerce.router)
+api_router.include_router(admin_invoices.router)
 api_router.include_router(admin_media.router)
 api_router.include_router(admin_users.router)

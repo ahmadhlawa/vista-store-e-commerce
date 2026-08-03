@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import sx from "../../sx.js";
 import { adminApi } from "../../api/adminApi.js";
-import { orderStatusLabels } from "../../store.js";
+import { invoiceStatusLabels, orderStatusLabels, paymentMethodLabels } from "../../store.js";
 import { formatDateTime } from "../../utils/format.js";
 import {
   Badge,
@@ -101,6 +101,11 @@ export function OrdersPage() {
               { key: "items_count", title: "الأصناف" },
               { key: "total", title: "الإجمالي", render: (row) => Math.round(row.total) },
               {
+                key: "payment_method",
+                title: "الدفع",
+                render: (row) => paymentMethodLabels[row.payment_method] || row.payment_method,
+              },
+              {
                 key: "status",
                 title: "الحالة",
                 render: (row) => <Badge tone={STATUS_TONE[row.status]}>{orderStatusLabels[row.status]}</Badge>,
@@ -191,6 +196,9 @@ export function OrderDetailPage() {
           {order.customer_email && <span style={sx`font-size:14px`}>البريد: {order.customer_email}</span>}
           <span style={sx`font-size:14px;line-height:1.8`}>العنوان: {order.address}</span>
           <span style={sx`font-size:14px`}>المنطقة: {order.delivery_area_name || "—"}</span>
+          <span style={sx`font-size:14px`}>
+            طريقة الدفع: <strong>{paymentMethodLabels[order.payment_method] || order.payment_method}</strong>
+          </span>
           {order.customer_notes && <span style={sx`font-size:14px;color:#7C766D`}>ملاحظات العميل: {order.customer_notes}</span>}
         </div>
 
@@ -214,6 +222,38 @@ export function OrderDetailPage() {
             {busy ? "جارٍ التحديث…" : "تحديث الحالة"}
           </Button>
         </div>
+      </div>
+
+      <div style={{ ...card, ...sx`margin-bottom:16px` }}>
+        <h2 style={sx`margin:0 0 12px;font-size:16px;font-weight:800`}>الفاتورة</h2>
+        {order.invoice ? (
+          <div style={sx`display:flex;align-items:center;gap:12px;flex-wrap:wrap`}>
+            <Badge tone={order.invoice.status === "cancelled" ? "bad" : "good"}>
+              {invoiceStatusLabels[order.invoice.status]}
+            </Badge>
+            <Link to={`/admin/invoices/${order.invoice.invoice_number}`} style={sx`font-weight:700`}>
+              {order.invoice.invoice_number}
+            </Link>
+            <span style={sx`font-size:13px;color:#7C766D`}>
+              صدرت في {formatDateTime(order.invoice.issued_at)}
+            </span>
+            <div style={sx`display:flex;gap:10px;margin-inline-start:auto;flex-wrap:wrap`}>
+              <Button variant="ghost" onClick={() => navigate(`/admin/invoices/${order.invoice.invoice_number}`)}>
+                عرض الفاتورة
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => navigate(`/admin/invoices/${order.invoice.invoice_number}?print=1`)}
+              >
+                طباعة الفاتورة
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p style={sx`margin:0;font-size:13.5px;color:#7C766D;line-height:1.8`}>
+            لا توجد فاتورة لهذا الطلب بعد. تصدر الفاتورة تلقائياً عند تغيير الحالة إلى «تم التأكيد».
+          </p>
+        )}
       </div>
 
       <div style={{ ...card, ...sx`margin-bottom:16px` }}>

@@ -1,11 +1,20 @@
 # Future Cloudflare R2 integration
 
-**Status: a deliberate boundary, not an implementation.** Local disk storage is the only
-working provider. `R2StorageProvider` exists so that switching a deployed instance to
-object storage is a configuration change plus one dependency rather than a refactor —
-nothing outside `app/storage/` knows where bytes live.
+> **Superseded as of `feat/vista-preview-data-storage` (2026-08-02).** The provider is no
+> longer a stub: `save()`, `delete()` and a new `exists()` are implemented against R2's
+> S3-compatible API, with prefix containment and 25 unit tests. Configuration and the
+> live smoke test are in **[deployment/r2-preview-setup.md](deployment/r2-preview-setup.md)**,
+> which is now the page to read. What follows describes the boundary and the reasoning
+> behind it, and is still accurate on both.
+>
+> Still true: **no R2 account, bucket or credential has ever been used from this
+> repository.** No credentials were available, so the implementation has never written a
+> byte to a real bucket. Live R2 is **blocked, not verified.**
 
-No R2 account, bucket or credential has ever been used from this repository.
+**Original status: a deliberate boundary, not an implementation.** Local disk storage is
+the only working provider. `R2StorageProvider` exists so that switching a deployed instance
+to object storage is a configuration change plus one dependency rather than a refactor —
+nothing outside `app/storage/` knows where bytes live.
 
 ## The boundary
 

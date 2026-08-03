@@ -5,22 +5,18 @@ import { cartStorage, lineKey, searchStorage, viewedStorage } from "../storage/c
 
 const StoreContext = createContext(null);
 
-export const DEFAULT_FILTERS = {
-  cats: [],
-  maxPrice: 400,
-  onlyOffers: false,
-  inStock: false,
-  sort: "featured",
-};
-
-const EMPTY_OVERLAYS = {
-  cartOpen: false,
-  navOpen: false,
-  searchOpen: false,
-  filtersOpen: false,
-  mega: false,
-  quick: null,
-  searchFocused: false,
+/**
+ * Exactly one overlay can be open at a time, so the value is a single name
+ * rather than a set of booleans — drawer exclusivity becomes structural instead
+ * of something every call site has to remember.
+ */
+export const OVERLAY = {
+  CART: "cart",
+  MENU: "menu",
+  CATEGORIES: "categories",
+  SEARCH: "search",
+  FILTERS: "filters",
+  QUICK: "quick",
 };
 
 export function useStore() {
@@ -33,7 +29,8 @@ export function StoreProvider({ children }) {
   const [settings, setSettings] = useState(() => normalizeSettings(FALLBACK_SETTINGS));
   const [categories, setCategories] = useState([]);
   const [deliveryAreas, setDeliveryAreas] = useState([]);
-  const [sideBanners, setSideBanners] = useState([]);
+  // All placements in one request; the homepage picks the ones it needs.
+  const [banners, setBanners] = useState([]);
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState(null);
 
@@ -42,7 +39,10 @@ export function StoreProvider({ children }) {
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
 
-  const [overlays, setOverlays] = useState(EMPTY_OVERLAYS);
+  // `overlay` is the open overlay's name; `quickSlug` carries the product the
+  // quick view is showing, which is the only overlay with a payload.
+  const [overlay, setOverlay] = useState(null);
+  const [quickSlug, setQuickSlug] = useState(null);
   const [navOpenCat, setNavOpenCat] = useState(null);
   const [announce, setAnnounce] = useState(true);
   const [scrolled, setScrolled] = useState(false);
@@ -53,7 +53,6 @@ export function StoreProvider({ children }) {
   const [recentSearches, setRecentSearches] = useState(() => searchStorage.load());
   const suggestTimer = useRef(null);
 
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [viewed, setViewed] = useState(() => viewedStorage.load());
 
   // Coupon and checkout form state live here because the cart drawer, the cart
@@ -85,14 +84,14 @@ export function StoreProvider({ children }) {
         storefrontService.settings(),
         catalogService.categories(),
         storefrontService.deliveryAreas(),
-        storefrontService.banners("home_side"),
+        storefrontService.banners(),
       ]);
       if (cancelled) return;
       const [settingsResult, categoriesResult, areasResult, bannersResult] = results;
       if (settingsResult.status === "fulfilled") setSettings(settingsResult.value);
       if (categoriesResult.status === "fulfilled") setCategories(categoriesResult.value);
       if (areasResult.status === "fulfilled") setDeliveryAreas(areasResult.value);
-      if (bannersResult.status === "fulfilled") setSideBanners(bannersResult.value);
+      if (bannersResult.status === "fulfilled") setBanners(bannersResult.value);
 
       const failure = results.find((result) => result.status === "rejected");
       // A failed bootstrap must not blank the storefront: defaults stay in place
@@ -106,12 +105,16 @@ export function StoreProvider({ children }) {
   }, []);
 
   // Store colours become CSS custom properties, so a client instance restyles
-  // itself from the admin area.
+  // itself from the admin area. The `--vs-*` aliases feed the public token
+  // system; the `--brand-*` names stay for anything already reading them.
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty("--brand-primary", settings.primaryColor);
     root.style.setProperty("--brand-secondary", settings.secondaryColor);
     root.style.setProperty("--brand-accent", settings.accentColor);
+    root.style.setProperty("--vs-brand-primary", settings.primaryColor);
+    root.style.setProperty("--vs-brand-accent", settings.secondaryColor);
+    root.style.setProperty("--vs-brand-success", settings.accentColor);
   }, [settings.primaryColor, settings.secondaryColor, settings.accentColor]);
 
   useEffect(() => {
@@ -125,10 +128,19 @@ export function StoreProvider({ children }) {
   }, []);
 
   const closeAll = useCallback(() => {
-    setOverlays(EMPTY_OVERLAYS);
+    setOverlay(null);
+    setQuickSlug(null);
+  }, []);
+
+  /** Opening any overlay closes whatever was open — never two at once. */
+  const openOverlay = useCallback((name, payload = null) => {
+    setOverlay(name);
+    setQuickSlug(name === OVERLAY.QUICK ? payload : null);
   }, []);
 
   useEffect(() => {
+    // Backstop for an Escape pressed while focus sits outside the open dialog;
+    // the dialog's own trap handles the normal case and stops propagation.
     const onKey = (event) => {
       if (event.key === "Escape") closeAll();
     };
@@ -175,6 +187,7 @@ export function StoreProvider({ children }) {
           name: product.name,
           unit,
           bg: product.bg,
+          imageUrl: product.imageUrl || null,
           variation: variant?.title || "",
           qty,
         });
@@ -248,7 +261,7 @@ export function StoreProvider({ children }) {
       settings,
       categories,
       deliveryAreas,
-      sideBanners,
+      banners,
       cart,
       bump,
       addToCart,
@@ -257,8 +270,9 @@ export function StoreProvider({ children }) {
       clearCart,
       toast,
       showToast,
-      overlays,
-      setOverlays,
+      overlay,
+      quickSlug,
+      openOverlay,
       closeAll,
       navOpenCat,
       setNavOpenCat,
@@ -272,8 +286,6 @@ export function StoreProvider({ children }) {
       runSuggest,
       recentSearches,
       rememberSearch,
-      filters,
-      setFilters,
       viewed,
       rememberViewed,
       coupon,
@@ -282,10 +294,11 @@ export function StoreProvider({ children }) {
       setCheckoutForm,
     }),
     [
-      ready, loadError, settings, categories, deliveryAreas, sideBanners, cart, bump,
-      addToCart, setLineQty, removeLine, clearCart, toast, showToast, overlays, closeAll,
-      navOpenCat, announce, scrolled, query, suggestions, suggestTried, runSuggest,
-      recentSearches, rememberSearch, filters, viewed, rememberViewed, coupon, checkoutForm,
+      ready, loadError, settings, categories, deliveryAreas, banners, cart, bump,
+      addToCart, setLineQty, removeLine, clearCart, toast, showToast, overlay, quickSlug,
+      openOverlay, closeAll, navOpenCat, announce, scrolled, query,
+      suggestions, suggestTried, runSuggest, recentSearches, rememberSearch,
+      viewed, rememberViewed, coupon, checkoutForm,
     ],
   );
 

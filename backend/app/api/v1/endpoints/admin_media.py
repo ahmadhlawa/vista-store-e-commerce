@@ -73,14 +73,28 @@ async def upload_media(
 @router.delete("/media/{asset_id}", response_model=MessageResponse)
 def delete_media(asset_id: int, db: DbSession, admin: CurrentAdmin):
     asset = get_or_404(db, MediaAsset, asset_id, "الملف غير موجود.")
-    get_storage().delete(asset.stored_key)
+
+    # Delete the stored object only when the running provider is the one that wrote it.
+    # After a switch from local to R2 (or back) the old keys belong to the other
+    # provider's namespace; asking this one to delete them would either do nothing
+    # useful or, on R2, be refused as an out-of-prefix key. The metadata row goes
+    # either way — the orphan is then a file, not a broken record.
+    storage = get_storage()
+    object_deleted = asset.storage_provider == storage.name
+    if object_deleted:
+        storage.delete(asset.stored_key)
+
     audit_service.record(
         db,
         admin=admin,
         action="media.deleted",
         entity_type="media_asset",
         entity_id=asset.id,
-        meta={"stored_key": asset.stored_key},
+        meta={
+            "stored_key": asset.stored_key,
+            "storage_provider": asset.storage_provider,
+            "object_deleted": object_deleted,
+        },
     )
     db.delete(asset)
     db.commit()
