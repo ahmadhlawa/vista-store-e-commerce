@@ -12,8 +12,14 @@ import {
   stubApi,
 } from "./utils.jsx";
 import { cartStorage } from "../storage/cartStorage.js";
+import { DEFAULT_HERO_SLIDE } from "../services/storefront.js";
 
 describe("public storefront", () => {
+  it("uses the supplied Vista artwork when no hero slide is configured", () => {
+    expect(DEFAULT_HERO_SLIDE.imageUrl).toBe("/hero-1-pic.png");
+    expect(DEFAULT_HERO_SLIDE.overlay).toBe(false);
+  });
+
   it("renders the shell with store identity from the API", async () => {
     stubApi(storefrontRoutes);
     renderApp("/");

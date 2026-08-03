@@ -60,6 +60,18 @@ const HERO_FALLBACKS = [
   "linear-gradient(115deg,#2b2f3a 0%,#4c5468 55%,#d3cfe2 155%)",
 ];
 
+export const DEFAULT_HERO_SLIDE = {
+  id: "vista-default-hero",
+  title: "",
+  subtitle: "",
+  desc: "",
+  cta: "",
+  href: "/shop",
+  imageUrl: "/hero-1-pic.png",
+  overlay: false,
+  fallback: HERO_FALLBACKS[0],
+};
+
 const BANNER_FALLBACKS = [
   "linear-gradient(150deg,#1f4e4a,#3d7d75)",
   "linear-gradient(150deg,#4a3527,#8a6237)",
@@ -165,7 +177,8 @@ export const storefrontService = {
   },
   async heroSlides() {
     const rows = await publicApi.heroSlides();
-    return rows.map(normalizeHeroSlide);
+    const slides = rows.map(normalizeHeroSlide);
+    return slides.length ? slides : [DEFAULT_HERO_SLIDE];
   },
   async banners(placement) {
     const rows = await publicApi.banners(placement);
