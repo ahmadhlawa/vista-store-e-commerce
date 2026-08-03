@@ -2,29 +2,14 @@ import { Link } from "react-router-dom";
 import Media from "../shell/Media.jsx";
 import { ArrowForward } from "../shell/icons.jsx";
 
-/** Compact promotional tile — used in the column beside the hero. */
-export function PromoTile({ banner, eager = false }) {
-  if (!banner) return null;
-  return (
-    <Link to={banner.href} className="vs-promo">
-      <Media
-        className="vs-promo__media"
-        src={banner.imageUrl}
-        fallback={banner.fallback}
-        alt=""
-        eager={eager}
-      />
-      <span className="vs-promo__veil" />
-      {banner.desc && <span className="vs-promo__eyebrow">{banner.desc}</span>}
-      <span className="vs-promo__title">{banner.title}</span>
-      <span className="vs-promo__cta">
-        {banner.cta} <ArrowForward size={15} />
-      </span>
-    </Link>
-  );
-}
-
-/** Full-width editorial band between two product sections. */
+/**
+ * Full-width editorial band between two product sections.
+ *
+ * This is now the only banner form the homepage renders. The compact tile that
+ * used to sit in a column beside the hero is gone: the hero is one advertising
+ * image across the full width, with nothing competing beside it. Banner records
+ * are untouched — every placement simply queues up for these bands instead.
+ */
 export function StripBanner({ banner }) {
   if (!banner) return null;
   return (

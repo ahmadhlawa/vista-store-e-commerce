@@ -6,7 +6,7 @@ import { catalogService } from "../services/catalog.js";
 import { storefrontService } from "../services/storefront.js";
 import { productView } from "../utils/productView.js";
 import Hero from "../components/public/home/Hero.jsx";
-import { PromoTile, StripBanner } from "../components/public/home/Banners.jsx";
+import { StripBanner } from "../components/public/home/Banners.jsx";
 import TrustStrip from "../components/public/home/TrustStrip.jsx";
 import SectionHead from "../components/public/shell/SectionHead.jsx";
 import CategoryCard from "../components/public/catalog/CategoryCard.jsx";
@@ -140,9 +140,13 @@ export default function HomePage() {
     };
   }, [needed]);
 
-  const banners = store.banners;
-  const heroPromos = banners.filter((banner) => banner.placement !== "home_strip").slice(0, 2);
-  const stripBanners = banners.filter((banner) => banner.placement === "home_strip");
+  // Nothing is rendered beside the hero any more, so every admin banner — not
+  // only the ones placed as strips — queues up for the promo sections instead.
+  // The records are untouched; only where they render has changed.
+  const stripBanners = [
+    ...store.banners.filter((banner) => banner.placement === "home_strip"),
+    ...store.banners.filter((banner) => banner.placement !== "home_strip"),
+  ];
 
   const views = (source) =>
     (lists[source]?.items || []).map((product) => productView(product, money));
@@ -256,13 +260,6 @@ export default function HomePage() {
           <div className="vs-skel vs-hero--skel" />
         ) : (
           <Hero slides={hero.slides} />
-        )}
-        {heroPromos.length > 0 && (
-          <div className="vs-promocol">
-            {heroPromos.map((banner, index) => (
-              <PromoTile key={banner.id} banner={banner} eager={index === 0} />
-            ))}
-          </div>
         )}
       </div>
 
