@@ -78,7 +78,61 @@ def calculate_order_totals(
     return OrderTotals(tuple(line_totals), subtotal, discount, delivery, total)
 
 
-_ACTIVITY_SECRET_KEYS = frozenset({"password", "password_hash", "secret", "token", "jwt"})
+_ACTIVITY_SAFE_FIELDS = frozenset(
+    {
+        "id",
+        "order_id",
+        "invoice_id",
+        "order_number",
+        "invoice_number",
+        "product_id",
+        "variant_id",
+        "item_kind",
+        "product_name",
+        "sku",
+        "variant_description",
+        "manual_description",
+        "quantity",
+        "unit_price",
+        "original_unit_price",
+        "line_total",
+        "subtotal",
+        "discount",
+        "discount_amount",
+        "delivery_fee",
+        "total",
+        "total_amount",
+        "customer_name",
+        "customer_phone",
+        "customer_email",
+        "address",
+        "customer_notes",
+        "admin_notes",
+        "status",
+        "source",
+        "source_note",
+        "payment_method",
+        "payment_status",
+        "paid_amount",
+        "refunded_amount",
+        "remaining_amount",
+        "is_locked",
+        "locked_at",
+        "completed_at",
+        "replacement_invoice_id",
+        "items",
+        "line",
+        "customer",
+        "payment",
+        "invoice",
+        "order",
+        "changes",
+        "context",
+        "from",
+        "to",
+    }
+)
+_ACTIVITY_REDACTED = "[redacted]"
 
 
 def _stable_activity_value(value: Any) -> Any:
@@ -93,9 +147,13 @@ def _stable_activity_value(value: Any) -> Any:
     if isinstance(value, Mapping):
         stable: dict[str, Any] = {}
         for key, nested in value.items():
-            if not isinstance(key, str) or key.lower() in _ACTIVITY_SECRET_KEYS:
+            if not isinstance(key, str):
                 raise DomainError("Activity data contains an unsafe field.", code="invalid_activity_data")
-            stable[key] = _stable_activity_value(nested)
+            stable[key] = (
+                _stable_activity_value(nested)
+                if key.lower() in _ACTIVITY_SAFE_FIELDS
+                else _ACTIVITY_REDACTED
+            )
         return stable
     if isinstance(value, (list, tuple)):
         return [_stable_activity_value(item) for item in value]
@@ -184,6 +242,11 @@ def create_order(db: Session, draft: OrderDraft) -> Order:
         delivery_area_id=draft.delivery_area_id,
     )
 
+    totals = calculate_order_totals(
+        priced.lines,
+        discount_amount=priced.discount,
+        delivery_fee=priced.delivery_fee,
+    )
     order = Order(
         order_number=generate_order_number(db),
         public_token=secrets.token_urlsafe(24),
@@ -194,16 +257,16 @@ def create_order(db: Session, draft: OrderDraft) -> Order:
         address=draft.address.strip(),
         delivery_area_id=priced.delivery_area.id if priced.delivery_area else None,
         delivery_area_name=priced.delivery_area.name if priced.delivery_area else None,
-        delivery_fee=priced.delivery_fee,
-        subtotal=priced.subtotal,
-        discount=priced.discount,
-        total=priced.total,
+        delivery_fee=totals.delivery_fee,
+        subtotal=totals.subtotal,
+        discount=totals.discount_amount,
+        total=totals.total_amount,
         coupon_code=priced.coupon.code if priced.coupon else None,
         payment_method=draft.payment_method,
         customer_notes=(draft.customer_notes or "").strip() or None,
     )
 
-    for line in priced.lines:
+    for line, line_total in zip(priced.lines, totals.line_totals, strict=True):
         order.items.append(
             OrderItem(
                 product_id=line.product.id,
@@ -213,7 +276,7 @@ def create_order(db: Session, draft: OrderDraft) -> Order:
                 variant_description=line.variant_description,
                 unit_price=line.unit_price,
                 quantity=line.quantity,
-                line_total=line.line_total,
+                line_total=line_total,
             )
         )
 
@@ -231,6 +294,16 @@ def create_order(db: Session, draft: OrderDraft) -> Order:
 
     db.add(order)
     db.flush()
+    record_order_activity(
+        db,
+        order_id=order.id,
+        invoice_id=None,
+        actor_admin_id=None,
+        event_type="order_created",
+        before_data=None,
+        after_data={"status": order.status, "total_amount": order.total},
+        reason=None,
+    )
     return order
 
 
@@ -275,11 +348,13 @@ def change_status(
     order.status = new_status
     # Invoicing rides on the same transaction as the status change, so an order can
     # never be left confirmed-but-uninvoiced or cancelled-with-a-live-invoice.
+    invoice_id: int | None = None
     if new_status == OrderStatus.CONFIRMED.value:
         # Idempotent: an order that was confirmed before keeps its original invoice.
-        invoices_service.issue_for_order(db, order)
+        invoice_id = invoices_service.issue_for_order(db, order).id
     elif new_status == OrderStatus.CANCELLED.value:
-        invoices_service.cancel_for_order(db, order, admin=admin, reason=note)
+        invoice = invoices_service.cancel_for_order(db, order, admin=admin, reason=note)
+        invoice_id = invoice.id if invoice else None
 
     order.updated_at = utcnow()
     db.add(
@@ -290,6 +365,16 @@ def change_status(
             admin_user_id=admin.id if admin else None,
             note=note,
         )
+    )
+    record_order_activity(
+        db,
+        order_id=order.id,
+        invoice_id=invoice_id,
+        actor_admin_id=admin.id if admin else None,
+        event_type="order_status_changed",
+        before_data={"status": old_status},
+        after_data={"status": new_status},
+        reason=note,
     )
     if admin is not None:
         audit_service.record(

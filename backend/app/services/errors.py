@@ -33,3 +33,12 @@ class PermissionDeniedError(DomainError):
 
     def __init__(self, message: str, code: str = "forbidden") -> None:
         super().__init__(message, code)
+
+
+class ImmutableActivityError(DomainError):
+    """Raised when append-only order activity is modified after insertion."""
+
+    status_code = 409
+
+    def __init__(self) -> None:
+        super().__init__("Order activity is immutable.", code="activity_immutable")

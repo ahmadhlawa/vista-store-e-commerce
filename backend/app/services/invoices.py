@@ -179,6 +179,14 @@ def issue_for_order(db: Session, order: Order) -> Invoice:
     )
     # Inclusive tax is already inside the order total, so it must not be added again.
     grand_total = order_total if (inclusive or not tax_enabled) else money(order_total + tax_amount)
+    payment = validate_payment_update(
+        total_amount=grand_total,
+        current_paid_amount=ZERO,
+        paid_amount=ZERO,
+        refunded_amount=ZERO,
+        actor_role=AdminRole.ADMIN.value,
+        reason=None,
+    )
 
     invoice = Invoice(
         invoice_number=next_invoice_number(db, prefix),
@@ -214,6 +222,10 @@ def issue_for_order(db: Session, order: Order) -> Invoice:
         prices_include_tax=inclusive,
         tax_amount=tax_amount,
         grand_total=grand_total,
+        payment_status=payment.status.value,
+        paid_amount=payment.paid_amount,
+        refunded_amount=payment.refunded_amount,
+        remaining_amount=payment.remaining_amount,
     )
 
     for item in order.items:
@@ -230,6 +242,18 @@ def issue_for_order(db: Session, order: Order) -> Invoice:
 
     db.add(invoice)
     db.flush()
+    from app.services.orders import record_order_activity
+
+    record_order_activity(
+        db,
+        order_id=order.id,
+        invoice_id=invoice.id,
+        actor_admin_id=None,
+        event_type="invoice_issued",
+        before_data=None,
+        after_data={"invoice_number": invoice.invoice_number, "total_amount": invoice.grand_total},
+        reason=None,
+    )
     return invoice
 
 
@@ -255,6 +279,18 @@ def cancel_for_order(
     invoice.cancellation_reason = (reason or "").strip()[:500] or None
     invoice.cancelled_by_admin_id = admin.id if admin else None
     db.flush()
+    from app.services.orders import record_order_activity
+
+    record_order_activity(
+        db,
+        order_id=order.id,
+        invoice_id=invoice.id,
+        actor_admin_id=admin.id if admin else None,
+        event_type="invoice_cancelled",
+        before_data={"status": InvoiceStatus.ACTIVE.value},
+        after_data={"status": InvoiceStatus.CANCELLED.value},
+        reason=reason,
+    )
     return invoice
 
 

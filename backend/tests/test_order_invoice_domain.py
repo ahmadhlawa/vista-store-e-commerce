@@ -8,9 +8,12 @@ from sqlalchemy.orm import Session
 
 from app.core.enums import AdminRole, PaymentStatus
 from app.models import Order
+from app.services import invoices as invoices_service
+from app.services import orders as orders_service
 from app.services.errors import DomainError, PermissionDeniedError
 from app.services.invoices import validate_payment_update
 from app.services.orders import calculate_order_totals, record_order_activity
+from tests.conftest import make_product
 
 
 @dataclass
@@ -171,3 +174,123 @@ def test_record_order_activity_stores_stable_snapshots_and_reason(db: Session) -
     assert saved.after_data == {"unit_price": "12.50", "line": {"quantity": 2}}
     assert saved.reason == "Customer agreed to the change"
 
+
+def test_record_order_activity_redacts_unknown_and_nested_secret_data(db: Session) -> None:
+    order = Order(
+        order_number="ORD-ACTIVITY-SECRETS",
+        public_token="activity-secrets-token",
+        customer_name="Customer",
+        customer_phone="0590000000",
+        address="Address",
+        subtotal=Decimal("10.00"),
+        total=Decimal("10.00"),
+    )
+    db.add(order)
+    db.flush()
+
+    event = record_order_activity(
+        db,
+        order_id=order.id,
+        invoice_id=None,
+        actor_admin_id=None,
+        event_type="payment_updated",
+        before_data={
+            "paid_amount": Decimal("1.00"),
+            "api_token": "top-secret",
+            "context": {"authorization": "Bearer secret", "api_key": "nested-secret"},
+        },
+        after_data={"refresh_token": "new-secret", "payment_status": "partial"},
+        reason="Payment recorded",
+    )
+    db.commit()
+    db.expire_all()
+
+    saved = db.get(type(event), event.id)
+    assert saved.before_data == {
+        "paid_amount": "1.00",
+        "api_token": "[redacted]",
+        "context": {"authorization": "[redacted]", "api_key": "[redacted]"},
+    }
+    assert saved.after_data == {"refresh_token": "[redacted]", "payment_status": "partial"}
+
+
+def test_order_activity_rows_reject_updates_and_deletes_after_insert(db: Session) -> None:
+    order = Order(
+        order_number="ORD-ACTIVITY-IMMUTABLE",
+        public_token="activity-immutable-token",
+        customer_name="Customer",
+        customer_phone="0590000000",
+        address="Address",
+        subtotal=Decimal("10.00"),
+        total=Decimal("10.00"),
+    )
+    db.add(order)
+    db.flush()
+    event = record_order_activity(
+        db,
+        order_id=order.id,
+        invoice_id=None,
+        actor_admin_id=None,
+        event_type="created",
+        before_data=None,
+        after_data={"status": "new"},
+        reason=None,
+    )
+    db.commit()
+
+    event.reason = "tampered"
+    with pytest.raises(DomainError, match="immutable"):
+        db.commit()
+    db.rollback()
+
+    db.delete(event)
+    with pytest.raises(DomainError, match="immutable"):
+        db.commit()
+    db.rollback()
+
+
+def test_create_order_calculates_domain_totals_and_records_a_creation_activity(
+    db: Session, category
+) -> None:
+    product = make_product(db, category_id=category.id, price="1.005")
+
+    order = orders_service.create_order(
+        db,
+        orders_service.OrderDraft(
+            customer_name="Customer",
+            customer_phone="0590000000",
+            address="Address",
+            items=[(product.id, None, 3)],
+        ),
+    )
+
+    assert order.subtotal == Decimal("3.00")
+    assert order.total == Decimal("3.00")
+    assert [(event.event_type, event.after_data) for event in order.activities] == [
+        ("order_created", {"status": order.status, "total_amount": "3.00"})
+    ]
+
+
+def test_status_change_records_activity_and_invoice_uses_validated_payment_amounts(
+    db: Session, category
+) -> None:
+    product = make_product(db, category_id=category.id, price="10.00")
+    order = orders_service.create_order(
+        db,
+        orders_service.OrderDraft(
+            customer_name="Customer",
+            customer_phone="0590000000",
+            address="Address",
+            items=[(product.id, None, 1)],
+        ),
+    )
+
+    orders_service.change_status(db, order, "confirmed")
+    invoice = invoices_service.get_for_order(db, order.id)
+
+    assert invoice is not None
+    assert invoice.payment_status == PaymentStatus.UNPAID.value
+    assert invoice.paid_amount == Decimal("0.00")
+    assert invoice.refunded_amount == Decimal("0.00")
+    assert invoice.remaining_amount == Decimal("10.00")
+    assert any(event.event_type == "order_status_changed" for event in order.activities)

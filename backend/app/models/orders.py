@@ -13,11 +13,13 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    event,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import OrderSource, OrderStatus, PaymentMethod
 from app.db.base import Base, TimestampMixin, utcnow
+from app.services.errors import ImmutableActivityError
 
 
 class Order(TimestampMixin, Base):
@@ -103,7 +105,7 @@ class Order(TimestampMixin, Base):
         overlaps="invoices,order",
     )
     activities: Mapped[list["OrderActivity"]] = relationship(
-        back_populates="order", order_by="OrderActivity.id"
+        back_populates="order", order_by="OrderActivity.id", passive_deletes=True
     )
 
     __table_args__ = (
@@ -193,3 +195,13 @@ class OrderActivity(Base):
 
     order: Mapped[Order] = relationship(back_populates="activities")
     invoice: Mapped["Invoice | None"] = relationship(back_populates="activities")
+
+
+@event.listens_for(OrderActivity, "before_update")
+def _reject_order_activity_update(*_args) -> None:
+    raise ImmutableActivityError()
+
+
+@event.listens_for(OrderActivity, "before_delete")
+def _reject_order_activity_delete(*_args) -> None:
+    raise ImmutableActivityError()
