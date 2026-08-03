@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 import re
 from typing import Literal
 
@@ -144,6 +145,17 @@ class OrderAdminListOut(APIModel):
     created_at: UTCDateTime
 
 
+class OrderFinalReviewOut(APIModel):
+    """Latest persisted values shown immediately before completion."""
+
+    payment_method: PaymentMethod
+    items: list[OrderAdminItemOut] = Field(default_factory=list)
+    subtotal: Money
+    discount: Money
+    delivery_fee: Money
+    total: Money
+
+
 class OrderAdminOut(APIModel):
     id: int
     order_number: str
@@ -165,11 +177,16 @@ class OrderAdminOut(APIModel):
     payment_status: PaymentStatus
     customer_notes: str | None = None
     admin_notes: str | None = None
+    is_locked: bool
+    locked_at: UTCDateTime | None = None
+    completed_at: UTCDateTime | None = None
+    completed_by_admin_id: int | None = None
     created_at: UTCDateTime
     updated_at: UTCDateTime
     items: list[OrderAdminItemOut] = Field(default_factory=list)
     status_history: list[OrderStatusHistoryOut] = Field(default_factory=list)
     activities: list["OrderActivityOut"] = Field(default_factory=list)
+    final_review: OrderFinalReviewOut | None = None
     active_invoice: InvoiceSummary | None = None
     invoices: list[InvoiceSummary] = Field(default_factory=list)
     # None until the order is first confirmed. Present and `cancelled` afterwards, even
@@ -222,6 +239,13 @@ class OrderAdminUpdate(APIModel):
 class OrderStatusUpdate(APIModel):
     status: OrderStatus
     note: str | None = Field(default=None, max_length=500)
+
+
+class OrderCompletionRequest(APIModel):
+    payment_method: PaymentMethod
+    paid_amount: Money = Field(default=Decimal("0.00"), ge=0)
+    payment_details: str | None = Field(default=None, max_length=2000)
+    invoice_notes: str | None = Field(default=None, max_length=2000)
 
 
 class OrderNotesUpdate(APIModel):

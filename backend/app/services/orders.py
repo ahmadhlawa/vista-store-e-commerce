@@ -397,13 +397,10 @@ def change_status(
         _restore_stock(db, order)
 
     order.status = new_status
-    # Invoicing rides on the same transaction as the status change, so an order can
-    # never be left confirmed-but-uninvoiced or cancelled-with-a-live-invoice.
+    # Cancellation still retires a live invoice in the same transaction. Issuance is
+    # deliberately reserved for the explicit completion workflow below.
     invoice_id: int | None = None
-    if new_status == OrderStatus.CONFIRMED.value:
-        # Idempotent: an order that was confirmed before keeps its original invoice.
-        invoice_id = invoices_service.issue_for_order(db, order, admin=admin).id
-    elif new_status == OrderStatus.CANCELLED.value:
+    if new_status == OrderStatus.CANCELLED.value:
         invoice = invoices_service.cancel_for_order(db, order, admin=admin, reason=note)
         invoice_id = invoice.id if invoice else None
 
@@ -445,6 +442,110 @@ def get_by_number(db: Session, order_number: str) -> Order:
     ).scalar_one_or_none()
     if order is None:
         raise NotFoundError("الطلب غير موجود.", code="order_not_found")
+    return order
+
+
+def complete_order(
+    db: Session,
+    *,
+    order_id: int,
+    payment_method: str,
+    paid_amount: Decimal,
+    payment_details: str | None,
+    invoice_notes: str | None,
+    admin: AdminUser,
+) -> Order:
+    """Lock, validate, complete and invoice one order in the caller's transaction."""
+    order = db.execute(
+        select(Order)
+        .options(selectinload(Order.items))
+        .where(Order.id == order_id)
+        .with_for_update()
+    ).scalar_one_or_none()
+    if order is None:
+        raise NotFoundError("Order not found.", code="order_not_found")
+
+    existing_invoice = invoices_service.get_for_order(db, order.id)
+    if order.status == OrderStatus.COMPLETED.value:
+        if existing_invoice is not None:
+            return order
+        raise DomainError("Completed orders are locked.", code="order_locked")
+    if order.status == OrderStatus.CANCELLED.value:
+        raise DomainError("Cancelled orders cannot be completed.", code="order_cancelled")
+    if order.is_locked:
+        raise DomainError("Completed orders are locked.", code="order_locked")
+    if not order.items:
+        raise DomainError("An order must contain at least one item.", code="empty_order")
+    if existing_invoice is not None:
+        raise DomainError("An active invoice already exists for this order.", code="active_invoice_exists")
+
+    totals = calculate_order_totals(order.items, order.discount, order.delivery_fee)
+    if (
+        totals.subtotal != money(order.subtotal)
+        or totals.total_amount != money(order.total)
+        or any(
+            line_total != money(item.line_total)
+            for item, line_total in zip(order.items, totals.line_totals, strict=True)
+        )
+    ):
+        raise DomainError("Order totals must be recalculated before completion.", code="invalid_order_totals")
+
+    # Create and validate the immutable snapshot before changing the operational row.
+    # If payment/tax/numbering fails, callers that handle the exception cannot commit a
+    # half-completed order.
+    invoice = invoices_service.issue_for_order(
+        db,
+        order,
+        admin=admin,
+        payment_method=payment_method,
+        paid_amount=paid_amount,
+        payment_details=payment_details,
+        invoice_notes=invoice_notes,
+    )
+    completed_at = utcnow()
+    previous_status = order.status
+    order.payment_method = payment_method
+    order.status = OrderStatus.COMPLETED.value
+    order.is_locked = True
+    order.locked_at = completed_at
+    order.completed_at = completed_at
+    order.completed_by_admin_id = admin.id
+    order.updated_at = completed_at
+    db.add(
+        OrderStatusHistory(
+            order_id=order.id,
+            old_status=previous_status,
+            new_status=OrderStatus.COMPLETED.value,
+            admin_user_id=admin.id,
+            note=None,
+        )
+    )
+    record_order_activity(
+        db,
+        order_id=order.id,
+        invoice_id=invoice.id,
+        actor_admin_id=admin.id,
+        event_type="order_completed",
+        before_data={"status": previous_status, "is_locked": False},
+        after_data={
+            "status": order.status,
+            "is_locked": order.is_locked,
+            "invoice_number": invoice.invoice_number,
+            "payment_status": invoice.payment_status,
+            "paid_amount": invoice.paid_amount,
+            "remaining_amount": invoice.remaining_amount,
+        },
+        reason=None,
+    )
+    audit_service.record(
+        db,
+        admin=admin,
+        action="order.completed",
+        entity_type="order",
+        entity_id=order.id,
+        meta={"order_number": order.order_number, "invoice_number": invoice.invoice_number},
+    )
+    db.flush()
     return order
 
 

@@ -271,7 +271,7 @@ def test_create_order_calculates_domain_totals_and_records_a_creation_activity(
     ]
 
 
-def test_status_change_records_activity_and_invoice_uses_validated_payment_amounts(
+def test_completion_records_activity_and_invoice_uses_validated_payment_amounts(
     db: Session, category, normal_admin
 ) -> None:
     product = make_product(db, category_id=category.id, price="10.00")
@@ -285,7 +285,15 @@ def test_status_change_records_activity_and_invoice_uses_validated_payment_amoun
         ),
     )
 
-    orders_service.change_status(db, order, "confirmed", admin=normal_admin)
+    orders_service.complete_order(
+        db,
+        order_id=order.id,
+        payment_method="cash_on_delivery",
+        paid_amount=Decimal("0.00"),
+        payment_details=None,
+        invoice_notes=None,
+        admin=normal_admin,
+    )
     invoice = invoices_service.get_for_order(db, order.id)
 
     assert invoice is not None
@@ -293,6 +301,40 @@ def test_status_change_records_activity_and_invoice_uses_validated_payment_amoun
     assert invoice.paid_amount == Decimal("0.00")
     assert invoice.refunded_amount == Decimal("0.00")
     assert invoice.remaining_amount == Decimal("10.00")
-    assert any(event.event_type == "order_status_changed" for event in order.activities)
+    assert any(event.event_type == "order_completed" for event in order.activities)
     invoice_event = next(event for event in order.activities if event.event_type == "invoice_issued")
     assert invoice_event.actor_admin_id == normal_admin.id
+
+
+def test_failed_completion_cannot_be_committed_as_a_partial_order(
+    db: Session, category, normal_admin
+) -> None:
+    product = make_product(db, category_id=category.id, price="10.00")
+    order = orders_service.create_order(
+        db,
+        orders_service.OrderDraft(
+            customer_name="Customer",
+            customer_phone="0590000000",
+            address="Address",
+            items=[(product.id, None, 1)],
+        ),
+    )
+    db.commit()
+
+    with pytest.raises(DomainError, match="bounds"):
+        orders_service.complete_order(
+            db,
+            order_id=order.id,
+            payment_method="cash_on_delivery",
+            paid_amount=Decimal("10.01"),
+            payment_details=None,
+            invoice_notes=None,
+            admin=normal_admin,
+        )
+    db.commit()
+    db.expire_all()
+
+    saved = db.get(Order, order.id)
+    assert saved.status != "completed"
+    assert saved.is_locked is False
+    assert invoices_service.get_for_order(db, order.id) is None

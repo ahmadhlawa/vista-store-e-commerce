@@ -27,6 +27,7 @@ from app.schemas.orders import (
     OrderAdminUpdate,
     OrderAdminListOut,
     OrderAdminOut,
+    OrderCompletionRequest,
     OrderNotesUpdate,
     OrderStatusUpdate,
 )
@@ -303,11 +304,22 @@ def _load_order(db: DbSession, order_id: int) -> Order:
 def get_order(order_id: int, db: DbSession, admin: CurrentAdmin):
     order = _load_order(db, order_id)
     active_invoice = next((invoice for invoice in order.invoices if invoice.status == "active"), None)
+    final_review = None
+    if not order.is_locked and order.status != OrderStatus.CANCELLED.value:
+        final_review = {
+            "payment_method": order.payment_method,
+            "items": order.items,
+            "subtotal": order.subtotal,
+            "discount": order.discount,
+            "delivery_fee": order.delivery_fee,
+            "total": order.total,
+        }
     return {
         **{column.name: getattr(order, column.name) for column in Order.__table__.columns},
         "items": order.items,
         "status_history": order.status_history,
         "activities": order.activities,
+        "final_review": final_review,
         "active_invoice": active_invoice,
         "invoices": order.invoices,
         "invoice": active_invoice,
@@ -357,6 +369,23 @@ def update_order_status(
     order = _load_order(db, order_id)
     orders_service.change_status(
         db, order, payload.status.value, admin=admin, note=payload.note
+    )
+    db.commit()
+    return get_order(order_id, db, admin)
+
+
+@router.post("/orders/{order_id}/complete", response_model=OrderAdminOut)
+def complete_order(
+    order_id: int, payload: OrderCompletionRequest, db: DbSession, admin: CurrentAdmin
+):
+    orders_service.complete_order(
+        db,
+        order_id=order_id,
+        payment_method=payload.payment_method.value,
+        paid_amount=payload.paid_amount,
+        payment_details=payload.payment_details,
+        invoice_notes=payload.invoice_notes,
+        admin=admin,
     )
     db.commit()
     return get_order(order_id, db, admin)

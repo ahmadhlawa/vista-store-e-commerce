@@ -5,7 +5,7 @@ from decimal import Decimal
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models import Order, Product
+from app.models import Invoice, Order, OrderItem, Product
 from tests.conftest import auth, make_product
 
 
@@ -102,6 +102,9 @@ def test_admin_order_detail_exposes_original_current_invoices_and_activity(
     assert body["source"] == "website"
     assert body["subtotal"] == 25.0
     assert body["total"] == 27.0
+    assert body["final_review"]["total"] == 27.0
+    assert body["final_review"]["items"][0]["unit_price"] == 12.5
+    assert body["final_review"]["payment_method"] == "cash_on_delivery"
     assert body["active_invoice"] is None
     assert body["invoices"] == []
     assert [event["event_type"] for event in body["activities"]] == [
@@ -267,3 +270,91 @@ def test_notes_change_requires_reason_and_records_material_activity(
     event = saved.json()["activities"][-1]
     assert event["event_type"] == "order_notes_updated"
     assert event["reason"] == "Customer requested a phone call"
+
+
+def test_both_roles_complete_an_order_once_with_an_immutable_final_invoice(
+    client: TestClient, db: Session, admin_token: str, super_token: str
+) -> None:
+    product = make_product(db, slug="completion-snapshot", name="Final price", price="10.00")
+    first_order_id: int | None = None
+
+    for suffix, token in (("admin", admin_token), ("super", super_token)):
+        order = _create_order(client, product, suffix=suffix)
+        first_order_id = first_order_id or order["id"]
+        completed = client.post(
+            f"/api/v1/admin/orders/{order['id']}/complete",
+            headers=auth(token),
+            json={
+                "payment_method": "manual",
+                "paid_amount": "5.00",
+                "payment_details": "Cash received",
+                "invoice_notes": "Final internal note",
+            },
+        )
+
+        assert completed.status_code == 200, completed.text
+        body = completed.json()
+        assert body["status"] == "completed"
+        assert body["is_locked"] is True
+        assert body["completed_at"] is not None
+        assert body["completed_by_admin_id"] is not None
+        assert body["active_invoice"] is not None
+
+        invoice = client.get(
+            f"/api/v1/admin/orders/{order['id']}/invoice", headers=auth(token)
+        ).json()
+        assert invoice["payment_method"] == "manual"
+        assert invoice["paid_amount"] == 5.0
+        assert invoice["remaining_amount"] == 5.0
+        assert invoice["payment_details"] == "Cash received"
+        assert invoice["invoice_notes"] == "Final internal note"
+        assert invoice["items"][0]["unit_price"] == 10.0
+
+        retried = client.post(
+            f"/api/v1/admin/orders/{order['id']}/complete",
+            headers=auth(token),
+            json={"payment_method": "manual", "paid_amount": "5.00"},
+        )
+        assert retried.status_code == 200, retried.text
+        db.expire_all()
+        assert db.query(Invoice).filter(Invoice.order_id == order["id"]).count() == 1
+
+    product.price = Decimal("777.00")
+    db.commit()
+    invoice = client.get(
+        f"/api/v1/admin/orders/{first_order_id}/invoice", headers=auth(admin_token)
+    ).json()
+    assert invoice["items"][0]["unit_price"] == 10.0
+
+
+def test_completion_rejects_cancelled_and_empty_orders_without_an_invoice(
+    client: TestClient, db: Session, admin_token: str
+) -> None:
+    product = make_product(db, slug="completion-rejections", name="Reject", price="10.00")
+    cancelled = _create_order(client, product, suffix="cancelled")
+    client.post(
+        f"/api/v1/admin/orders/{cancelled['id']}/status",
+        headers=auth(admin_token),
+        json={"status": "cancelled"},
+    )
+    blocked = client.post(
+        f"/api/v1/admin/orders/{cancelled['id']}/complete",
+        headers=auth(admin_token),
+        json={"payment_method": "cash_on_delivery", "paid_amount": "0.00"},
+    )
+    assert blocked.status_code == 400
+    assert blocked.json()["error"]["code"] == "order_cancelled"
+
+    empty = _create_order(client, product, suffix="empty")
+    db.query(OrderItem).filter(OrderItem.order_id == empty["id"]).delete()
+    db.commit()
+    blocked = client.post(
+        f"/api/v1/admin/orders/{empty['id']}/complete",
+        headers=auth(admin_token),
+        json={"payment_method": "cash_on_delivery", "paid_amount": "0.00"},
+    )
+    assert blocked.status_code == 400
+    assert blocked.json()["error"]["code"] == "empty_order"
+    db.expire_all()
+    assert db.get(Order, empty["id"]).status != "completed"
+    assert db.query(Invoice).filter(Invoice.order_id == empty["id"]).count() == 0

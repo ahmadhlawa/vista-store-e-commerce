@@ -158,7 +158,14 @@ def get_for_order(db: Session, order_id: int) -> Invoice | None:
 
 
 def issue_for_order(
-    db: Session, order: Order, *, admin: AdminUser | None = None
+    db: Session,
+    order: Order,
+    *,
+    admin: AdminUser | None = None,
+    payment_method: str | None = None,
+    paid_amount: Decimal = ZERO,
+    payment_details: str | None = None,
+    invoice_notes: str | None = None,
 ) -> Invoice:
     """Issue the invoice for `order`, or return the one it already has.
 
@@ -184,9 +191,9 @@ def issue_for_order(
     payment = validate_payment_update(
         total_amount=grand_total,
         current_paid_amount=ZERO,
-        paid_amount=ZERO,
+        paid_amount=paid_amount,
         refunded_amount=ZERO,
-        actor_role=AdminRole.ADMIN.value,
+        actor_role=admin.role if admin is not None else AdminRole.ADMIN.value,
         reason=None,
     )
 
@@ -197,7 +204,7 @@ def issue_for_order(
         active_invoice_marker=InvoiceStatus.ACTIVE.value,
         issued_at=utcnow(),
         order_number=order.order_number,
-        payment_method=order.payment_method,
+        payment_method=payment_method or order.payment_method,
         customer_notes=order.customer_notes,
         store_name=settings.store_name_ar or settings.store_name,
         store_phone=settings.phone,
@@ -228,6 +235,8 @@ def issue_for_order(
         paid_amount=payment.paid_amount,
         refunded_amount=payment.refunded_amount,
         remaining_amount=payment.remaining_amount,
+        payment_details=(payment_details or "").strip() or None,
+        invoice_notes=(invoice_notes or "").strip() or None,
     )
 
     for item in order.items:
@@ -236,6 +245,8 @@ def issue_for_order(
                 product_name=item.product_name,
                 sku=item.sku,
                 variant_description=item.variant_description,
+                item_kind=item.item_kind,
+                manual_description=item.manual_description,
                 unit_price=money(item.unit_price),
                 quantity=item.quantity,
                 line_total=money(item.line_total),
