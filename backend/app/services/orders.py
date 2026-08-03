@@ -235,9 +235,7 @@ def _apply_stock_delta(priced: PricedCart, sign: int) -> None:
 
 def create_order(db: Session, draft: OrderDraft) -> Order:
     if draft.client_reference:
-        existing = db.execute(
-            select(Order).where(Order.client_reference == draft.client_reference)
-        ).scalar_one_or_none()
+        existing = get_by_client_reference(db, draft.client_reference)
         if existing is not None:
             return existing
 
@@ -321,6 +319,12 @@ def create_order(db: Session, draft: OrderDraft) -> Order:
         reason=None,
     )
     return order
+
+
+def get_by_client_reference(db: Session, client_reference: str) -> Order | None:
+    return db.execute(
+        select(Order).where(Order.client_reference == client_reference)
+    ).scalar_one_or_none()
 
 
 def _restore_stock(db: Session, order: Order) -> None:

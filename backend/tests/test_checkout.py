@@ -5,11 +5,14 @@ from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.api.v1.endpoints import public_checkout
 from app.core.enums import DiscountType, OrderStatus
 from app.db.base import utcnow
 from app.models import Coupon, DeliveryArea, Order, Product
+from app.schemas.orders import OrderCreate
 from app.services import orders as orders_service
 from app.services import pricing
 from app.services.errors import DomainError
@@ -461,4 +464,22 @@ def test_public_checkout_returns_a_canonical_new_order_snapshot_and_is_idempoten
     assert body["discount"] == 0.0
     assert body["delivery_fee"] == 20.0
     assert body["total"] == 70.0
+    assert db.query(Order).count() == 1
+
+
+def test_public_checkout_recovers_from_a_concurrent_client_reference_conflict(
+    client: TestClient, db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    product = make_product(db, stock=10)
+    payload = _order_payload(product, client_reference="checkout-race-0001")
+    created = client.post("/api/v1/orders", json=payload).json()
+
+    def concurrent_conflict(*_args, **_kwargs):
+        raise IntegrityError("INSERT INTO orders", {}, Exception("unique client reference"))
+
+    monkeypatch.setattr(public_checkout.orders_service, "create_order", concurrent_conflict)
+    recovered = public_checkout.create_order(OrderCreate.model_validate(payload), db)
+
+    assert recovered.id == created["id"]
+    assert recovered.order_number == created["order_number"]
     assert db.query(Order).count() == 1

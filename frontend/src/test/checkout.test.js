@@ -48,6 +48,7 @@ describe("checkout confirmation", () => {
       customer_phone: "0591234567",
       address: "رام الله، شارع الإرسال",
       customer_notes: "اتصل قبل الوصول",
+      delivery_area_name: "Delivery area API",
       items: [{ product_name: "اسم من الخادم", sku: "SKU-1", quantity: 2, unit_price: 25, line_total: 50 }],
       subtotal: 50,
       discount: 0,
@@ -61,6 +62,7 @@ describe("checkout confirmation", () => {
     expect(message).toContain("50");
     expect(message).toContain("20");
     expect(message).toContain("70");
+    expect(message).toContain("Delivery area API");
     expect(message).toContain("اتصل قبل الوصول");
     expect(message).not.toContain("Untrusted");
   });

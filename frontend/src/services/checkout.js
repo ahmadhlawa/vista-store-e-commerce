@@ -31,7 +31,7 @@ export function buildOrderWhatsAppMessage(order) {
     "",
     `المجموع الفرعي: ${displayMoney(order.subtotal)}`,
     `الخصم: ${displayMoney(order.discount)}`,
-    `التوصيل: ${displayMoney(order.delivery_fee)}`,
+    `التوصيل${order.delivery_area_name ? ` (${order.delivery_area_name})` : ""}: ${displayMoney(order.delivery_fee)}`,
     `الإجمالي: ${displayMoney(order.total)}`,
     ...(order.customer_notes ? ["", `ملاحظات: ${order.customer_notes}`] : []),
   ].join("\n");
