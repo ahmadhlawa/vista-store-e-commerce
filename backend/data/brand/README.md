@@ -29,11 +29,19 @@ Two measured limitations of the file we have:
 
 - It is a JPEG, so it carries a white box rather than transparency — visible against
   any non-white surface, and it is the version that prints on invoices.
-- Roughly a third of it is white margin. The artwork occupies only x 19.8–80.4% and
-  y 34.6–64.6% of the 1000×1000 canvas. The header sizes logos with `object-fit:
-  contain` so no client's mark is ever cropped or stretched, which means this file's
-  own padding is rendered too: the mark reads smaller than the space it sits in.
-  Trimming the original fixes it with no code change.
+- Roughly a third of it is white margin. The artwork occupies only x 19.5–80.5% and
+  y 34.5–64.5% of the 1000×1000 canvas.
+
+The second one is **worked around, not fixed**. The header and footer clip the logo to
+a fixed viewport and `useLogoFit` measures where the artwork actually sits, then scales
+the image inside that viewport until the artwork fills it — so the mark renders at
+87.9 × 43.2 px in the desktop header rather than 29.3 × 14.4. The file is never edited,
+never stretched, and a logo that is already trimmed is left alone. It is a workaround
+because it costs a canvas read on every page load, it needs the file to be same-origin
+or CORS-readable, and it does nothing about the white box.
+
+A trimmed original with a transparent background removes the white box **and** makes
+`useLogoFit` a no-op. It is still worth insisting on.
 
 Nothing here was taken from a social page, and nothing was generated as a stand-in.
 

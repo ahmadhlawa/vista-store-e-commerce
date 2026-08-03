@@ -2,8 +2,7 @@ import { Link } from "react-router-dom";
 import { useStore } from "../../../app/StoreProvider.jsx";
 import { useActiveCategorySlug, useCategoryNav } from "../../../hooks/useStorefront.js";
 import { Drawer } from "../overlays/Overlay.jsx";
-import Media from "../shell/Media.jsx";
-import { ArrowForward, ChevronDown } from "../shell/icons.jsx";
+import { ArrowForward, ChevronDown, TagIcon } from "../shell/icons.jsx";
 
 /**
  * The category panel, opened from the rail trigger on desktop and from the header
@@ -50,12 +49,15 @@ export default function CategoryDrawer({ open, onClose }) {
                     aria-current={category.active ? "page" : undefined}
                     onClick={onClose}
                   >
-                    <Media
-                      className="vs-catdrawer__thumb"
-                      src={category.imageUrl}
-                      fallback={category.bg}
-                      alt=""
-                    />
+                    {/* Same rule as the rail: the category's own picture, or a
+                        neutral icon — never a tint pretending to be one. */}
+                    <span className="vs-catdrawer__thumb">
+                      {category.imageUrl ? (
+                        <img src={category.imageUrl} alt="" loading="lazy" />
+                      ) : (
+                        <TagIcon size={20} />
+                      )}
+                    </span>
                     <span className="vs-catdrawer__text">
                       <span className="vs-catdrawer__name">{category.name}</span>
                       <span className="vs-catdrawer__count">{category.countText}</span>

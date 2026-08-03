@@ -8,23 +8,36 @@
   --vs-container: 1400px;
   --vs-container-narrow: 1080px;
   --vs-gutter: 20px;
-  --vs-section: 68px;
-  --vs-section-tight: 40px;
+  --vs-section: 56px;
+  --vs-section-tight: 34px;
   --vs-grid-gap: 20px;
   --vs-cols: 4;
   --vs-cols-cat: 4;
   --vs-cols-pkg: 3;
 
   /* ── header ──────────────────────────────────────────────────────────── */
-  --vs-strip-h: 38px;
-  --vs-header-h: 76px;
-  --vs-nav-h: 52px;
+  /* Two compact bands rather than two roomy ones: the identity row is sized by
+     its tallest control (the logo viewport) plus one 9px rhythm step, and the
+     nav band is just tall enough for a 34px trigger. Everything in the identity
+     row is centred on one axis, so shrinking the band moves nothing sideways. */
+  --vs-strip-h: 34px;
+  --vs-header-h: 64px;
+  --vs-nav-h: 46px;
   --vs-rail-h: 0px;
+  /* A fixed-size viewport the logo is clipped to. The owner's file carries its
+     own whitespace, so `useLogoFit` measures where the mark actually sits and
+     scales the image inside this box until the mark fills it — the file is
+     never edited, never stretched, and a trimmed logo is left alone. */
+  --vs-logo-h: 46px;
+  --vs-logo-w: 132px;
+  /* How wide the header's search field is allowed to grow. Stated once: the
+     field and the slot it sits in are two elements and were two numbers. */
+  --vs-search-max: 820px;
   /* The fixed category rail at the far right. It is a real gutter, not an
      overlay: `--vs-rail-gutter` is what the page reserves for it, so the rail
      can never sit on top of content. Both drop to 0 on mobile, where the rail
      is replaced by a header trigger. */
-  --vs-rail-w: 68px;
+  --vs-rail-w: 64px;
   --vs-rail-gutter: var(--vs-rail-w);
   --vs-drawer-cat-w: 340px;
   /* What a sticky element must clear. Kept as one token so page-level sticky
@@ -117,8 +130,11 @@
      with the products around it; the dedicated package grid widens it. */
   --vs-ar-package: 1 / 1;
   /* A wide advertising banner. The ratio — not a pixel height — is what the
-     hero reserves, so the box is correct before the image decodes. */
+     hero reserves, so the box is correct before the image decodes. The cap
+     stops the same ratio from turning a 1852px-wide band into a 700px wall on
+     a large monitor; the artwork covers, so a shorter box only crops. */
   --vs-ar-hero: 21 / 8;
+  --vs-hero-max-h: 520px;
 }
 
 @media (max-width: 1279px) {
@@ -128,8 +144,9 @@
     --vs-cols-pkg: 3;
     --vs-grid-gap: 18px;
     --vs-fs-h1: 30px;
-    --vs-rail-w: 60px;
+    --vs-rail-w: 58px;
     --vs-ar-hero: 2 / 1;
+    --vs-hero-max-h: 440px;
   }
 }
 
@@ -142,13 +159,15 @@
     --vs-cols-pkg: 2;
     --vs-gutter: 18px;
     --vs-grid-gap: 14px;
-    --vs-section: 48px;
-    --vs-section-tight: 30px;
+    --vs-section: 40px;
+    --vs-section-tight: 26px;
     /* The nav band and the category rail leave the sticky header on mobile, so
        only the 60px action row follows the scroll. */
     --vs-header-h: 60px;
     --vs-nav-h: 0px;
     --vs-sticky-top: 76px;
+    --vs-logo-h: 34px;
+    --vs-logo-w: 100px;
     --vs-tabbar-h: 64px;
     --vs-fs-h1: 26px;
     --vs-fs-h2: 20px;
@@ -178,8 +197,10 @@
     --vs-grid-gap: 12px;
     --vs-fs-h1: 23px;
     --vs-fs-h2: 18.5px;
-    /* An intentional phone crop rather than a squeezed desktop banner. */
+    /* An intentional phone crop rather than a squeezed desktop banner, so the
+       cap is lifted clear of it — it exists for wide monitors, not for this. */
     --vs-ar-hero: 5 / 6;
+    --vs-hero-max-h: 560px;
   }
 }
 

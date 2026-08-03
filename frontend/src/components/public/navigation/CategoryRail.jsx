@@ -1,8 +1,7 @@
 import { NavLink } from "react-router-dom";
 import { OVERLAY, useStore } from "../../../app/StoreProvider.jsx";
 import { useActiveCategorySlug, useCategoryNav } from "../../../hooks/useStorefront.js";
-import Media from "../shell/Media.jsx";
-import { MenuIcon } from "../shell/icons.jsx";
+import { MenuIcon, TagIcon } from "../shell/icons.jsx";
 
 /**
  * The fixed category rail at the far right of the desktop viewport.
@@ -38,8 +37,10 @@ export default function CategoryRail() {
         aria-label="تصنيفات المنتجات"
         title="تصنيفات المنتجات"
       >
-        <MenuIcon size={19} />
+        <MenuIcon size={18} />
       </button>
+
+      <span className="vs-catbar__rule" aria-hidden="true" />
 
       <ul className="vs-catbar__list">
         {categories.map((category) => (
@@ -52,12 +53,16 @@ export default function CategoryRail() {
               aria-label={category.name}
               title={category.name}
             >
-              <Media
-                className="vs-catbar__thumb"
-                src={category.imageUrl}
-                fallback={category.bg}
-                alt=""
-              />
+              {/* The category's own picture where the store has uploaded one,
+                  and a neutral icon where it has not — never a tinted square
+                  standing in for a photograph that does not exist. */}
+              {category.imageUrl ? (
+                <img className="vs-catbar__thumb" src={category.imageUrl} alt="" loading="lazy" />
+              ) : (
+                <span className="vs-catbar__ico" aria-hidden="true">
+                  <TagIcon size={18} />
+                </span>
+              )}
               {/* Presentational: the accessible name already comes from
                   aria-label, so a screen reader must not hear it twice. */}
               <span className="vs-catbar__tip" aria-hidden="true">

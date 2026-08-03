@@ -368,8 +368,11 @@
   background: var(--vs-accent);
   color: var(--vs-ink);
 }
+/* Tied to the brand token like every other badge — this one still carried the
+   template's original teal, so a Vista package was labelled in a colour the
+   store does not use. */
 .vs-badge--package {
-  background: rgba(31, 78, 74, 0.92);
+  background: color-mix(in srgb, var(--vs-primary) 92%, transparent);
   color: #fff;
 }
 

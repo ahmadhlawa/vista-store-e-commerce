@@ -48,6 +48,16 @@ export const GridIcon = icon(
   </>,
 );
 
+/* The neutral stand-in for a category with no artwork of its own. A tag, not a
+   product or a folder: it says "a part of the catalogue" without implying what
+   is inside it. */
+export const TagIcon = icon(
+  <>
+    <path d="M11.4 3.5H20a.5.5 0 0 1 .5.5v8.6a1 1 0 0 1-.3.7l-7.2 7.2a1 1 0 0 1-1.4 0l-7.9-7.9a1 1 0 0 1 0-1.4l7.2-7.2a1 1 0 0 1 .5-.5Z" />
+    <circle cx="16.4" cy="7.6" r="1.4" />
+  </>,
+);
+
 export const GridDenseIcon = icon(
   <>
     <rect x="3" y="3" width="4.6" height="4.6" rx="1" />

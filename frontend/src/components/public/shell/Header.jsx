@@ -1,16 +1,27 @@
 import { Link, NavLink } from "react-router-dom";
 import { OVERLAY, useStore } from "../../../app/StoreProvider.jsx";
 import { useCartCountPulse } from "../../../hooks/useCartCountPulse.js";
+import { useLogoFit } from "../../../hooks/useLogoFit.js";
 import { useMoney } from "../../../hooks/useStorefront.js";
 import { navLinks } from "../../../store.js";
 import SearchBox from "../search/SearchBox.jsx";
 import { CartIcon, GridIcon, MenuIcon, PhoneIcon, SearchIcon, UserIcon } from "./icons.jsx";
 
 function StoreMark({ settings }) {
+  // The file is left exactly as the owner supplied it; only how much of the box
+  // its artwork is allowed to fill is decided here. See useLogoFit.
+  const { boxRef, style } = useLogoFit(settings.logoUrl);
   return (
     <Link to="/" className="vs-logo" aria-label={`${settings.storeName} — الصفحة الرئيسية`}>
       {settings.logoUrl ? (
-        <img className="vs-logo__img" src={settings.logoUrl} alt={settings.storeName} />
+        <span className="vs-logo__box" ref={boxRef}>
+          <img
+            className="vs-logo__img"
+            src={settings.logoUrl}
+            alt={settings.storeName}
+            style={style}
+          />
+        </span>
       ) : (
         <span className="vs-logo__name">{settings.storeName}</span>
       )}

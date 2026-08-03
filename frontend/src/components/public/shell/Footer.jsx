@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useStore } from "../../../app/StoreProvider.jsx";
 import { useCategoryNav } from "../../../hooks/useStorefront.js";
+import { useLogoFit } from "../../../hooks/useLogoFit.js";
 import { footerLinks } from "../../../store.js";
 import { whatsappHref } from "../../../utils/format.js";
 
@@ -13,6 +14,10 @@ export default function Footer() {
   const { settings } = useStore();
   const categories = useCategoryNav();
   const year = new Date().getFullYear();
+  // The same viewport as the header's, so the mark is the size of the mark here
+  // too — and the file's white box is cropped back to it instead of sitting on
+  // the dark footer as a pale slab.
+  const { boxRef: logoBox, style: logoStyle } = useLogoFit(settings.logoUrl);
 
   const socials = [
     { key: "ig", label: "إنستغرام", short: "IG", href: settings.instagram },
@@ -48,7 +53,9 @@ export default function Footer() {
       <div className="vs-container vs-footer__top">
         <div className="vs-footer__brand">
           {settings.logoUrl ? (
-            <img className="vs-footer__logo" src={settings.logoUrl} alt={settings.storeName} />
+            <span className="vs-logo__box vs-footer__logo" ref={logoBox}>
+              <img className="vs-logo__img" src={settings.logoUrl} alt={settings.storeName} style={logoStyle} />
+            </span>
           ) : (
             <span className="vs-footer__name">{settings.storeName}</span>
           )}
