@@ -20,7 +20,7 @@
 # Schema version of this document. Bumped only when the profile shape changes.
 profile_schema_version: 1
 
-# The Golden Template release this profile was written for (see the VERSION file).
+# The commerce foundation release this profile was written for (see the VERSION file).
 template_version: "0.3.0-rc.1"
 
 # Stable identifier for the instance. Lowercase letters, digits and hyphens, 3-40

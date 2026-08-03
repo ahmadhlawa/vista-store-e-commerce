@@ -22,7 +22,7 @@
 
 profile_schema_version: 1
 
-# The Golden Template release this instance was created from.
+# The commerce foundation release this instance was created from.
 template_version: "0.3.0-rc.1"
 
 client_slug: "vista-store"

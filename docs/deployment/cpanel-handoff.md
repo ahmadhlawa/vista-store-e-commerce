@@ -11,7 +11,7 @@ sections in order; do not skip to section 3.
 
 | Area | State |
 | --- | --- |
-| Independent client repository | Cloned from the Golden Template at `dba6a67` (v0.3.0-rc.1), history preserved, `template-upstream` remote configured, no `origin` |
+| Dedicated Vista Store repository | Local rebranding complete; GitHub publication remains pending |
 | Vista Store identity | Applied from `instance/vista-store.yaml` — the two verified names, nothing invented |
 | Backend | FastAPI + SQLAlchemy + Alembic, three migrations, MySQL-portable column types throughout |
 | Storefront | React/Vite, Arabic, RTL, guest checkout, no customer accounts |
@@ -23,8 +23,8 @@ sections in order; do not skip to section 3.
 | Local acceptance | 26/26 live checks against a real server — `docs/client/local-acceptance.md` |
 | Release packaging | `scripts/make_release_package.py` builds a secret-free archive |
 
-**Also true:** the source template at `D:\Project\commerce-template` was never modified,
-and no production system, SSH session, cPanel, MySQL server or R2 bucket was contacted.
+**Also true:** no production system, SSH session, cPanel, MySQL server or R2 bucket was
+contacted.
 
 ---
 

@@ -1,4 +1,4 @@
-"""The Golden Template version — one authoritative source.
+"""The commerce foundation version — one authoritative source.
 
 The version lives in the tracked `VERSION` file at the repository root. Nothing else
 declares it: the CLI, the instance manifest and `InstanceMetadata` all read it from here.
@@ -42,7 +42,7 @@ def version_file() -> Path:
             return path
     searched = ", ".join(str(p) for p in _candidate_paths())
     raise TemplateVersionError(
-        f"Golden Template {VERSION_FILENAME} file not found. Searched: {searched}"
+        f"Commerce foundation {VERSION_FILENAME} file not found. Searched: {searched}"
     )
 
 

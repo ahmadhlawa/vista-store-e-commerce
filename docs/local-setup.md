@@ -16,7 +16,7 @@ storage account and no network services are required.
 ### 1 — Backend
 
 ```powershell
-cd D:\Project\commerce-template\backend
+cd D:\Project\vista-store-e-commerce\backend
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -e ".[dev]"
 ```
@@ -103,11 +103,11 @@ email validator. The first account created is a `super_admin`.
 
 ```powershell
 # terminal 1
-cd D:\Project\commerce-template\backend
+cd D:\Project\vista-store-e-commerce\backend
 .venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 
 # terminal 2
-cd D:\Project\commerce-template\frontend
+cd D:\Project\vista-store-e-commerce\frontend
 npm install
 npm run dev
 ```
@@ -138,11 +138,11 @@ Both reload on save. After pulling changes that touch `backend/app/models/`, run
 ## Tests
 
 ```powershell
-cd D:\Project\commerce-template\backend
+cd D:\Project\vista-store-e-commerce\backend
 .venv\Scripts\python.exe -m pytest                 # 74 tests
 .venv\Scripts\python.exe -m pytest --cov=app       # with coverage, currently 88 %
 
-cd D:\Project\commerce-template\frontend
+cd D:\Project\vista-store-e-commerce\frontend
 npx vitest run                                     # 24 tests
 npm run test:watch                                 # watch mode
 ```
@@ -156,7 +156,7 @@ real server.
 Four commands manage an instance's identity. All are local and touch no server.
 
 ```powershell
-cd D:\Project\commerce-template\backend
+cd D:\Project\vista-store-e-commerce\backend
 .venv\Scripts\python.exe -m scripts.instance_cli validate --profile ..\instance\demo-profile.yaml
 .venv\Scripts\python.exe -m scripts.instance_cli plan     --profile ..\instance\demo-profile.yaml
 .venv\Scripts\python.exe -m scripts.instance_cli apply    --profile ..\instance\demo-profile.yaml
@@ -175,7 +175,7 @@ The offline MySQL portability check connects to nothing:
 ## Production build check
 
 ```powershell
-cd D:\Project\commerce-template\frontend
+cd D:\Project\vista-store-e-commerce\frontend
 npm run build       # emits dist/
 npm run preview     # serves the build locally
 ```

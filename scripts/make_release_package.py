@@ -227,7 +227,8 @@ def main() -> int:
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
     output_root = (REPO_ROOT / args.output).resolve()
-    staging = output_root / f"vista-store-{stamp}"
+    package_name = f"vista-store-e-commerce-{stamp}"
+    staging = output_root / package_name
     if staging.exists():
         shutil.rmtree(staging)
     staging.mkdir(parents=True)
@@ -244,7 +245,7 @@ def main() -> int:
             print(f"  - {problem}", file=sys.stderr)
         return 1
 
-    archive = output_root / f"vista-store-{stamp}.zip"
+    archive = output_root / f"{package_name}.zip"
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
         for path in sorted(staging.rglob("*")):
             if path.is_file():

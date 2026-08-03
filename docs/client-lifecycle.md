@@ -38,7 +38,7 @@ commit.
 ### 2 — Copy and customize a profile
 
 ```powershell
-cd D:\Project\commerce-template
+cd D:\Project\vista-store-e-commerce
 copy instance\client-profile.example.yaml instance\acme-profile.yaml
 ```
 

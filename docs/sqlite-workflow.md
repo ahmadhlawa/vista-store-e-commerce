@@ -17,7 +17,7 @@ they are launched from.
 All commands below assume:
 
 ```powershell
-cd D:\Project\commerce-template\backend
+cd D:\Project\vista-store-e-commerce\backend
 ```
 
 ## Migrations

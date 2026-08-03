@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     )
 
     APP_ENV: str = "development"
-    APP_NAME: str = "Commerce Template"
+    APP_NAME: str = "Vista Store"
     API_V1_PREFIX: str = "/api/v1"
 
     SECRET_KEY: str = "development-only-secret-change-me"

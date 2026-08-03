@@ -138,7 +138,7 @@ Not left to application code:
 Two revisions today. Adding a model means adding a migration:
 
 ```powershell
-cd D:\Project\commerce-template\backend
+cd D:\Project\vista-store-e-commerce\backend
 .venv\Scripts\alembic.exe revision --autogenerate -m "describe the change"
 # read the generated file before trusting it
 .venv\Scripts\alembic.exe upgrade head

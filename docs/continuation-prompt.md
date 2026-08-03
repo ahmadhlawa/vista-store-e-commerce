@@ -4,7 +4,7 @@ The MVP scope described in `docs/implementation-status.md` is **complete and ver
 There is no unfinished task queued. Use this prompt only if new work is being started.
 
 Paste everything between the markers into a fresh Claude Code session opened on
-`D:\Project\commerce-template`.
+`D:\Project\vista-store-e-commerce`.
 
 ---8<--- COPY FROM HERE ---8<---
 
@@ -21,7 +21,7 @@ yourself, and **trust fresh command output over the document** if they ever disa
 Then inspect the real state:
 
 ```powershell
-cd D:\Project\commerce-template
+cd D:\Project\vista-store-e-commerce
 git status --short --branch
 git log --oneline --decorate -6
 git diff --check
@@ -31,7 +31,7 @@ Read the actual files you are about to touch. Do not rely on the handoff for fil
 
 ## Where you are
 
-- Repository: `D:\Project\commerce-template`
+- Repository: `D:\Project\vista-store-e-commerce`
 - Branch: `feat/fullstack-commerce-mvp` — **stay on it**, it is pushed and up to date
 - The backend, the storefront, the admin workspace, the deployment templates and the
   documentation are all complete and verified.
@@ -73,7 +73,7 @@ The candidates listed in §15 of the handoff, in order of value:
 - **Do not touch, read from, or continue `feat/frontend-foundation`.** Its incomplete
   TypeScript migration must not be reused.
 - **Do not read, write, copy from, or run anything inside `D:\Project\MALIK`.** Anchor every
-  command with an explicit `D:\Project\commerce-template` path.
+  command with an explicit `D:\Project\vista-store-e-commerce` path.
 - **Do not access any production system**: no SSH, no production servers, no real MySQL, no
   Nginx, no systemd, no Redis, no Cloudflare, no deployment environment. Local SQLite only.
 - **Never commit** a real `.env`, a SQLite database, uploaded media, `node_modules`, `dist`,
@@ -89,10 +89,10 @@ The candidates listed in §15 of the handoff, in order of value:
 missing, follow `docs/local-setup.md` — do not improvise.
 
 ```powershell
-cd D:\Project\commerce-template\backend
+cd D:\Project\vista-store-e-commerce\backend
 .venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 
-cd D:\Project\commerce-template\frontend
+cd D:\Project\vista-store-e-commerce\frontend
 npm run dev
 ```
 
@@ -102,14 +102,14 @@ Run these and report the real output. Never describe unfinished work as complete
 claim a visual result you have not actually looked at.
 
 ```powershell
-cd D:\Project\commerce-template\backend
+cd D:\Project\vista-store-e-commerce\backend
 .venv\Scripts\python.exe -m pytest --cov=app          # expect 74 passed, 88 %
 
-cd D:\Project\commerce-template\frontend
+cd D:\Project\vista-store-e-commerce\frontend
 npx vitest run                                        # expect 24 passed
 npm run build
 
-cd D:\Project\commerce-template
+cd D:\Project\vista-store-e-commerce
 git status --short --branch
 git diff --check
 ```
