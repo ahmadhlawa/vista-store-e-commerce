@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
@@ -175,9 +175,14 @@ describe("public storefront", () => {
       { key: "1|", productId: 1, variantId: null, slug: "clear-resin", name: "ريزن شفاف", unit: 100, bg: "", variation: "", qty: 1 },
     ]);
     const created = {
+      id: 42,
       order_number: "ORD-260731-1234",
       public_token: "token-value-123456",
-      status: "pending",
+      status: "new",
+      source: "website",
+      customer_phone: "0591234567",
+      address: "Ramallah server address",
+      customer_notes: "Server note",
       customer_name: "سارة أحمد",
       delivery_area_name: "رام الله",
       delivery_fee: 20,
@@ -189,7 +194,7 @@ describe("public storefront", () => {
       created_at: "2026-07-31T10:00:00Z",
       items: [{ id: 1, product_name: "ريزن شفاف", quantity: 1, unit_price: 100, line_total: 100 }],
     };
-    stubApi({
+    const calls = stubApi({
       ...storefrontRoutes,
       "POST /api/v1/cart/price": {
         lines: [],
@@ -203,6 +208,7 @@ describe("public storefront", () => {
       "POST /api/v1/orders": respond(201, created),
       "/api/v1/orders/ORD-260731-1234": created,
     });
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
     renderApp("/checkout");
 
     await userEvent.type(await screen.findByPlaceholderText("مثال: سارة أحمد"), "سارة أحمد");
@@ -216,6 +222,41 @@ describe("public storefront", () => {
     expect(await screen.findByRole("heading", { name: "تم استلام طلبك بنجاح" })).toBeInTheDocument();
     expect(screen.getByText("ORD-260731-1234")).toBeInTheDocument();
     expect(cartStorage.load()).toHaveLength(0);
+    const orderRequest = calls.find((call) => call.path === "/api/v1/orders");
+    expect(JSON.parse(orderRequest.body).client_reference).toMatch(/^[-\w]{8,}$/);
+    expect(open).toHaveBeenCalledTimes(1);
+    const message = decodeURIComponent(open.mock.calls[0][0].split("?text=")[1]);
+    expect(message).toContain("ORD-260731-1234");
+    expect(message).toContain("Server note");
+    open.mockRestore();
+  });
+
+  it("keeps the cart and does not open WhatsApp when order creation fails", async () => {
+    cartStorage.save([
+      { key: "1|", productId: 1, variantId: null, slug: "clear-resin", name: "ريزن شفاف", unit: 100, bg: "", variation: "", qty: 1 },
+    ]);
+    stubApi({
+      ...storefrontRoutes,
+      "POST /api/v1/cart/price": {
+        lines: [], subtotal: 100, discount: 0, delivery_fee: 20, total: 120,
+        coupon_code: null, delivery_area_name: "رام الله",
+      },
+      "POST /api/v1/orders": respond(500, { error: { code: "create_failed", message: "تعذر الحفظ" } }),
+    });
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    renderApp("/checkout");
+
+    await userEvent.type(await screen.findByPlaceholderText("مثال: سارة أحمد"), "سارة أحمد");
+    await userEvent.type(screen.getByPlaceholderText("05XXXXXXXX"), "0591234567");
+    await userEvent.type(screen.getByPlaceholderText("الشارع، رقم البناية، أقرب معلم"), "رام الله، شارع الإرسال");
+    await userEvent.selectOptions(screen.getByLabelText(/منطقة التوصيل/), "1");
+    await userEvent.click(screen.getByRole("checkbox"));
+    await userEvent.click(screen.getByRole("button", { name: /تأكيد الطلب/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("تعذر الحفظ");
+    expect(cartStorage.load()).toHaveLength(1);
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
   });
 
   it("keeps the storefront usable when the API is unreachable", async () => {

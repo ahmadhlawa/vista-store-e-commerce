@@ -1,12 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useStore } from "../app/StoreProvider.jsx";
 import { useCartLines } from "../components/public/cart/useCartLines.js";
 import Media from "../components/public/shell/Media.jsx";
-import { checkoutService } from "../services/checkout.js";
+import { buildOrderWhatsAppMessage, checkoutService } from "../services/checkout.js";
 import { orderTokenStorage } from "../storage/authStorage.js";
 import { paymentMethods } from "../store.js";
 import { useMoney } from "../hooks/useStorefront.js";
+import { whatsappHref } from "../utils/format.js";
+
+function newClientReference() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `checkout-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 function validate(form) {
   const errors = {};
@@ -32,6 +38,8 @@ export default function CheckoutRoutePage() {
   const [placing, setPlacing] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [priced, setPriced] = useState(null);
+  const clientReference = useRef(null);
+  const submitting = useRef(false);
 
   // Every displayed number is recomputed by the server, so a stale cart or a
   // tampered price can never become an order total.
@@ -68,14 +76,16 @@ export default function CheckoutRoutePage() {
 
   const placeOrder = async (event) => {
     event.preventDefault();
-    if (placing) return;
+    if (placing || submitting.current) return;
     const found = validate(form);
     setErrors(found);
     if (Object.keys(found).length) return;
 
+    submitting.current = true;
     setPlacing(true);
     setSubmitError(null);
     try {
+      clientReference.current ||= newClientReference();
       const order = await checkoutService.placeOrder(cart, {
         name: form.name.trim(),
         phone: form.phone.trim(),
@@ -85,14 +95,22 @@ export default function CheckoutRoutePage() {
         couponCode: coupon.applied || null,
         paymentMethod: form.payment,
         notes: form.notes.trim() || null,
-      });
+      }, clientReference.current);
       orderTokenStorage.save(order.order_number, order.public_token);
+      if (store.settings.whatsapp) {
+        window.open(
+          whatsappHref(store.settings.whatsapp, buildOrderWhatsAppMessage(order)),
+          "_blank",
+          "noopener",
+        );
+      }
       store.clearCart();
       store.setCoupon({ input: "", applied: "", label: "", message: "", ok: false, discount: 0 });
       navigate(`/order-success/${order.order_number}`, { replace: true });
     } catch (error) {
       setSubmitError(error.message || "تعذّر إتمام الطلب. حاول مرة أخرى.");
     } finally {
+      submitting.current = false;
       setPlacing(false);
     }
   };

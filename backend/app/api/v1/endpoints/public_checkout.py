@@ -79,6 +79,7 @@ def price_cart(payload: CartPricingRequest, db: DbSession) -> CartPricingRespons
 @router.post("/orders", response_model=OrderCreatedOut, status_code=status.HTTP_201_CREATED)
 def create_order(payload: OrderCreate, db: DbSession) -> OrderCreatedOut:
     draft = orders_service.OrderDraft(
+        client_reference=payload.client_reference,
         customer_name=payload.customer_name,
         customer_phone=payload.customer_phone,
         customer_email=payload.customer_email,

@@ -34,6 +34,7 @@ def _coupon(db: Session, **kwargs) -> Coupon:
 
 def _order_payload(product: Product, **overrides) -> dict:
     payload = {
+        "client_reference": f"test-order-{product.id}",
         "customer_name": "سارة أحمد",
         "customer_phone": "0591234567",
         "address": "رام الله، شارع الإرسال، بناية ٥",
@@ -293,14 +294,14 @@ def test_order_status_history_is_recorded(
     client.post(
         f"/api/v1/admin/orders/{order.id}/status",
         headers=auth(admin_token),
-        json={"status": "confirmed", "note": "تم التأكيد هاتفياً"},
+        json={"status": "reviewing", "note": "تم التأكيد هاتفياً"},
     )
     detail = client.get(f"/api/v1/admin/orders/{order.id}", headers=auth(admin_token)).json()
 
     history = detail["status_history"]
-    assert [h["new_status"] for h in history] == ["pending", "confirmed"]
+    assert [h["new_status"] for h in history] == ["new", "reviewing"]
     assert history[0]["old_status"] is None
-    assert history[1]["old_status"] == "pending"
+    assert history[1]["old_status"] == "new"
     assert history[1]["note"] == "تم التأكيد هاتفياً"
     assert history[1]["admin_user_id"] is not None
 
@@ -337,6 +338,24 @@ def test_empty_and_invalid_carts_are_rejected(client: TestClient, db: Session) -
         "/api/v1/orders", json=_order_payload(product, customer_phone="abc")
     )
     assert bad_phone.status_code == 422
+
+
+def test_rejected_checkout_does_not_persist_a_partial_order(client: TestClient, db: Session) -> None:
+    product = make_product(db, stock=5)
+
+    response = client.post(
+        "/api/v1/orders",
+        json=_order_payload(
+            product,
+            items=[
+                {"product_id": product.id, "quantity": 1},
+                {"product_id": 9999, "quantity": 1},
+            ],
+        ),
+    )
+
+    assert response.status_code == 404
+    assert db.query(Order).count() == 0
 
 
 def test_cart_pricing_endpoint_matches_the_order(
@@ -382,6 +401,7 @@ def test_unknown_status_is_rejected_by_the_service(db: Session) -> None:
     order = orders_service.create_order(
         db,
         orders_service.OrderDraft(
+            client_reference="service-ref-0001",
             customer_name="اسم",
             customer_phone="0591234567",
             address="عنوان كامل",
@@ -391,4 +411,54 @@ def test_unknown_status_is_rejected_by_the_service(db: Session) -> None:
     db.commit()
     with pytest.raises(DomainError):
         orders_service.change_status(db, order, "not-a-status")
-    assert order.status == OrderStatus.PENDING.value
+    assert order.status == OrderStatus.NEW.value
+
+
+def test_public_checkout_returns_a_canonical_new_order_snapshot_and_is_idempotent(
+    client: TestClient, db: Session, delivery_area: DeliveryArea
+) -> None:
+    product = make_product(
+        db,
+        name="Server name",
+        sku="SERVER-SKU",
+        price="25.00",
+        stock=10,
+    )
+    payload = _order_payload(
+        product,
+        client_reference="checkout-ref-0001",
+        delivery_area_id=delivery_area.id,
+        customer_notes="Leave at reception",
+    )
+
+    created = client.post("/api/v1/orders", json=payload)
+    repeated = client.post("/api/v1/orders", json=payload)
+
+    assert created.status_code == 201, created.text
+    assert repeated.status_code == 201, repeated.text
+    body = created.json()
+    assert repeated.json()["id"] == body["id"]
+    assert repeated.json()["order_number"] == body["order_number"]
+    assert body["status"] == "new"
+    assert body["source"] == "website"
+    assert body["customer_phone"] == "0591234567"
+    assert body["address"] == payload["address"]
+    assert body["customer_notes"] == "Leave at reception"
+    assert body["items"] == [
+        {
+            "id": body["items"][0]["id"],
+            "product_id": product.id,
+            "variant_id": None,
+            "product_name": "Server name",
+            "sku": "SERVER-SKU",
+            "variant_description": None,
+            "unit_price": 25.0,
+            "quantity": 2,
+            "line_total": 50.0,
+        }
+    ]
+    assert body["subtotal"] == 50.0
+    assert body["discount"] == 0.0
+    assert body["delivery_fee"] == 20.0
+    assert body["total"] == 70.0
+    assert db.query(Order).count() == 1

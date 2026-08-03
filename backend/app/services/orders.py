@@ -18,7 +18,7 @@ from typing import Any, Protocol
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.enums import OrderStatus, PaymentMethod
+from app.core.enums import OrderSource, OrderStatus, PaymentMethod
 from app.db.base import utcnow
 from app.models import (
     AdminUser,
@@ -187,6 +187,7 @@ def record_order_activity(
 
 # Statuses that mean stock is currently committed to the order.
 _STOCK_HELD_STATUSES = {
+    OrderStatus.NEW.value,
     OrderStatus.PENDING.value,
     OrderStatus.CONFIRMED.value,
     OrderStatus.PROCESSING.value,
@@ -202,6 +203,7 @@ class OrderDraft:
     customer_phone: str
     address: str
     items: list[tuple[int, int | None, int]]
+    client_reference: str | None = None
     customer_email: str | None = None
     delivery_area_id: int | None = None
     coupon_code: str | None = None
@@ -232,6 +234,13 @@ def _apply_stock_delta(priced: PricedCart, sign: int) -> None:
 
 
 def create_order(db: Session, draft: OrderDraft) -> Order:
+    if draft.client_reference:
+        existing = db.execute(
+            select(Order).where(Order.client_reference == draft.client_reference)
+        ).scalar_one_or_none()
+        if existing is not None:
+            return existing
+
     if not draft.items:
         raise DomainError("العربة فارغة.", code="empty_cart")
 
@@ -250,7 +259,9 @@ def create_order(db: Session, draft: OrderDraft) -> Order:
     order = Order(
         order_number=generate_order_number(db),
         public_token=secrets.token_urlsafe(24),
-        status=OrderStatus.PENDING.value,
+        status=OrderStatus.NEW.value,
+        source=OrderSource.WEBSITE.value,
+        client_reference=draft.client_reference,
         customer_name=draft.customer_name.strip(),
         customer_phone=draft.customer_phone.strip(),
         customer_email=(draft.customer_email or "").strip() or None,
@@ -271,9 +282,14 @@ def create_order(db: Session, draft: OrderDraft) -> Order:
             OrderItem(
                 product_id=line.product.id,
                 variant_id=line.variant.id if line.variant else None,
+                item_kind="catalog",
                 product_name=line.product.name,
+                original_product_name=line.product.name,
                 sku=line.sku,
+                original_sku=line.sku,
                 variant_description=line.variant_description,
+                original_variant_description=line.variant_description,
+                original_unit_price=line.unit_price,
                 unit_price=line.unit_price,
                 quantity=line.quantity,
                 line_total=line_total,
@@ -283,7 +299,7 @@ def create_order(db: Session, draft: OrderDraft) -> Order:
     order.status_history.append(
         OrderStatusHistory(
             old_status=None,
-            new_status=OrderStatus.PENDING.value,
+            new_status=OrderStatus.NEW.value,
             note="تم إنشاء الطلب من المتجر.",
         )
     )

@@ -4,7 +4,7 @@ import re
 
 from pydantic import EmailStr, Field, field_validator
 
-from app.core.enums import OrderStatus, PaymentMethod
+from app.core.enums import OrderSource, OrderStatus, PaymentMethod
 from app.schemas.common import APIModel, Money, UTCDateTime
 from app.schemas.invoices import InvoiceSummary
 
@@ -20,6 +20,7 @@ class OrderItemIn(APIModel):
 class OrderCreate(APIModel):
     """The client sends what it wants to buy. It never sends prices or totals."""
 
+    client_reference: str = Field(min_length=8, max_length=64)
     customer_name: str = Field(min_length=3, max_length=150)
     customer_phone: str = Field(min_length=7, max_length=40)
     customer_email: EmailStr | None = None
@@ -110,6 +111,11 @@ class OrderPublicOut(APIModel):
 class OrderCreatedOut(OrderPublicOut):
     """Returned once, at creation, so the browser can look the order up again."""
 
+    id: int
+    source: OrderSource
+    customer_phone: str
+    address: str
+    customer_notes: str | None = None
     public_token: str
 
 
