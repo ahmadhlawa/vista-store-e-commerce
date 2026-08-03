@@ -46,6 +46,10 @@ export function productView(product, money) {
     categoryHref: product.categorySlug ? `/category/${product.categorySlug}` : null,
     short: product.short,
     imageUrl: product.imageUrl,
+    // Null unless the product genuinely has a second picture. Cards branch on
+    // it rather than inventing one, so a single-image product simply keeps its
+    // cover and reveals only the action panel.
+    secondaryImageUrl: product.secondaryImageUrl || null,
     bg: product.bg,
     isPackage,
     packageCount: product.packageItemCount || product.packageItems?.length || 0,

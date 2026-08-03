@@ -118,6 +118,20 @@ class Product(TimestampMixin, Base):
         primary = next((i for i in self.images if i.is_primary), None)
         return (primary or self.images[0]).url
 
+    @property
+    def secondary_image_url(self) -> str | None:
+        """The next image after the cover, or None.
+
+        A catalogue card swaps to this on hover. Carrying it on the list
+        projection is what keeps that swap from costing a product-detail request
+        per card. Images that merely repeat the cover URL are skipped, so a
+        product with one picture uploaded twice still reports no second image.
+        """
+        cover = self.primary_image_url
+        if cover is None:
+            return None
+        return next((image.url for image in self.images if image.url != cover), None)
+
 
 class ProductImage(Base):
     __tablename__ = "product_images"

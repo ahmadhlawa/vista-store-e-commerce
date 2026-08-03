@@ -1,13 +1,17 @@
 import ProductCard from "./ProductCard.jsx";
 import PackageCard from "./PackageCard.jsx";
 
-/** Skeleton that matches the real card's box, so nothing shifts when data lands. */
+/**
+ * Skeleton that matches the real card's box, so nothing shifts when data lands.
+ * A card is now its image on desktop and image-plus-panel below 900px, and the
+ * skeleton follows exactly that — the placeholder rows are inside the same
+ * media-query, so it cannot promise a body the card will not have.
+ */
 export function CardSkeleton() {
   return (
     <div className="vs-cardskel" aria-hidden="true">
       <div className="vs-skel vs-cardskel__media" />
       <div className="vs-cardskel__body">
-        <div className="vs-skel" style={{ height: 11, width: "40%" }} />
         <div className="vs-skel" style={{ height: 13, width: "88%" }} />
         <div className="vs-skel" style={{ height: 13, width: "56%" }} />
         <div className="vs-skel" style={{ height: 40, marginTop: 6 }} />

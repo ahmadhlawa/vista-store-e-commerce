@@ -113,6 +113,10 @@ class PreviewProduct(_Strict):
     short_description: str | None = None
     description: str | None = None
     image: str | None = None
+    # The picture a catalogue card cross-fades to on hover. Optional by design: a
+    # product without one keeps its cover and simply reveals its action panel,
+    # which is the fallback the cards have to handle anyway.
+    secondary_image: str | None = None
     is_featured: bool = False
     is_new: bool = False
     is_bestseller: bool = False
@@ -322,6 +326,12 @@ class PreviewDataset(_Strict):
 
         for product in self.products:
             check_image(f"product {product.slug!r}", product.image)
+            check_image(f"product {product.slug!r} (secondary)", product.secondary_image)
+            if product.secondary_image is not None and product.image is None:
+                raise ValueError(
+                    f"product {product.slug!r} has a secondary_image but no image; "
+                    "the second picture is what a card swaps to, so there must be a cover"
+                )
             if product.category not in category_slugs:
                 raise ValueError(
                     f"product {product.slug!r} references unknown category {product.category!r}"

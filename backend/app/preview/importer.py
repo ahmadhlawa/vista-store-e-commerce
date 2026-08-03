@@ -182,6 +182,7 @@ def managed_values(entity_type: str, row: Any) -> dict[str, Any]:
             "is_bestseller": row.is_bestseller,
             "sort_order": row.sort_order,
             "primary_image_url": row.primary_image_url,
+            "secondary_image_url": row.secondary_image_url,
         }
     if entity_type == DELIVERY_AREA:
         return {
@@ -235,7 +236,13 @@ def managed_values(entity_type: str, row: Any) -> dict[str, Any]:
     raise PreviewError(f"unknown entity type {entity_type!r}")
 
 
-def desired_values(entity_type: str, item: Any, *, image_url: str | None = None) -> dict[str, Any]:
+def desired_values(
+    entity_type: str,
+    item: Any,
+    *,
+    image_url: str | None = None,
+    secondary_image_url: str | None = None,
+) -> dict[str, Any]:
     """The same field set as `managed_values`, computed from the dataset instead.
 
     These two functions must agree exactly: a row written from `item` has to hash to
@@ -267,6 +274,7 @@ def desired_values(entity_type: str, item: Any, *, image_url: str | None = None)
             "is_bestseller": item.is_bestseller,
             "sort_order": item.sort_order,
             "primary_image_url": image_url,
+            "secondary_image_url": secondary_image_url,
         }
     if entity_type == DELIVERY_AREA:
         return {
@@ -324,8 +332,18 @@ def row_fingerprint(entity_type: str, row: Any) -> str:
     return _fingerprint(managed_values(entity_type, row))
 
 
-def item_fingerprint(entity_type: str, item: Any, *, image_url: str | None = None) -> str:
-    return _fingerprint(desired_values(entity_type, item, image_url=image_url))
+def item_fingerprint(
+    entity_type: str,
+    item: Any,
+    *,
+    image_url: str | None = None,
+    secondary_image_url: str | None = None,
+) -> str:
+    return _fingerprint(
+        desired_values(
+            entity_type, item, image_url=image_url, secondary_image_url=secondary_image_url
+        )
+    )
 
 
 # ── batch access ─────────────────────────────────────────────────────────────
@@ -707,7 +725,13 @@ class PreviewImporter:
         for item in self.dataset.products:
             target = f"product:{item.slug}"
             image_url = media_urls.get(item.image) if item.image else None
-            fingerprint = item_fingerprint(PRODUCT, item, image_url=image_url)
+            secondary_url = media_urls.get(item.secondary_image) if item.secondary_image else None
+            # A second key pointing at the same artwork is not a second image.
+            if secondary_url == image_url:
+                secondary_url = None
+            fingerprint = item_fingerprint(
+                PRODUCT, item, image_url=image_url, secondary_image_url=secondary_url
+            )
             verdict, row, record = self._decide(
                 PRODUCT,
                 item.slug,
@@ -756,7 +780,7 @@ class PreviewImporter:
             catalog_service.refresh_search_text(row)
             self.db.flush()
 
-            self._sync_product_image(row, image_url, item)
+            self._sync_product_image(row, image_url, secondary_url, item)
             self._sync_specifications(row, item)
             self.db.flush()
             written[item.slug] = row
@@ -766,21 +790,37 @@ class PreviewImporter:
             # Re-read the index: products created moments ago now have batch records.
             self._sync_packages(written, _record_index(self.db, batch))
 
-    def _sync_product_image(self, product: Product, url: str | None, item: Any) -> None:
+    def _sync_product_image(
+        self, product: Product, url: str | None, secondary_url: str | None, item: Any
+    ) -> None:
+        """Make the product's images exactly the one or two the dataset names.
+
+        Rewritten in place rather than deleted and recreated, so re-seeding does not
+        churn image rows. Every row here belongs to the preview batch: the product
+        itself is batch-owned, so a purge still removes exactly this and nothing else.
+        """
         existing = list(product.images)
         if url is None:
             for image in existing:
                 self.db.delete(image)
             return
-        if existing:
-            primary = next((i for i in existing if i.is_primary), existing[0])
-            primary.url = url
-            primary.alt_text = item.name
-            primary.is_primary = True
-            return
-        self.db.add(
-            ProductImage(product_id=product.id, url=url, alt_text=item.name, is_primary=True)
-        )
+
+        wanted = [(url, True)] + ([(secondary_url, False)] if secondary_url else [])
+        for order, (image_url, is_primary) in enumerate(wanted):
+            if order < len(existing):
+                row = existing[order]
+                row.url = image_url
+            else:
+                row = ProductImage(product_id=product.id, url=image_url)
+                self.db.add(row)
+            row.alt_text = item.name
+            row.is_primary = is_primary
+            row.sort_order = order
+
+        # Anything the dataset no longer names goes, so dropping a secondary image
+        # from the YAML actually removes it.
+        for image in existing[len(wanted) :]:
+            self.db.delete(image)
 
     def _sync_specifications(self, product: Product, item: Any) -> None:
         for spec in list(product.specifications):

@@ -3,8 +3,13 @@ import Media from "../shell/Media.jsx";
 import { ArrowForward } from "../shell/icons.jsx";
 
 /**
- * Image-led category tile. The whole card is one link, the title and the count
- * are always visible, and hover only enriches what is already readable.
+ * Image-only category tile: the artwork fills the card and the name sits centred
+ * over it, readable at rest above a base overlay. Hover and keyboard focus do the
+ * same thing — scale the image slightly, deepen the overlay and bring up a
+ * translucent plate behind the name — so nothing is hover-only and nothing moves.
+ *
+ * The whole card is one link, and the product count stays in the accessible name
+ * rather than on the artwork, which keeps the tile image-led.
  */
 export default function CategoryCard({ category, compact = false, eager = false }) {
   if (!category) return null;
@@ -23,14 +28,15 @@ export default function CategoryCard({ category, compact = false, eager = false 
         eager={eager}
       />
       <span className="vs-cat__veil" />
-      <span className="vs-cat__text">
-        <span className="vs-cat__name">{category.name}</span>
-        <span className="vs-cat__count">{category.countText}</span>
-        {!compact && (
-          <span className="vs-cat__go">
-            تصفّح القسم <ArrowForward size={15} />
-          </span>
-        )}
+      <span className="vs-cat__center">
+        <span className="vs-cat__plate">
+          <span className="vs-cat__name">{category.name}</span>
+          {!compact && (
+            <span className="vs-cat__go">
+              تصفّح القسم <ArrowForward size={14} />
+            </span>
+          )}
+        </span>
       </span>
     </Link>
   );

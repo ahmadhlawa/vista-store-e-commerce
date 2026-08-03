@@ -246,6 +246,10 @@ products:
     short_description: "بطاقة دعوة بورق مقوّى وطباعة واضحة، تُخصَّص بالأسماء والتاريخ."
     description: "نموذج معاينة. يُطبع الكرت بالمقاس والتصميم المتفق عليه، والسعر هنا للعرض فقط."
     image: "tile-wedding"
+    # PREVIEW ONLY. Re-uses an existing preview artwork already owned by this
+    # batch so the card's hover image-swap has something to swap to. It is not a
+    # second photograph of a real product, and no image was generated for it.
+    secondary_image: "hero-invitations"
     is_featured: true
     is_bestseller: true
     sort_order: 0
@@ -299,6 +303,8 @@ products:
     short_description: "بنر تهنئة بمقاس ٢٠٠×٨٥ سم يُطبع بالاسم والصورة."
     description: "نموذج معاينة. المقاس مأخوذ من منشور عام على إنستغرام؛ السعر هنا للعرض فقط."
     image: "tile-events"
+    # PREVIEW ONLY — see the note on preview-wedding-card-classic.
+    secondary_image: "hero-events"
     is_featured: true
     is_bestseller: true
     sort_order: 4
@@ -608,6 +614,10 @@ products:
     stock_quantity: 15
     short_description: "بنر وفوم بورد وستاند خشبي وكروت هدايا في باقة واحدة."
     image: "tile-events"
+    # PREVIEW ONLY — see the note on preview-wedding-card-classic. The package
+    # card cross-fades to this on hover; the remaining preview packages carry no
+    # second image on purpose, so the no-secondary fallback stays exercised.
+    secondary_image: "tile-signage"
     is_featured: true
     sort_order: 30
     origin: "inferred"
@@ -690,6 +700,8 @@ products:
     stock_quantity: 20
     short_description: "مج وميدالية ودفتر في باقة هدية للمعاينة."
     image: "product-gift-package"
+    # PREVIEW ONLY — see the note on preview-wedding-card-classic.
+    secondary_image: "product-notebook"
     is_new: true
     sort_order: 34
     origin: "inferred"
@@ -785,11 +797,12 @@ banners:
 # are deliberately not touched here — the preview fills them with products
 # instead of replacing them.
 home_sections:
+  # Third on the page, right after the first product row — the owner's order.
   - key: "preview-packages"
     section_type: "packages"
     title: "باقات جاهزة"
     description: "باقات تجميعية للمعاينة."
-    sort_order: 4
+    sort_order: 2
   - key: "preview-promo"
     section_type: "promo_banner"
     title: "عروض المعاينة"

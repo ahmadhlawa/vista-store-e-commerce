@@ -29,6 +29,9 @@ export function normalizeProduct(raw) {
     short: raw.short_description || "",
     description: raw.description || "",
     imageUrl: raw.primary_image_url || null,
+    // Present on the list projection too, so a card can cross-fade to it on
+    // hover without fetching the product's detail payload.
+    secondaryImageUrl: raw.secondary_image_url || null,
     bg: backgroundFor(raw.primary_image_url, seed),
     gallery: galleryFor(raw.images, seed),
     images: raw.images || [],

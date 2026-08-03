@@ -1,51 +1,75 @@
-/* Product, package and category cards; catalogue page furniture. */
+/* Product, package and category cards; catalogue page furniture.
 
-/* ── product card ──────────────────────────────────────────────────────── */
+   All three cards share one model: the artwork is the card, and everything a
+   shopper reads or presses lives in a panel that is absolutely positioned over
+   the bottom of it. Because the panel is out of flow, revealing it can never
+   change a card's height or shift the row around it — the single most visible
+   defect the previous permanent-body cards had.
 
-.vs-card {
+   The reveal is driven by three selectors that always travel together:
+     :hover        a pointer
+     :focus-within a keyboard
+     [data-revealed="true"]  the first tap of a coarse pointer (useCardReveal)
+
+   Below 900px the whole mechanism is switched off and the panel is laid out
+   statically, always visible. A phone has no hover, and a card that small has no
+   room to overlay a panel without clipping it. */
+
+/* ── shared reveal ─────────────────────────────────────────────────────── */
+
+.vs-card,
+.vs-pkg {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
   min-width: 0;
-  background: var(--vs-surface);
-  border: 1px solid var(--vs-border);
   border-radius: var(--vs-r-lg);
   overflow: hidden;
+  background: var(--vs-surface);
+  border: 1px solid var(--vs-border);
   box-shadow: var(--vs-shadow-1);
   transition: border-color var(--vs-t-card) var(--vs-ease),
     box-shadow var(--vs-t-card) var(--vs-ease);
 }
 
-@media (hover: hover) {
-  .vs-card:hover {
-    border-color: var(--vs-border-strong);
-    box-shadow: var(--vs-shadow-2);
-  }
-  .vs-card:hover .vs-card__img {
-    transform: scale(1.045);
-  }
-  .vs-card:hover .vs-card__quick {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.vs-card__media {
+.vs-card__media,
+.vs-pkg__media {
   position: relative;
   overflow: hidden;
   background: var(--vs-surface-2);
 }
 
-.vs-card__link {
+.vs-card__link,
+.vs-pkg__link {
   display: block;
 }
 
-.vs-card__img {
+.vs-card__img,
+.vs-pkg__img {
   transition: transform var(--vs-t-hero) var(--vs-ease);
 }
 
-.vs-card__badges {
+/* The second picture is stacked over the cover and cross-faded in. It is only
+   rendered when the product actually has one. */
+.vs-card__img2,
+.vs-pkg__img2 {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity var(--vs-t-card) var(--vs-ease);
+}
+
+.vs-card__panel,
+.vs-pkg__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.vs-card__badges,
+.vs-pkg__badges {
   position: absolute;
   inset-block-start: 10px;
   inset-inline-start: 10px;
@@ -57,59 +81,13 @@
   z-index: 2;
 }
 
-.vs-card__quick {
-  position: absolute;
-  inset-block-end: 0;
-  inset-inline: 0;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 0;
-  background: rgba(31, 78, 74, 0.94);
-  color: #fff;
-  font-family: inherit;
-  font-size: var(--vs-fs-sm);
-  font-weight: 700;
-  cursor: pointer;
-  opacity: 0;
-  transform: translateY(100%);
-  transition: opacity var(--vs-t-card) var(--vs-ease), transform var(--vs-t-card) var(--vs-ease);
-  z-index: 2;
-}
-
-/* Touch and coarse pointers never see a hover, so the same action becomes a
-   permanently visible icon button in the corner of the image. */
-@media (hover: none), (max-width: 899px) {
-  .vs-card__quick {
-    inset-block-end: 8px;
-    inset-inline-start: 8px;
-    inset-inline-end: auto;
-    width: 38px;
-    height: 38px;
-    border-radius: 50%;
-    opacity: 1;
-    transform: none;
-    box-shadow: 0 4px 12px rgba(30, 27, 24, 0.2);
-  }
-  .vs-card__quick-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-  }
-}
-
 .vs-card__veil {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(251, 249, 246, 0.74);
+  background: rgba(255, 255, 255, 0.72);
   z-index: 3;
 }
 
@@ -122,26 +100,86 @@
   border-radius: var(--vs-r-sm);
 }
 
-.vs-card__body {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 13px 14px 14px;
-  flex: 1;
-  min-width: 0;
+@media (min-width: 900px) {
+  .vs-card__panel,
+  .vs-pkg__panel {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: 0;
+    z-index: 4;
+    padding: 14px;
+    background: linear-gradient(
+      to top,
+      color-mix(in srgb, var(--vs-surface) 97%, transparent) 72%,
+      transparent
+    );
+    backdrop-filter: blur(6px);
+    opacity: 0;
+    transform: translateY(100%);
+    pointer-events: none;
+    /* Clipped rather than allowed to grow: a long title shortens instead of
+       spilling out of the card. */
+    max-height: 100%;
+    overflow: hidden;
+    transition: opacity var(--vs-t-card) var(--vs-ease),
+      transform var(--vs-t-card) var(--vs-ease);
+  }
+
+  .vs-card:hover .vs-card__panel,
+  .vs-card:focus-within .vs-card__panel,
+  .vs-card[data-revealed="true"] .vs-card__panel,
+  .vs-pkg:hover .vs-pkg__panel,
+  .vs-pkg:focus-within .vs-pkg__panel,
+  .vs-pkg[data-revealed="true"] .vs-pkg__panel {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+
+  .vs-card:hover,
+  .vs-card:focus-within,
+  .vs-pkg:hover,
+  .vs-pkg:focus-within {
+    border-color: var(--vs-border-strong);
+    box-shadow: var(--vs-shadow-2);
+  }
+
+  .vs-card:hover .vs-card__img,
+  .vs-card:focus-within .vs-card__img,
+  .vs-card[data-revealed="true"] .vs-card__img,
+  .vs-pkg:hover .vs-pkg__img,
+  .vs-pkg:focus-within .vs-pkg__img,
+  .vs-pkg[data-revealed="true"] .vs-pkg__img {
+    transform: scale(1.045);
+  }
+
+  .vs-card:hover .vs-card__img2,
+  .vs-card:focus-within .vs-card__img2,
+  .vs-card[data-revealed="true"] .vs-card__img2,
+  .vs-pkg:hover .vs-pkg__img2,
+  .vs-pkg:focus-within .vs-pkg__img2,
+  .vs-pkg[data-revealed="true"] .vs-pkg__img2 {
+    opacity: 1;
+  }
 }
 
-.vs-card__cat {
-  font-size: var(--vs-fs-xs);
-  color: var(--vs-ink-4);
+/* Phones and small tablets: the panel is simply part of the card. Nothing is
+   hidden behind an interaction that a finger cannot perform. */
+@media (max-width: 899px) {
+  .vs-card__panel,
+  .vs-pkg__panel {
+    padding: 12px;
+    border-block-start: 1px solid var(--vs-border);
+  }
 }
+
+/* ── product card ──────────────────────────────────────────────────────── */
 
 .vs-card__title {
   font-size: 14.5px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.5;
   color: var(--vs-ink);
-  min-height: 44px;
   transition: color var(--vs-t) var(--vs-ease);
 }
 
@@ -151,9 +189,33 @@
   }
 }
 
+.vs-card__meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.vs-card__stock {
+  font-size: var(--vs-fs-xs);
+  color: var(--vs-ink-3);
+}
+
+.vs-card__acts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .vs-card__cta {
-  margin-block-start: 8px;
-  height: 42px;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 40px;
+}
+
+.vs-card__quick {
+  flex: 0 0 auto;
 }
 
 /* ── price block ───────────────────────────────────────────────────────── */
@@ -163,8 +225,6 @@
   align-items: baseline;
   gap: 9px;
   flex-wrap: wrap;
-  margin-block-start: auto;
-  padding-block-start: 4px;
 }
 
 /* Each amount is its own bidi run: without isolation the currency symbol of one
@@ -197,122 +257,38 @@
 
 /* ── package card ──────────────────────────────────────────────────────── */
 
-.vs-pkg {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-width: 0;
-  border-radius: var(--vs-r-lg);
-  overflow: hidden;
-  background: var(--vs-surface);
-  border: 1px solid var(--vs-border);
-  box-shadow: var(--vs-shadow-1);
-  transition: border-color var(--vs-t-card) var(--vs-ease),
-    box-shadow var(--vs-t-card) var(--vs-ease);
-}
-
-@media (hover: hover) {
-  .vs-pkg:hover {
-    border-color: var(--vs-border-strong);
-    box-shadow: var(--vs-shadow-2);
-  }
-  .vs-pkg:hover .vs-pkg__contents {
-    max-height: 190px;
-    opacity: 1;
-  }
-}
-
-.vs-pkg__media {
-  position: relative;
-}
-
-.vs-pkg__badges {
-  position: absolute;
-  inset-block-start: 12px;
-  inset-inline-start: 12px;
-  display: flex;
-  gap: 6px;
-  z-index: 2;
-}
-
-.vs-pkg__body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 16px;
-  flex: 1;
-}
-
 .vs-pkg__title {
-  font-size: 16.5px;
+  font-size: 16px;
   font-weight: 800;
-  line-height: 1.5;
+  line-height: 1.45;
   color: var(--vs-ink);
 }
 
-.vs-pkg__count {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--vs-fs-sm);
-  color: var(--vs-ink-3);
-}
-
-/* Desktop reveals the contents on hover; below 900px they are simply always
-   there, because a tap cannot hover. */
 .vs-pkg__contents {
-  max-height: 0;
-  opacity: 0;
-  overflow: hidden;
-  transition: max-height var(--vs-t-card) var(--vs-ease), opacity var(--vs-t-card) var(--vs-ease);
-}
-
-.vs-pkg__contents ul {
-  margin: 0;
-  padding: 10px 0 0;
-  list-style: none;
   display: flex;
-  flex-direction: column;
-  gap: 5px;
-  border-block-start: 1px solid var(--vs-border);
-}
-
-.vs-pkg__contents li {
-  font-size: 12.5px;
-  color: var(--vs-ink-3);
-  display: flex;
+  align-items: flex-start;
   gap: 7px;
-  align-items: baseline;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--vs-ink-3);
 }
 
-.vs-pkg__contents li::before {
-  content: "";
-  width: 5px;
-  height: 5px;
-  border-radius: 2px;
-  background: var(--vs-accent);
+.vs-pkg__contents svg {
   flex: 0 0 auto;
+  margin-block-start: 3px;
+  color: var(--vs-accent-dark);
 }
 
-@media (hover: none), (max-width: 899px) {
-  .vs-pkg__contents {
-    max-height: none;
-    opacity: 1;
-  }
-}
-
-.vs-pkg__foot {
+.vs-pkg__acts {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
-  margin-block-start: auto;
-  padding-block-start: 10px;
 }
 
 .vs-pkg__cta {
-  flex: 1 1 170px;
+  flex: 1 1 150px;
+  height: 40px;
 }
 
 /* ── category card ─────────────────────────────────────────────────────── */
@@ -331,60 +307,104 @@
   transition: transform var(--vs-t-hero) var(--vs-ease);
 }
 
+/* A base wash so the centred name is readable at rest over any artwork; hover
+   and focus deepen it rather than introducing it. */
 .vs-cat__veil {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, rgba(18, 16, 14, 0.72) 0%, rgba(18, 16, 14, 0.12) 52%, rgba(18, 16, 14, 0) 100%);
+  background: linear-gradient(
+    to top,
+    rgba(18, 16, 26, 0.5) 0%,
+    rgba(18, 16, 26, 0.24) 55%,
+    rgba(18, 16, 26, 0.14) 100%
+  );
   transition: background var(--vs-t-card) var(--vs-ease);
 }
 
-.vs-cat__text {
+.vs-cat__center {
   position: absolute;
-  inset-block-end: 0;
-  inset-inline: 0;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 16px;
+  text-align: center;
+}
+
+/* The plate is the "stronger translucent backdrop" the title gains on hover: it
+   is transparent at rest, so the tile reads as image-only. */
+.vs-cat__plate {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  color: #fff;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 12px 18px;
+  border-radius: var(--vs-r-md);
+  background: rgba(18, 16, 26, 0);
+  transition: background var(--vs-t-card) var(--vs-ease);
 }
 
 .vs-cat__name {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 800;
   line-height: 1.45;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.3);
-}
-
-.vs-cat__count {
-  font-size: 12.5px;
-  color: rgba(255, 255, 255, 0.82);
+  color: #fff;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.45);
 }
 
 .vs-cat__go {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-block-start: 6px;
   font-size: var(--vs-fs-sm);
   font-weight: 700;
   color: var(--vs-accent);
+  opacity: 0;
+  transition: opacity var(--vs-t-card) var(--vs-ease);
 }
 
-@media (hover: hover) {
-  .vs-cat:hover {
-    box-shadow: var(--vs-shadow-2);
-  }
-  .vs-cat:hover .vs-cat__img {
-    transform: scale(1.05);
-  }
-  .vs-cat:hover .vs-cat__veil {
-    background: linear-gradient(to top, rgba(18, 16, 14, 0.82) 0%, rgba(18, 16, 14, 0.3) 60%, rgba(18, 16, 14, 0.08) 100%);
-  }
+.vs-cat:hover,
+.vs-cat:focus-visible {
+  box-shadow: var(--vs-shadow-2);
+}
+
+.vs-cat:hover .vs-cat__img,
+.vs-cat:focus-visible .vs-cat__img {
+  transform: scale(1.05);
+}
+
+.vs-cat:hover .vs-cat__veil,
+.vs-cat:focus-visible .vs-cat__veil {
+  background: linear-gradient(
+    to top,
+    rgba(18, 16, 26, 0.68) 0%,
+    rgba(18, 16, 26, 0.46) 55%,
+    rgba(18, 16, 26, 0.36) 100%
+  );
+}
+
+.vs-cat:hover .vs-cat__plate,
+.vs-cat:focus-visible .vs-cat__plate {
+  background: rgba(18, 16, 26, 0.42);
+}
+
+.vs-cat:hover .vs-cat__go,
+.vs-cat:focus-visible .vs-cat__go {
+  opacity: 1;
 }
 
 .vs-cat--compact .vs-cat__name {
   font-size: 14px;
+}
+
+@media (max-width: 599px) {
+  .vs-cat__name {
+    font-size: 14.5px;
+  }
+  .vs-cat__plate {
+    padding: 8px 12px;
+  }
 }
 
 /* ── catalogue page ────────────────────────────────────────────────────── */
@@ -664,9 +684,18 @@
   aspect-ratio: var(--vs-ar-product);
 }
 
+/* On desktop the real card is its image alone — the panel is an overlay — so the
+   skeleton must not reserve a body the card will never occupy. */
 .vs-cardskel__body {
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
+  display: none;
+}
+
+@media (max-width: 899px) {
+  .vs-cardskel__body {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    border-block-start: 1px solid var(--vs-border);
+  }
 }
