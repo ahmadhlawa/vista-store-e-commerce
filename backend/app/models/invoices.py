@@ -28,7 +28,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.enums import InvoiceStatus
+from app.core.enums import InvoiceStatus, PaymentStatus
 from app.db.base import Base, TimestampMixin, utcnow
 
 DEFAULT_INVOICE_PREFIX = "INV"
@@ -59,13 +59,18 @@ class Invoice(TimestampMixin, Base):
     invoice_number: Mapped[str] = mapped_column(
         String(40), unique=True, index=True, nullable=False
     )
-    # Unique, not just indexed: the database itself guarantees "at most one invoice per
-    # order", so a concurrent double-confirm cannot produce two.
     order_id: Mapped[int] = mapped_column(
-        ForeignKey("orders.id", ondelete="RESTRICT"), unique=True, nullable=False
+        ForeignKey("orders.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     status: Mapped[str] = mapped_column(
-        String(16), default=InvoiceStatus.ISSUED.value, nullable=False, index=True
+        String(16),
+        default=InvoiceStatus.ACTIVE.value,
+        server_default=InvoiceStatus.ACTIVE.value,
+        nullable=False,
+        index=True,
+    )
+    replacement_invoice_id: Mapped[int | None] = mapped_column(
+        ForeignKey("invoices.id", ondelete="RESTRICT"), unique=True, nullable=True
     )
     issued_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, nullable=False, index=True
@@ -120,6 +125,25 @@ class Invoice(TimestampMixin, Base):
     )
     grand_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
 
+    payment_status: Mapped[str] = mapped_column(
+        String(24),
+        default=PaymentStatus.UNPAID.value,
+        server_default=PaymentStatus.UNPAID.value,
+        nullable=False,
+        index=True,
+    )
+    paid_amount: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=Decimal("0.00"), server_default="0.00", nullable=False
+    )
+    refunded_amount: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=Decimal("0.00"), server_default="0.00", nullable=False
+    )
+    remaining_amount: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=Decimal("0.00"), server_default="0.00", nullable=False
+    )
+    payment_details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    invoice_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # ── cancellation ─────────────────────────────────────────────────────────
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     cancellation_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -130,7 +154,20 @@ class Invoice(TimestampMixin, Base):
     items: Mapped[list["InvoiceItem"]] = relationship(
         back_populates="invoice", cascade="all, delete-orphan", order_by="InvoiceItem.id"
     )
-    order = relationship("Order", back_populates="invoice")
+    order = relationship("Order", back_populates="invoices", overlaps="invoice")
+    replacement_invoice: Mapped["Invoice | None"] = relationship(
+        "Invoice",
+        remote_side="Invoice.id",
+        foreign_keys=[replacement_invoice_id],
+        back_populates="replaces_invoice",
+    )
+    replaces_invoice: Mapped["Invoice | None"] = relationship(
+        "Invoice",
+        uselist=False,
+        foreign_keys="Invoice.replacement_invoice_id",
+        back_populates="replacement_invoice",
+    )
+    activities: Mapped[list["OrderActivity"]] = relationship(back_populates="invoice")
 
     __table_args__ = (
         CheckConstraint("subtotal >= 0", name="ck_invoices_subtotal_non_negative"),
@@ -156,6 +193,10 @@ class InvoiceItem(Base):
     product_name: Mapped[str] = mapped_column(String(250), nullable=False)
     sku: Mapped[str | None] = mapped_column(String(64), nullable=True)
     variant_description: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    item_kind: Mapped[str] = mapped_column(
+        String(16), default="catalog", server_default="catalog", nullable=False
+    )
+    manual_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     line_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)

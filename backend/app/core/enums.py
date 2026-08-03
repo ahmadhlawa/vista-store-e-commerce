@@ -26,13 +26,32 @@ class ProductType(StrEnum):
 
 
 class OrderStatus(StrEnum):
+    NEW = "new"
     PENDING = "pending"
     CONFIRMED = "confirmed"
     PROCESSING = "processing"
     READY = "ready"
     SHIPPED = "shipped"
     DELIVERED = "delivered"
+    COMPLETED = "completed"
     CANCELLED = "cancelled"
+
+
+class OrderSource(StrEnum):
+    WEBSITE = "website"
+    WHATSAPP = "whatsapp"
+    PHONE = "phone"
+    WALK_IN = "walk_in"
+    SOCIAL = "social"
+    OTHER = "other"
+
+
+class PaymentStatus(StrEnum):
+    UNPAID = "unpaid"
+    PARTIAL = "partial"
+    PAID = "paid"
+    PARTIALLY_REFUNDED = "partially_refunded"
+    REFUNDED = "refunded"
 
 
 class PaymentMethod(StrEnum):
@@ -41,10 +60,13 @@ class PaymentMethod(StrEnum):
 
 
 class InvoiceStatus(StrEnum):
-    """An invoice is issued once and either stands or is cancelled. It is never deleted."""
+    """Internal invoice lifecycle; rows are never deleted."""
 
+    ACTIVE = "active"
+    # Legacy value retained only while the old issuance service is replaced.
     ISSUED = "issued"
     CANCELLED = "cancelled"
+    REPLACED = "replaced"
 
 
 class DiscountType(StrEnum):

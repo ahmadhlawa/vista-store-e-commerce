@@ -113,11 +113,10 @@ def test_repeating_the_same_confirmation_creates_no_duplicate(
     assert db.query(Invoice).filter(Invoice.order_id == order.id).count() == 1
 
 
-def test_only_one_invoice_per_order_at_the_database_level(
+def test_a_replaced_invoice_and_its_active_replacement_can_share_an_order(
     db: Session, product: Product
 ) -> None:
-    """The service check is a courtesy; the constraint is the guarantee."""
-    from sqlalchemy.exc import IntegrityError
+    """Archived invoices remain when a corrected invoice replaces them."""
 
     order = orders_service.create_order(
         db,
@@ -133,10 +132,11 @@ def test_only_one_invoice_per_order_at_the_database_level(
     first = invoices_service.issue_for_order(db, order)
     db.commit()
 
-    duplicate = Invoice(
+    first.status = InvoiceStatus.REPLACED.value
+    replacement = Invoice(
         invoice_number="INV-999999",
         order_id=order.id,
-        status=InvoiceStatus.ISSUED.value,
+        status=InvoiceStatus.ACTIVE.value,
         order_number=order.order_number,
         payment_method=order.payment_method,
         store_name="Store",
@@ -150,13 +150,13 @@ def test_only_one_invoice_per_order_at_the_database_level(
         delivery_fee=order.delivery_fee,
         tax_amount=Decimal("0.00"),
         grand_total=order.total,
+        replacement_invoice=first,
     )
-    db.add(duplicate)
-    with pytest.raises(IntegrityError):
-        db.flush()
-    db.rollback()
+    db.add(replacement)
+    db.commit()
 
-    assert first.invoice_number != "INV-999999"
+    assert replacement.replacement_invoice_id == first.id
+    assert replacement.invoice_number == "INV-999999"
 
 
 # ── numbering ────────────────────────────────────────────────────────────────
