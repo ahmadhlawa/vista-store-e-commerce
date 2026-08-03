@@ -957,7 +957,7 @@ class PreviewImporter:
             row.title = item.title
             row.subtitle = item.subtitle
             row.description = item.description
-            row.image_url = media_urls.get(item.image) if item.image else None
+            row.image_url = item.image_url or (media_urls.get(item.image) if item.image else None)
             row.button_label = item.button_label
             row.button_url = item.button_url
             row.is_active = True
@@ -975,7 +975,7 @@ class PreviewImporter:
             label=lambda item: item.title,
             create=lambda item: HeroSlide(title=item.title),
             write=write,
-            image_for=lambda item: media_urls.get(item.image) if item.image else None,
+            image_for=lambda item: item.image_url or (media_urls.get(item.image) if item.image else None),
             apply=apply,
             force=force,
         )

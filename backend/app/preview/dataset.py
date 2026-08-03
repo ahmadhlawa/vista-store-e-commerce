@@ -171,6 +171,7 @@ class PreviewHeroSlide(_Strict):
     button_label: str | None = Field(default=None, max_length=100)
     button_url: str | None = Field(default=None, max_length=500)
     image: str | None = None
+    image_url: str | None = Field(default=None, max_length=500, pattern=r"^/[^\\s]*$")
     sort_order: int = 0
     origin: Origin
 

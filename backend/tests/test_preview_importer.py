@@ -105,6 +105,27 @@ def test_seed_creates_every_declared_row(importer: PreviewImporter, db: Session)
     assert product.primary_image_url is not None
 
 
+def test_seed_allows_a_preview_hero_to_use_a_public_image_url(
+    db: Session, storage: LocalStorageProvider
+) -> None:
+    document = {
+        **DOCUMENT,
+        "hero_slides": [
+            {
+                "key": "owner-advertisement",
+                "title": "Vista preview advertisement",
+                "image_url": "/hero-1-pic.png",
+                "origin": "confirmed",
+            }
+        ],
+    }
+
+    PreviewImporter(db, parse_dataset(document), storage=storage).seed()
+
+    slide = db.query(HeroSlide).filter_by(title="Vista preview advertisement").one()
+    assert slide.image_url == "/hero-1-pic.png"
+
+
 def test_seed_gives_a_product_its_declared_second_image(
     db: Session, storage: LocalStorageProvider
 ) -> None:

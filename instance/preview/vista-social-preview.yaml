@@ -728,6 +728,13 @@ delivery_areas:
 
 # ── homepage ─────────────────────────────────────────────────────────────────
 hero_slides:
+  # Owner-supplied artwork, deliberately image-only. It remains a normal preview
+  # record, so Admin can replace or remove it without a frontend change.
+  - key: "vista-owner-advertisement"
+    title: "Vista Store preview advertisement"
+    image_url: "/hero-1-pic.png"
+    sort_order: 0
+    origin: "confirmed"
   - key: "hero-invitations"
     title: "مكاتيب أفراح تُصمَّم لك"
     subtitle: "نسخة تجريبية للمعاينة"
@@ -735,7 +742,7 @@ hero_slides:
     button_label: "تصفّح القسم"
     button_url: "/category/wedding-invitations"
     image: "hero-invitations"
-    sort_order: 0
+    sort_order: 1
     origin: "inferred"
   - key: "hero-events"
     title: "اطبع فرحتك بالمناسبات"
@@ -744,7 +751,7 @@ hero_slides:
     button_label: "شاهد المطبوعات"
     button_url: "/category/event-print"
     image: "hero-events"
-    sort_order: 1
+    sort_order: 2
     origin: "inferred"
   - key: "hero-gifts"
     title: "هدايا مخصصة بالاسم"
@@ -753,7 +760,7 @@ hero_slides:
     button_label: "اكتشف الهدايا"
     button_url: "/category/custom-gifts"
     image: "hero-gifts"
-    sort_order: 2
+    sort_order: 3
     origin: "inferred"
 
   # A finished advertisement: artwork and nothing else. The storefront prints
@@ -764,7 +771,7 @@ hero_slides:
   - key: "hero-apparel"
     title: "طباعة تليق بمناسبتك"
     image: "hero-apparel"
-    sort_order: 3
+    sort_order: 4
     origin: "inferred"
 
 banners:
