@@ -429,132 +429,224 @@
   white-space: nowrap;
 }
 
-/* ── category mega panel ───────────────────────────────────────────────── */
+/* ── fixed category rail ───────────────────────────────────────────────── */
 
-.vs-mega {
-  position: absolute;
-  inset-inline: 0;
-  z-index: var(--vs-z-drawer);
+/* Physical `right`, not `inset-inline-end`: the storefront is RTL, so the
+   logical end edge is the left one. The rail belongs at the far right of the
+   viewport, which is also the side `.vs-drawer--right` comes in from. */
+.vs-catbar {
+  position: fixed;
+  right: 0;
+  top: calc(var(--vs-header-h) + var(--vs-nav-h));
+  bottom: 0;
+  z-index: var(--vs-z-rail);
+  width: var(--vs-rail-w);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
   background: var(--vs-surface);
-  border-block-end: 1px solid var(--vs-border);
-  box-shadow: var(--vs-shadow-3);
-  animation: vs-pop var(--vs-t-card) var(--vs-ease) both;
-  max-height: calc(100vh - var(--vs-header-h) - var(--vs-nav-h));
+  border-inline-start: 1px solid var(--vs-border);
+  box-shadow: -6px 0 20px rgba(28, 27, 33, 0.05);
+}
+
+.vs-catbar__trigger {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--vs-primary);
+  color: var(--vs-ink-invert);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--vs-t) var(--vs-ease);
+}
+
+.vs-catbar__trigger:hover,
+.vs-catbar__trigger[aria-expanded="true"] {
+  background: var(--vs-primary-dark);
+}
+
+/* The rail scrolls on its own once the categories outrun the viewport, so a
+   long list never pushes items off the bottom or onto the page. */
+.vs-catbar__list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
 }
 
-.vs-mega__grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr)) 280px;
-  gap: 18px;
-  padding-block: 24px 28px;
+.vs-catbar__list::-webkit-scrollbar {
+  display: none;
 }
 
-.vs-mega__cat {
+.vs-catbar__item {
+  position: relative;
+  display: block;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--vs-r-md);
+  overflow: hidden;
+  border: 1px solid var(--vs-border);
+  background: var(--vs-surface-2);
+  transition: border-color var(--vs-t) var(--vs-ease), box-shadow var(--vs-t) var(--vs-ease);
+}
+
+.vs-catbar__item:hover,
+.vs-catbar__item:focus-visible {
+  border-color: var(--vs-primary);
+}
+
+.vs-catbar__item[data-active="true"] {
+  border-color: var(--vs-primary);
+  box-shadow: 0 0 0 2px var(--vs-accent);
+}
+
+.vs-catbar__thumb,
+.vs-catbar__thumb img,
+.vs-catbar__thumb > span {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* A label on demand, never a permanent one: the collapsed rail stays icons. */
+.vs-catbar__tip {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 10px);
+  transform: translateY(-50%);
+  padding: 6px 10px;
+  border-radius: var(--vs-r-sm);
+  background: var(--vs-ink);
+  color: var(--vs-ink-invert);
+  font-size: var(--vs-fs-xs);
+  font-weight: 700;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--vs-t) var(--vs-ease);
+}
+
+.vs-catbar__item:hover .vs-catbar__tip,
+.vs-catbar__item:focus-visible .vs-catbar__tip {
+  opacity: 1;
+}
+
+/* ── category drawer ───────────────────────────────────────────────────── */
+
+.vs-drawer--cats {
+  width: var(--vs-drawer-cat-w);
+}
+
+.vs-catdrawer__list,
+.vs-catdrawer__children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.vs-catdrawer__item + .vs-catdrawer__item {
+  border-block-start: 1px solid var(--vs-border);
+}
+
+.vs-catdrawer__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vs-catdrawer__link {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px;
+  padding: 10px 4px;
   border-radius: var(--vs-r-md);
   transition: background var(--vs-t) var(--vs-ease);
 }
 
-.vs-mega__cat:hover {
-  background: var(--vs-surface-2);
+.vs-catdrawer__link:hover {
+  background: var(--vs-primary-soft);
 }
 
-.vs-mega__thumb {
-  width: 52px;
-  height: 52px;
+.vs-catdrawer__link[data-active="true"] .vs-catdrawer__name {
+  color: var(--vs-primary);
+}
+
+.vs-catdrawer__thumb {
+  width: 46px;
+  height: 46px;
   flex: 0 0 auto;
   border-radius: var(--vs-r-sm);
   overflow: hidden;
   background: var(--vs-surface-2);
 }
 
-.vs-mega__name {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--vs-ink);
-  line-height: 1.4;
+.vs-catdrawer__thumb img,
+.vs-catdrawer__thumb > span {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.vs-mega__count {
+.vs-catdrawer__text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.vs-catdrawer__name {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--vs-ink);
+  line-height: 1.45;
+}
+
+.vs-catdrawer__count {
   font-size: 12px;
   color: var(--vs-ink-4);
 }
 
-.vs-mega__sub {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-inline-start: 12px;
+.vs-catdrawer__toggle[data-open="true"] {
+  transform: rotate(180deg);
 }
 
-.vs-mega__sublink {
-  font-size: 12.5px;
+.vs-catdrawer__children {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 58px 10px 0;
+}
+
+.vs-catdrawer__child {
+  font-size: 13px;
   color: var(--vs-ink-3);
-  padding-block: 3px;
+  padding-block: 6px;
   transition: color var(--vs-t) var(--vs-ease);
 }
 
-.vs-mega__sublink:hover {
+.vs-catdrawer__child:hover,
+.vs-catdrawer__child[data-active="true"] {
   color: var(--vs-primary);
 }
 
-.vs-mega__promo {
-  grid-row: span 2;
-  border-radius: var(--vs-r-lg);
-  overflow: hidden;
-  position: relative;
-  min-height: 230px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 6px;
-  padding: 22px;
-  color: #fff;
-  background: linear-gradient(160deg, var(--vs-primary), var(--vs-primary-mid));
-}
-
-.vs-mega__promo-eyebrow {
-  font-size: var(--vs-fs-xs);
-  letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.75);
-}
-
-.vs-mega__promo-title {
-  font-size: 21px;
-  font-weight: 800;
-  line-height: 1.4;
-}
-
-.vs-mega__promo-cta {
+.vs-catdrawer__empty {
+  padding: 20px 4px;
   font-size: var(--vs-fs-sm);
-  color: rgba(255, 255, 255, 0.85);
-}
-
-/* ── mobile category rail ──────────────────────────────────────────────── */
-
-.vs-catrail {
-  background: var(--vs-surface);
-  border-block-end: 1px solid var(--vs-border);
-}
-
-.vs-catrail__row {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  padding-block: 10px;
-}
-
-.vs-catrail__row::-webkit-scrollbar {
-  display: none;
-}
-
-.vs-catrail__chip {
-  flex: 0 0 auto;
+  color: var(--vs-ink-3);
 }
 
 /* ── mobile tab bar ────────────────────────────────────────────────────── */
@@ -653,8 +745,10 @@
   }
 }
 
-@media (min-width: 900px) {
-  .vs-catrail {
+/* The rail is desktop-only; below 900 its trigger lives in the header instead,
+   and the gutter it reserved collapses to nothing (see tokens.css). */
+@media (max-width: 899px) {
+  .vs-catbar {
     display: none;
   }
 }

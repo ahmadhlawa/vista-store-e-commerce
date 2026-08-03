@@ -1,27 +1,72 @@
 import { NavLink } from "react-router-dom";
-import { useCategoryNav } from "../../../hooks/useStorefront.js";
+import { OVERLAY, useStore } from "../../../app/StoreProvider.jsx";
+import { useActiveCategorySlug, useCategoryNav } from "../../../hooks/useStorefront.js";
+import Media from "../shell/Media.jsx";
+import { MenuIcon } from "../shell/icons.jsx";
 
 /**
- * Mobile-only horizontal category strip under the header. It gives the phone
- * layout the same one-tap route into the catalogue that desktop gets from the
- * nav band, without stealing sticky height.
+ * The fixed category rail at the far right of the desktop viewport.
+ *
+ * It is a gutter, not an overlay: `.vs-public` reserves `--vs-rail-gutter` on its
+ * physical right, so the rail can never end up on top of the page. Below 900px it
+ * leaves the layout entirely and its trigger moves into the header — nothing here
+ * is the only way to reach a category, and nothing depends on hover.
+ *
+ * Content is whatever the categories API returns; there is no Vista list in this
+ * file, and it shares `OVERLAY.CATEGORIES` with the header trigger so the two can
+ * never disagree about whether the drawer is open.
  */
 export default function CategoryRail() {
-  const categories = useCategoryNav();
-  if (!categories.length) return null;
+  const { overlay, openOverlay, closeAll } = useStore();
+  const activeSlug = useActiveCategorySlug();
+  const categories = useCategoryNav(activeSlug);
 
+  if (!categories.length) return null;
+  const open = overlay === OVERLAY.CATEGORIES;
+
+  // A navigation landmark, not a complementary one: everything in it is a route
+  // into the catalogue, and it is labelled so it sits alongside the header nav
+  // without either becoming ambiguous.
   return (
-    <nav className="vs-catrail" aria-label="الأقسام">
-      <div className="vs-container vs-catrail__row">
-        <NavLink to="/shop" end className="vs-chip vs-catrail__chip">
-          كل المنتجات
-        </NavLink>
+    <nav className="vs-catbar" aria-label="أقسام المتجر">
+      <button
+        type="button"
+        className="vs-catbar__trigger"
+        onClick={() => (open ? closeAll() : openOverlay(OVERLAY.CATEGORIES))}
+        aria-expanded={open}
+        aria-controls="vs-catdrawer"
+        aria-label="تصنيفات المنتجات"
+        title="تصنيفات المنتجات"
+      >
+        <MenuIcon size={19} />
+      </button>
+
+      <ul className="vs-catbar__list">
         {categories.map((category) => (
-          <NavLink key={category.slug} to={category.href} className="vs-chip vs-catrail__chip">
-            {category.name}
-          </NavLink>
+          <li key={category.slug}>
+            <NavLink
+              to={category.href}
+              className="vs-catbar__item"
+              data-active={category.active}
+              aria-current={category.active ? "page" : undefined}
+              aria-label={category.name}
+              title={category.name}
+            >
+              <Media
+                className="vs-catbar__thumb"
+                src={category.imageUrl}
+                fallback={category.bg}
+                alt=""
+              />
+              {/* Presentational: the accessible name already comes from
+                  aria-label, so a screen reader must not hear it twice. */}
+              <span className="vs-catbar__tip" aria-hidden="true">
+                {category.name}
+              </span>
+            </NavLink>
+          </li>
         ))}
-      </div>
+      </ul>
     </nav>
   );
 }

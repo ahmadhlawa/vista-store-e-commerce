@@ -1,6 +1,7 @@
 // Small, focused hooks shared by the public components. Deliberately not one
 // god view-model: each surface takes only what it needs.
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import { OVERLAY, useStore } from "../app/StoreProvider.jsx";
 import { makeMoney } from "../utils/format.js";
 import { productView } from "../utils/productView.js";
@@ -79,6 +80,19 @@ export function useProductActions() {
   );
 
   return { addProduct, openQuick, primaryAction };
+}
+
+/**
+ * The category slug the current route is showing, or null. Derived from the URL
+ * rather than stored, so the rail, the drawer and the catalogue page can never
+ * disagree about which category is active.
+ */
+export function useActiveCategorySlug() {
+  const { pathname } = useLocation();
+  return useMemo(() => {
+    const match = /^\/category\/([^/]+)/.exec(pathname);
+    return match ? decodeURIComponent(match[1]) : null;
+  }, [pathname]);
 }
 
 /** Top-level categories with routes and an active flag, ready for navigation. */

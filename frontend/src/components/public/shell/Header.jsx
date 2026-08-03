@@ -4,9 +4,7 @@ import { useCartCountPulse } from "../../../hooks/useCartCountPulse.js";
 import { useMoney } from "../../../hooks/useStorefront.js";
 import { navLinks } from "../../../store.js";
 import SearchBox from "../search/SearchBox.jsx";
-import CategoryMega from "../navigation/CategoryMega.jsx";
-import CategoryRail from "../navigation/CategoryRail.jsx";
-import { CartIcon, MenuIcon, PhoneIcon, SearchIcon, UserIcon } from "./icons.jsx";
+import { CartIcon, GridIcon, MenuIcon, PhoneIcon, SearchIcon, UserIcon } from "./icons.jsx";
 
 function StoreMark({ settings }) {
   return (
@@ -29,7 +27,8 @@ export default function Header() {
   const count = cart.reduce((sum, line) => sum + line.qty, 0);
   const subtotal = cart.reduce((sum, line) => sum + line.unit * line.qty, 0);
   const pulse = useCartCountPulse(count);
-  const megaOpen = overlay === OVERLAY.CATEGORIES;
+  const catsOpen = overlay === OVERLAY.CATEGORIES;
+  const toggleCats = () => (catsOpen ? closeAll() : openOverlay(OVERLAY.CATEGORIES));
 
   return (
     <>
@@ -60,6 +59,19 @@ export default function Header() {
               aria-expanded={overlay === OVERLAY.MENU}
             >
               <MenuIcon size={20} />
+            </button>
+
+            {/* The fixed category rail is desktop-only, so its trigger has to
+                exist here for a phone — same overlay, same categories. */}
+            <button
+              type="button"
+              className="vs-iconbtn vs-mob"
+              onClick={toggleCats}
+              aria-label="تصنيفات المنتجات"
+              aria-expanded={catsOpen}
+              aria-controls="vs-catdrawer"
+            >
+              <GridIcon size={19} />
             </button>
 
             <StoreMark settings={settings} />
@@ -124,9 +136,9 @@ export default function Header() {
             <button
               type="button"
               className="vs-nav__cats"
-              onClick={() => (megaOpen ? closeAll() : openOverlay(OVERLAY.CATEGORIES))}
-              aria-expanded={megaOpen}
-              aria-controls="vs-mega"
+              onClick={toggleCats}
+              aria-expanded={catsOpen}
+              aria-controls="vs-catdrawer"
             >
               <MenuIcon size={15} />
               كل الأقسام
@@ -150,12 +162,8 @@ export default function Header() {
               </span>
             )}
           </div>
-
-          {megaOpen && <CategoryMega onClose={closeAll} />}
         </nav>
       </header>
-
-      <CategoryRail />
     </>
   );
 }

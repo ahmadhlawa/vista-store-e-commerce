@@ -24,6 +24,8 @@ export function Drawer({
   head = null,
   footer = null,
   bodyClass = "",
+  className = "",
+  id,
   children,
 }) {
   useScrollLock(open);
@@ -35,10 +37,13 @@ export function Drawer({
       <Scrim onClose={onClose} />
       <aside
         ref={ref}
+        id={id}
         role="dialog"
         aria-modal="true"
         aria-label={label || title}
-        className={`vs-drawer vs-drawer--${side}${wide ? " vs-drawer--wide" : ""}`}
+        className={`vs-drawer vs-drawer--${side}${wide ? " vs-drawer--wide" : ""}${
+          className ? ` ${className}` : ""
+        }`}
       >
         <div className="vs-drawer__head">
           {head}

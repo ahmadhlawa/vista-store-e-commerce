@@ -6,6 +6,7 @@ import PreviewNotice from "../../PreviewNotice.jsx";
 import Header from "./Header.jsx";
 import Footer from "./Footer.jsx";
 import MobileTabBar from "./MobileTabBar.jsx";
+import CategoryRail from "../navigation/CategoryRail.jsx";
 import ShellOverlays from "../overlays/ShellOverlays.jsx";
 
 /**
@@ -39,6 +40,7 @@ export default function PublicShell() {
       </a>
       <PreviewNotice />
       <Header />
+      <CategoryRail />
 
       <main className="vs-main" id="vs-content">
         {store.loadError && (

@@ -1,7 +1,7 @@
 import { OVERLAY, useStore } from "../../../app/StoreProvider.jsx";
-import { useScrollLock } from "../../../hooks/useScrollLock.js";
 import { whatsappHref } from "../../../utils/format.js";
 import CartDrawer from "../cart/CartDrawer.jsx";
+import CategoryDrawer from "../navigation/CategoryDrawer.jsx";
 import MobileMenu from "../navigation/MobileMenu.jsx";
 import SearchOverlay from "../search/SearchOverlay.jsx";
 import QuickView from "./QuickView.jsx";
@@ -17,17 +17,11 @@ export default function ShellOverlays() {
   const store = useStore();
   const { overlay, closeAll, settings } = store;
 
-  // The category panel is a popover under the header rather than a dialog, so it
-  // dims the page from below the header instead of covering it.
-  const megaOpen = overlay === OVERLAY.CATEGORIES;
-  useScrollLock(megaOpen);
-
   const wa = whatsappHref(settings.whatsapp, `مرحباً، لدي استفسار عن ${settings.storeName}`);
 
   return (
     <>
-      {megaOpen && <div className="vs-dim" aria-hidden="true" onClick={closeAll} />}
-
+      <CategoryDrawer open={overlay === OVERLAY.CATEGORIES} onClose={closeAll} />
       <MobileMenu open={overlay === OVERLAY.MENU} onClose={closeAll} />
       <SearchOverlay open={overlay === OVERLAY.SEARCH} onClose={closeAll} />
       <CartDrawer open={overlay === OVERLAY.CART} onClose={closeAll} />
