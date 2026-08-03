@@ -979,6 +979,27 @@ img.vs-logo__img {
   color: #8d877e;
 }
 
+.vs-footer__credit {
+  border-block-start: 1px solid #2a2722;
+}
+
+.vs-footer__credit-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding-block: 14px;
+  color: #8d877e;
+  direction: ltr;
+  font-size: 12px;
+}
+
+.vs-footer__credit img {
+  display: block;
+  width: auto;
+  height: 32px;
+}
+
 @media (max-width: 767px) {
   .vs-footer__top {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -992,5 +1013,10 @@ img.vs-logo__img {
 @media (max-width: 419px) {
   .vs-footer__top {
     grid-template-columns: 1fr;
+  }
+
+  .vs-footer__credit-row {
+    gap: 8px;
+    text-align: center;
   }
 }

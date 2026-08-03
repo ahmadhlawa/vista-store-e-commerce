@@ -123,6 +123,13 @@ export default function Footer() {
           <Link to="/page/terms">الشروط والأحكام</Link>
         </div>
       </div>
+
+      <div className="vs-footer__credit">
+        <div className="vs-container vs-footer__credit-row">
+          <img src="/branding/tfn.png" alt="TFN Technologies Team" />
+          <span>Developed by TFN Technologies Team</span>
+        </div>
+      </div>
     </footer>
   );
 }
