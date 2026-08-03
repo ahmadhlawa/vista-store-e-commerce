@@ -367,14 +367,12 @@ def update_order_notes(
     order_id: int, payload: OrderNotesUpdate, db: DbSession, admin: CurrentAdmin
 ):
     order = _load_order(db, order_id)
-    order.admin_notes = payload.admin_notes
-    audit_service.record(
+    orders_service.update_order_notes(
         db,
+        order,
+        admin_notes=payload.admin_notes,
+        reason=payload.reason,
         admin=admin,
-        action="order.notes_updated",
-        entity_type="order",
-        entity_id=order.id,
-        meta={"order_number": order.order_number},
     )
     db.commit()
     return get_order(order_id, db, admin)

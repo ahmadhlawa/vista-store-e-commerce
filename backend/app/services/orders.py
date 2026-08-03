@@ -377,6 +377,13 @@ def change_status(
         raise DomainError("حالة الطلب غير معروفة.", code="invalid_status")
 
     old_status = order.status
+    if old_status == OrderStatus.COMPLETED.value:
+        raise DomainError("Completed orders are locked.", code="order_locked")
+    if new_status == OrderStatus.COMPLETED.value:
+        raise DomainError(
+            "Order completion requires explicit confirmation.",
+            code="completion_requires_confirmation",
+        )
     if old_status == new_status:
         # Idempotent: no history row, no stock movement.
         return order
@@ -438,6 +445,51 @@ def get_by_number(db: Session, order_number: str) -> Order:
     ).scalar_one_or_none()
     if order is None:
         raise NotFoundError("الطلب غير موجود.", code="order_not_found")
+    return order
+
+
+def update_order_notes(
+    db: Session,
+    order: Order,
+    *,
+    admin_notes: str | None,
+    reason: str | None,
+    admin: AdminUser,
+) -> Order:
+    """Update internal notes only when their material change is explained."""
+    if order.status == OrderStatus.CANCELLED.value:
+        raise DomainError("Cancelled orders are locked.", code="order_cancelled")
+    if order.is_locked or order.status == OrderStatus.COMPLETED.value:
+        raise DomainError("Completed orders are locked.", code="order_locked")
+
+    before = order.admin_notes
+    after = (admin_notes or "").strip() or None
+    if before == after:
+        return order
+    normalized_reason = (reason or "").strip() or None
+    if normalized_reason is None:
+        raise DomainError("An edit reason is required.", code="edit_reason_required")
+
+    order.admin_notes = after
+    order.updated_at = utcnow()
+    record_order_activity(
+        db,
+        order_id=order.id,
+        invoice_id=None,
+        actor_admin_id=admin.id,
+        event_type="order_notes_updated",
+        before_data={"admin_notes": before},
+        after_data={"admin_notes": after},
+        reason=normalized_reason,
+    )
+    audit_service.record(
+        db,
+        admin=admin,
+        action="order.notes_updated",
+        entity_type="order",
+        entity_id=order.id,
+        meta={"order_number": order.order_number},
+    )
     return order
 
 

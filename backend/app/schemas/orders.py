@@ -226,6 +226,7 @@ class OrderStatusUpdate(APIModel):
 
 class OrderNotesUpdate(APIModel):
     admin_notes: str | None = Field(default=None, max_length=2000)
+    reason: str | None = Field(default=None, max_length=500)
 
 
 class DashboardSummary(APIModel):

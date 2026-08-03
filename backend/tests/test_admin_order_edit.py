@@ -211,3 +211,59 @@ def test_edit_rejects_completed_or_cancelled_status_and_manual_items(
     )
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "order_cancelled"
+
+
+def test_status_endpoint_cannot_complete_or_move_a_completed_order(
+    client: TestClient, db: Session, admin_token: str
+) -> None:
+    product = make_product(db, slug="admin-status-completed", name="Status", price="10.00")
+    order = _create_order(client, product)
+
+    complete = client.post(
+        f"/api/v1/admin/orders/{order['id']}/status",
+        headers=auth(admin_token),
+        json={"status": "completed"},
+    )
+    assert complete.status_code == 400
+    assert complete.json()["error"]["code"] == "completion_requires_confirmation"
+
+    db_order = db.get(Order, order["id"])
+    db_order.status = "completed"
+    db_order.is_locked = True
+    db.commit()
+    moved = client.post(
+        f"/api/v1/admin/orders/{order['id']}/status",
+        headers=auth(admin_token),
+        json={"status": "reviewing"},
+    )
+    assert moved.status_code == 400
+    assert moved.json()["error"]["code"] == "order_locked"
+
+
+def test_notes_change_requires_reason_and_records_material_activity(
+    client: TestClient, db: Session, admin_token: str
+) -> None:
+    product = make_product(db, slug="admin-notes-reason", name="Notes", price="10.00")
+    order = _create_order(client, product)
+
+    missing_reason = client.patch(
+        f"/api/v1/admin/orders/{order['id']}/notes",
+        headers=auth(admin_token),
+        json={"admin_notes": "Call before delivery"},
+    )
+    assert missing_reason.status_code == 400
+    assert missing_reason.json()["error"]["code"] == "edit_reason_required"
+
+    saved = client.patch(
+        f"/api/v1/admin/orders/{order['id']}/notes",
+        headers=auth(admin_token),
+        json={
+            "admin_notes": "Call before delivery",
+            "reason": "Customer requested a phone call",
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["admin_notes"] == "Call before delivery"
+    event = saved.json()["activities"][-1]
+    assert event["event_type"] == "order_notes_updated"
+    assert event["reason"] == "Customer requested a phone call"
