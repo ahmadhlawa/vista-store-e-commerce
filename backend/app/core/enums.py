@@ -33,6 +33,9 @@ class OrderStatus(StrEnum):
     READY = "ready"
     SHIPPED = "shipped"
     DELIVERED = "delivered"
+    REVIEWING = "reviewing"
+    PREPARING = "preparing"
+    OUT_FOR_DELIVERY = "out_for_delivery"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
 
@@ -63,8 +66,8 @@ class InvoiceStatus(StrEnum):
     """Internal invoice lifecycle; rows are never deleted."""
 
     ACTIVE = "active"
-    # Legacy value retained only while the old issuance service is replaced.
-    ISSUED = "issued"
+    # Compatibility alias for callers that still refer to issuance.
+    ISSUED = "active"
     CANCELLED = "cancelled"
     REPLACED = "replaced"
 

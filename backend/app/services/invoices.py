@@ -84,7 +84,7 @@ def get_for_order(db: Session, order_id: int) -> Invoice | None:
     return db.execute(
         select(Invoice)
         .options(selectinload(Invoice.items))
-        .where(Invoice.order_id == order_id)
+        .where(Invoice.order_id == order_id, Invoice.status == InvoiceStatus.ACTIVE.value)
     ).scalar_one_or_none()
 
 

@@ -94,9 +94,16 @@ class Order(TimestampMixin, Base):
     )
     # Compatibility accessor for the pre-replacement admin response. New workflow code
     # uses ``invoices`` and selects the active row explicitly.
-    invoice = relationship("Invoice", uselist=False, viewonly=True, overlaps="invoices,order")
+    invoice = relationship(
+        "Invoice",
+        primaryjoin="and_(Order.id == Invoice.order_id, Invoice.status == 'active')",
+        order_by="Invoice.id.desc()",
+        uselist=False,
+        viewonly=True,
+        overlaps="invoices,order",
+    )
     activities: Mapped[list["OrderActivity"]] = relationship(
-        back_populates="order", cascade="all, delete-orphan", order_by="OrderActivity.id"
+        back_populates="order", order_by="OrderActivity.id"
     )
 
     __table_args__ = (
@@ -170,7 +177,7 @@ class OrderActivity(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     order_id: Mapped[int] = mapped_column(
-        ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True
+        ForeignKey("orders.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     invoice_id: Mapped[int | None] = mapped_column(
         ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True, index=True

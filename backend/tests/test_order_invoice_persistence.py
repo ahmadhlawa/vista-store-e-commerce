@@ -8,11 +8,15 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import MetaData, create_engine, inspect, select
 from sqlalchemy.orm import Session
+import sqlalchemy as sa
 
 import app.models as models
+import pytest
 from app.core.config import settings
+from app.core.enums import InvoiceStatus, OrderStatus
 from app.db.base import Base
-from app.models import Invoice, Order, OrderItem
+from app.models import Invoice, Order, OrderActivity, OrderItem
+from sqlalchemy.exc import IntegrityError
 
 
 def _order() -> Order:
@@ -150,6 +154,43 @@ def test_order_and_invoice_workflow_columns_have_safe_defaults() -> None:
     assert Base.metadata.tables["invoices"].c.payment_status.server_default is not None
 
 
+def test_legacy_statuses_map_to_the_review_workflow() -> None:
+    """Collapsing review/preparation/delivery statuses loses the staff workflow state."""
+    assert OrderStatus.REVIEWING.value == "reviewing"
+    assert OrderStatus.PREPARING.value == "preparing"
+    assert OrderStatus.OUT_FOR_DELIVERY.value == "out_for_delivery"
+
+
+def test_order_activity_survives_an_attempt_to_delete_its_order(db: Session) -> None:
+    """Deleting an order must not cascade away its immutable activity trail."""
+    order = _order()
+    order.activities.append(OrderActivity(event_type="created", after_data={"status": "new"}))
+    db.add(order)
+    db.commit()
+
+    db.delete(order)
+    with pytest.raises(IntegrityError):
+        db.commit()
+    db.rollback()
+
+
+def test_order_invoice_view_selects_the_active_invoice_deterministically(db: Session) -> None:
+    """A scalar compatibility accessor must not return an arbitrary historical invoice."""
+    order = _order()
+    active = _invoice(order, invoice_number="INV-ACTIVE", status=InvoiceStatus.ACTIVE.value)
+    archived = _invoice(
+        order,
+        invoice_number="INV-REPLACED",
+        status=InvoiceStatus.REPLACED.value,
+        replacement_invoice=active,
+    )
+    db.add_all((active, archived))
+    db.commit()
+    db.expire_all()
+
+    assert db.get(Order, order.id).invoice.id == active.id
+
+
 def test_upgrade_from_0004_retains_and_backfills_legacy_order_and_invoice(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -183,6 +224,26 @@ def test_upgrade_from_0004_retains_and_backfills_legacy_order_and_invoice(
                 "updated_at": now,
             },
         )
+        for order_id, status in ((42, "confirmed"), (43, "processing"), (44, "ready"), (45, "shipped")):
+            connection.execute(
+                metadata.tables["orders"].insert(),
+                {
+                    "id": order_id,
+                    "order_number": f"ORD-LEGACY-{order_id}",
+                    "public_token": f"legacy-token-{order_id}",
+                    "status": status,
+                    "customer_name": "Legacy Customer",
+                    "customer_phone": "0590000000",
+                    "address": "Legacy address",
+                    "delivery_fee": Decimal("0.00"),
+                    "subtotal": Decimal("10.00"),
+                    "discount": Decimal("0.00"),
+                    "total": Decimal("10.00"),
+                    "payment_method": "cash_on_delivery",
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            )
         connection.execute(
             metadata.tables["invoices"].insert(),
             {
@@ -231,4 +292,150 @@ def test_upgrade_from_0004_retains_and_backfills_legacy_order_and_invoice(
     assert invoice["status"] == "active"
     assert invoice["payment_status"] == "unpaid"
     assert invoice["remaining_amount"] == Decimal("10.00")
+    with engine.connect() as connection:
+        mapped_statuses = dict(
+            connection.execute(
+                select(metadata.tables["orders"].c.id, metadata.tables["orders"].c.status).where(
+                    metadata.tables["orders"].c.id.in_((42, 43, 44, 45))
+                )
+            ).all()
+        )
+    assert mapped_statuses == {
+        42: "reviewing",
+        43: "reviewing",
+        44: "preparing",
+        45: "out_for_delivery",
+    }
+    with engine.begin() as connection:
+        connection.execute(
+            metadata.tables["orders"].insert(),
+            {
+                "id": 99,
+                "order_number": "ORD-DEFAULTS",
+                "public_token": "defaults-token",
+                "customer_name": "Default Customer",
+                "customer_phone": "0590000001",
+                "address": "Default address",
+                "delivery_fee": Decimal("0.00"),
+                "subtotal": Decimal("10.00"),
+                "discount": Decimal("0.00"),
+                "total": Decimal("10.00"),
+                "payment_method": "cash_on_delivery",
+                "created_at": now,
+                "updated_at": now,
+            },
+        )
+        connection.execute(
+            metadata.tables["invoices"].insert(),
+            {
+                "id": 100,
+                "invoice_number": "INV-DEFAULTS",
+                "order_id": 99,
+                "issued_at": now,
+                "order_number": "ORD-DEFAULTS",
+                "payment_method": "cash_on_delivery",
+                "store_name": "Vista",
+                "customer_name": "Default Customer",
+                "customer_phone": "0590000001",
+                "delivery_address": "Default address",
+                "currency_code": "ILS",
+                "currency_symbol": "₪",
+                "subtotal": Decimal("10.00"),
+                "discount": Decimal("0.00"),
+                "delivery_fee": Decimal("0.00"),
+                "tax_enabled": False,
+                "tax_rate": Decimal("0.000"),
+                "prices_include_tax": False,
+                "tax_amount": Decimal("0.00"),
+                "grand_total": Decimal("10.00"),
+                "created_at": now,
+                "updated_at": now,
+            },
+        )
+    with engine.connect() as connection:
+        default_order_status = connection.execute(
+            select(metadata.tables["orders"].c.status).where(metadata.tables["orders"].c.id == 99)
+        ).scalar_one()
+        default_invoice_status = connection.execute(
+            select(metadata.tables["invoices"].c.status).where(metadata.tables["invoices"].c.id == 100)
+        ).scalar_one()
+    assert default_order_status == "new"
+    assert default_invoice_status == "active"
+    engine.dispose()
+
+
+def test_downgrade_with_replacement_history_refuses_to_stamp_invalid_0004(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A replacement history cannot be downgraded to 0004 without deleting invoices."""
+    database_url = f"sqlite+pysqlite:///{(tmp_path / 'replacement-history.db').as_posix()}"
+    monkeypatch.setattr(settings, "DATABASE_URL", database_url)
+    config = Config("alembic.ini")
+    command.upgrade(config, "head")
+
+    engine = create_engine(database_url)
+    metadata = MetaData()
+    metadata.reflect(engine, only=["orders", "invoices"])
+    now = datetime(2026, 8, 3, 12, 0, 0)
+    with engine.begin() as connection:
+        connection.execute(
+            metadata.tables["orders"].insert(),
+            {
+                "id": 201,
+                "order_number": "ORD-HISTORY",
+                "public_token": "history-token",
+                "customer_name": "History Customer",
+                "customer_phone": "0590000002",
+                "address": "History address",
+                "delivery_fee": Decimal("0.00"),
+                "subtotal": Decimal("10.00"),
+                "discount": Decimal("0.00"),
+                "total": Decimal("10.00"),
+                "payment_method": "cash_on_delivery",
+                "created_at": now,
+                "updated_at": now,
+            },
+        )
+        base_invoice = {
+            "order_id": 201,
+            "issued_at": now,
+            "order_number": "ORD-HISTORY",
+            "payment_method": "cash_on_delivery",
+            "store_name": "Vista",
+            "customer_name": "History Customer",
+            "customer_phone": "0590000002",
+            "delivery_address": "History address",
+            "currency_code": "ILS",
+            "currency_symbol": "₪",
+            "subtotal": Decimal("10.00"),
+            "discount": Decimal("0.00"),
+            "delivery_fee": Decimal("0.00"),
+            "tax_enabled": False,
+            "tax_rate": Decimal("0.000"),
+            "prices_include_tax": False,
+            "tax_amount": Decimal("0.00"),
+            "grand_total": Decimal("10.00"),
+            "created_at": now,
+            "updated_at": now,
+        }
+        connection.execute(
+            metadata.tables["invoices"].insert(),
+            {**base_invoice, "id": 301, "invoice_number": "INV-HISTORY-OLD", "status": "replaced"},
+        )
+        connection.execute(
+            metadata.tables["invoices"].insert(),
+            {
+                **base_invoice,
+                "id": 302,
+                "invoice_number": "INV-HISTORY-ACTIVE",
+                "status": "active",
+                "replacement_invoice_id": 301,
+            },
+        )
+
+    with pytest.raises(RuntimeError, match="replacement invoice history"):
+        command.downgrade(config, "0004_import_batches")
+    command.upgrade(config, "head")
+    with engine.connect() as connection:
+        assert connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0005_order_invoice_workflow"
     engine.dispose()

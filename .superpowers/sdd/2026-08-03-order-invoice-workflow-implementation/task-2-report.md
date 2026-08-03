@@ -33,3 +33,17 @@
 - `Order.invoice` remains a compatibility view for existing readers; new workflow code must use `Order.invoices` and explicitly select the active row.
 - Downgrade preserves replacement rows. If an order has multiple historical invoices, it intentionally does not recreate the old unique `order_id` constraint, because recreating it would require deleting records.
 - The requested corrected map at `docs/superpowers/plans/2026-08-03-order-invoice-workflow-implementation.md` was absent from the assigned worktree; the approved design and implementation-plan documents were used.
+
+## Round 1 fixes
+
+- Added `reviewing`, `preparing`, and `out_for_delivery` lifecycle values. The migration now maps legacy `confirmed`/`processing`, `ready`, and `shipped` values respectively.
+- The migration now establishes actual SQLite database defaults for order status (`new`) and invoice status (`active`); focused upgrade tests insert rows without those values to prove the upgraded schema, not just metadata.
+- Order activity is no longer delete-orphan/cascade data. Its database foreign key is `RESTRICT`, so an order deletion cannot erase immutable activity history.
+- The compatibility `Order.invoice` relationship deterministically selects the active invoice. The legacy issuance enum is an `active` alias and the existing invoice reader selects only active rows.
+- Downgrade refuses before any schema mutation when replacement history would violate 0004's one-invoice unique constraint. Upgrade tolerates a prior schema missing that constraint, preventing a false 0004 stamp from breaking re-upgrade.
+
+### Round 1 tests
+
+- Red: focused additions failed for missing lifecycle values, cascading activity deletion, and incorrect legacy mappings.
+- Green: `pytest -q tests/test_order_invoice_persistence.py` -> 9 passed.
+- The broad `tests/test_invoices.py` regression command exceeded 120 seconds without emitting a failure and was stopped; this is a verification limitation, not a passing result.

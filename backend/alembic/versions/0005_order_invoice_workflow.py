@@ -17,12 +17,26 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _has_order_unique_constraint() -> bool:
+    return any(
+        constraint.get("name") == "uq_invoices_order_id"
+        for constraint in sa.inspect(op.get_bind()).get_unique_constraints("invoices")
+    )
+
+
+def _has_replacement_invoice_history() -> bool:
+    return op.get_bind().execute(
+        sa.text("SELECT 1 FROM invoices GROUP BY order_id HAVING COUNT(*) > 1 LIMIT 1")
+    ).first() is not None
+
+
 def upgrade() -> None:
     # SQLite batch migrations replace tables; temporarily disable FK enforcement so an
     # existing invoice can continue to reference its order while that table is rebuilt.
     if op.get_bind().dialect.name == "sqlite":
         op.execute("PRAGMA foreign_keys=OFF")
     with op.batch_alter_table("orders") as batch:
+        batch.alter_column("status", existing_type=sa.String(length=32), server_default="new")
         batch.add_column(
             sa.Column("source", sa.String(length=24), nullable=False, server_default="website")
         )
@@ -41,7 +55,9 @@ def upgrade() -> None:
     # The previous UI issued invoices at confirmation. Retain those records as completed
     # legacy orders; all other legacy statuses are mapped to the nearest new lifecycle state.
     op.execute("UPDATE orders SET status = 'new' WHERE status = 'pending'")
-    op.execute("UPDATE orders SET status = 'processing' WHERE status IN ('confirmed', 'processing', 'ready')")
+    op.execute("UPDATE orders SET status = 'reviewing' WHERE status IN ('confirmed', 'processing')")
+    op.execute("UPDATE orders SET status = 'preparing' WHERE status = 'ready'")
+    op.execute("UPDATE orders SET status = 'out_for_delivery' WHERE status = 'shipped'")
     op.execute("UPDATE orders SET status = 'completed' WHERE status = 'delivered'")
     op.execute(
         "UPDATE orders SET status = 'completed', is_locked = 1, "
@@ -74,8 +90,11 @@ def upgrade() -> None:
         "original_variant_description = variant_description, original_unit_price = unit_price"
     )
 
+    has_order_unique_constraint = _has_order_unique_constraint()
     with op.batch_alter_table("invoices") as batch:
-        batch.drop_constraint("uq_invoices_order_id", type_="unique")
+        batch.alter_column("status", existing_type=sa.String(length=16), server_default="active")
+        if has_order_unique_constraint:
+            batch.drop_constraint("uq_invoices_order_id", type_="unique")
         batch.add_column(sa.Column("replacement_invoice_id", sa.Integer(), nullable=True))
         batch.add_column(
             sa.Column("payment_status", sa.String(length=24), nullable=False, server_default="unpaid")
@@ -120,7 +139,7 @@ def upgrade() -> None:
         sa.Column("after_data", sa.JSON(), nullable=True),
         sa.Column("reason", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.ForeignKeyConstraint(["order_id"], ["orders.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["order_id"], ["orders.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["invoice_id"], ["invoices.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["actor_admin_id"], ["admin_users.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
@@ -133,6 +152,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if _has_replacement_invoice_history():
+        raise RuntimeError(
+            "Cannot downgrade replacement invoice history without deleting invoices."
+        )
     op.drop_index("ix_order_activities_created_at", table_name="order_activities")
     op.drop_index("ix_order_activities_invoice_id", table_name="order_activities")
     op.drop_index("ix_order_activities_order_id", table_name="order_activities")
@@ -156,14 +179,9 @@ def downgrade() -> None:
         batch.drop_column("paid_amount")
         batch.drop_column("payment_status")
         batch.drop_column("replacement_invoice_id")
-
-    # Do not delete archived replacements merely to recreate the old one-row constraint.
-    duplicate_order = op.get_bind().execute(
-        sa.text("SELECT order_id FROM invoices GROUP BY order_id HAVING COUNT(*) > 1 LIMIT 1")
-    ).first()
-    if duplicate_order is None:
-        with op.batch_alter_table("invoices") as batch:
-            batch.create_unique_constraint("uq_invoices_order_id", ["order_id"])
+        batch.alter_column("status", existing_type=sa.String(length=16), server_default=None)
+    with op.batch_alter_table("invoices") as batch:
+        batch.create_unique_constraint("uq_invoices_order_id", ["order_id"])
 
     with op.batch_alter_table("order_items") as batch:
         batch.drop_column("original_unit_price")
@@ -176,6 +194,11 @@ def downgrade() -> None:
     op.drop_index("ix_orders_status_source_created_at", table_name="orders")
     op.drop_index("ix_orders_client_reference", table_name="orders")
     op.drop_index("ix_orders_source", table_name="orders")
+    op.execute("UPDATE orders SET status = 'pending' WHERE status = 'new'")
+    op.execute("UPDATE orders SET status = 'confirmed' WHERE status = 'reviewing'")
+    op.execute("UPDATE orders SET status = 'ready' WHERE status = 'preparing'")
+    op.execute("UPDATE orders SET status = 'shipped' WHERE status = 'out_for_delivery'")
+    op.execute("UPDATE orders SET status = 'delivered' WHERE status = 'completed'")
     with op.batch_alter_table("orders") as batch:
         batch.drop_constraint("fk_orders_completed_by_admin_id", type_="foreignkey")
         batch.drop_column("completed_by_admin_id")
@@ -185,3 +208,4 @@ def downgrade() -> None:
         batch.drop_column("client_reference")
         batch.drop_column("source_note")
         batch.drop_column("source")
+        batch.alter_column("status", existing_type=sa.String(length=32), server_default=None)
