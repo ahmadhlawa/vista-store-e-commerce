@@ -272,7 +272,7 @@ def test_create_order_calculates_domain_totals_and_records_a_creation_activity(
 
 
 def test_status_change_records_activity_and_invoice_uses_validated_payment_amounts(
-    db: Session, category
+    db: Session, category, normal_admin
 ) -> None:
     product = make_product(db, category_id=category.id, price="10.00")
     order = orders_service.create_order(
@@ -285,7 +285,7 @@ def test_status_change_records_activity_and_invoice_uses_validated_payment_amoun
         ),
     )
 
-    orders_service.change_status(db, order, "confirmed")
+    orders_service.change_status(db, order, "confirmed", admin=normal_admin)
     invoice = invoices_service.get_for_order(db, order.id)
 
     assert invoice is not None
@@ -294,3 +294,5 @@ def test_status_change_records_activity_and_invoice_uses_validated_payment_amoun
     assert invoice.refunded_amount == Decimal("0.00")
     assert invoice.remaining_amount == Decimal("10.00")
     assert any(event.event_type == "order_status_changed" for event in order.activities)
+    invoice_event = next(event for event in order.activities if event.event_type == "invoice_issued")
+    assert invoice_event.actor_admin_id == normal_admin.id

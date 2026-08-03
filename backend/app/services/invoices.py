@@ -157,7 +157,9 @@ def get_for_order(db: Session, order_id: int) -> Invoice | None:
     ).scalar_one_or_none()
 
 
-def issue_for_order(db: Session, order: Order) -> Invoice:
+def issue_for_order(
+    db: Session, order: Order, *, admin: AdminUser | None = None
+) -> Invoice:
     """Issue the invoice for `order`, or return the one it already has.
 
     Idempotent by design: confirming an already-invoiced order is a no-op that returns
@@ -248,7 +250,7 @@ def issue_for_order(db: Session, order: Order) -> Invoice:
         db,
         order_id=order.id,
         invoice_id=invoice.id,
-        actor_admin_id=None,
+        actor_admin_id=admin.id if admin else None,
         event_type="invoice_issued",
         before_data=None,
         after_data={"invoice_number": invoice.invoice_number, "total_amount": invoice.grand_total},

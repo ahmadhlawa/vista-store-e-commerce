@@ -201,6 +201,43 @@ def test_order_activity_survives_an_attempt_to_delete_its_order(db: Session) -> 
     db.rollback()
 
 
+def test_migration_blocks_direct_sql_activity_updates_and_deletes(tmp_path: Path, monkeypatch) -> None:
+    """Audit immutability must hold even when ORM mapper hooks are bypassed."""
+    database_url = f"sqlite+pysqlite:///{(tmp_path / 'activity-triggers.db').as_posix()}"
+    monkeypatch.setattr(settings, "DATABASE_URL", database_url)
+    config = Config("alembic.ini")
+    command.upgrade(config, "head")
+
+    engine = create_engine(database_url)
+    with Session(engine) as session:
+        order = _order()
+        order.order_number = "ORD-TRIGGER"
+        order.public_token = "trigger-token"
+        session.add(order)
+        session.flush()
+        activity = OrderActivity(order_id=order.id, event_type="created", after_data={"status": "new"})
+        session.add(activity)
+        session.commit()
+        activity_id = activity.id
+
+    with engine.begin() as connection:
+        with pytest.raises(IntegrityError, match="order_activity_immutable"):
+            connection.execute(
+                sa.text("UPDATE order_activities SET reason = 'tampered' WHERE id = :id"),
+                {"id": activity_id},
+            )
+    with engine.begin() as connection:
+        with pytest.raises(IntegrityError, match="order_activity_immutable"):
+            connection.execute(
+                sa.text("DELETE FROM order_activities WHERE id = :id"), {"id": activity_id}
+            )
+    with engine.connect() as connection:
+        assert connection.execute(
+            sa.text("SELECT COUNT(*) FROM order_activities WHERE id = :id"), {"id": activity_id}
+        ).scalar_one() == 1
+    engine.dispose()
+
+
 def test_order_invoice_view_selects_the_active_invoice_deterministically(db: Session) -> None:
     """A scalar compatibility accessor must not return an arbitrary historical invoice."""
     order = _order()
@@ -473,5 +510,5 @@ def test_downgrade_with_replacement_history_refuses_to_stamp_invalid_0004(
         command.downgrade(config, "0004_import_batches")
     command.upgrade(config, "head")
     with engine.connect() as connection:
-        assert connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0007_active_invoice_marker_null_safe"
+        assert connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0008_order_activity_immutable_triggers"
     engine.dispose()

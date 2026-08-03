@@ -351,7 +351,7 @@ def change_status(
     invoice_id: int | None = None
     if new_status == OrderStatus.CONFIRMED.value:
         # Idempotent: an order that was confirmed before keeps its original invoice.
-        invoice_id = invoices_service.issue_for_order(db, order).id
+        invoice_id = invoices_service.issue_for_order(db, order, admin=admin).id
     elif new_status == OrderStatus.CANCELLED.value:
         invoice = invoices_service.cancel_for_order(db, order, admin=admin, reason=note)
         invoice_id = invoice.id if invoice else None
