@@ -23,9 +23,17 @@ another client instance built from this template is never branded as Vista.
 Its sampled colours are the storefront's brand tokens: primary `#484397`
 (deep blue-purple), accent `#FFC50A` (yellow), on white.
 
-Still wanted: a **vector or transparent-background** original. This one is a JPEG, so
-it carries a white box rather than transparency — visible against any non-white
-surface, and it is the version that prints on invoices.
+Still wanted: a **vector or transparent-background** original, **trimmed**.
+
+Two measured limitations of the file we have:
+
+- It is a JPEG, so it carries a white box rather than transparency — visible against
+  any non-white surface, and it is the version that prints on invoices.
+- Roughly a third of it is white margin. The artwork occupies only x 19.8–80.4% and
+  y 34.6–64.6% of the 1000×1000 canvas. The header sizes logos with `object-fit:
+  contain` so no client's mark is ever cropped or stretched, which means this file's
+  own padding is rendered too: the mark reads smaller than the space it sits in.
+  Trimming the original fixes it with no code change.
 
 Nothing here was taken from a social page, and nothing was generated as a stand-in.
 

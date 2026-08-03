@@ -73,10 +73,13 @@
   min-width: 0;
 }
 
+/* `contain`, so no client's logo is ever cropped or distorted by the header.
+   A file with its own white margin baked in therefore renders smaller than the
+   box — the fix for that is a trimmed original, not a crop here. */
 .vs-logo__img {
-  height: 40px;
+  height: 48px;
   width: auto;
-  max-width: 190px;
+  max-width: 210px;
   object-fit: contain;
   object-position: right center;
 }

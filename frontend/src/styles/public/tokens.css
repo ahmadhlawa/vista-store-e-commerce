@@ -152,8 +152,10 @@
     --vs-tabbar-h: 64px;
     --vs-fs-h1: 26px;
     --vs-fs-h2: 20px;
-    /* An intentional mobile crop rather than a squeezed desktop banner. */
-    --vs-ar-hero: 5 / 6;
+    /* A tablet still reads a landscape banner; the portrait crop is for phones
+       only, and starts at 600 (below). At 768 a 5/6 hero was 878px tall — most
+       of the screen for one advertisement. */
+    --vs-ar-hero: 16 / 9;
     /* The fixed rail leaves the layout entirely below 900: its trigger moves
        into the header, so no width is reserved and nothing is covered. */
     --vs-rail-w: 0px;
@@ -176,6 +178,8 @@
     --vs-grid-gap: 12px;
     --vs-fs-h1: 23px;
     --vs-fs-h2: 18.5px;
+    /* An intentional phone crop rather than a squeezed desktop banner. */
+    --vs-ar-hero: 5 / 6;
   }
 }
 

@@ -175,7 +175,10 @@
 .vs-rail {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(210px, calc((100% - (var(--vs-cols) - 1) * var(--vs-grid-gap)) / var(--vs-cols)));
+  /* The floor matters more than it used to: a rail always overflows, so this is
+     the width the cards actually take. At 210px they were two-thirds the size of
+     the grid cards on the same page, and the reveal panel had almost no room. */
+  grid-auto-columns: minmax(280px, calc((100% - (var(--vs-cols) - 1) * var(--vs-grid-gap)) / var(--vs-cols)));
   gap: var(--vs-grid-gap);
   overflow-x: auto;
   scroll-snap-type: x proximity;
