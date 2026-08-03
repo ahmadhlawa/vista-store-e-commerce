@@ -105,6 +105,63 @@ def test_seed_creates_every_declared_row(importer: PreviewImporter, db: Session)
     assert product.primary_image_url is not None
 
 
+def test_seed_gives_a_product_its_declared_second_image(
+    db: Session, storage: LocalStorageProvider
+) -> None:
+    """A card cross-fades to the second image, so the dataset can name one.
+
+    It stays optional: `prod-b` here declares no cover at all and `prod-a`'s
+    sibling case — a cover with no second image — is what the no-secondary card
+    fallback renders, so both paths are exercised by one seed.
+    """
+    document = {
+        **DOCUMENT,
+        "media": [
+            *DOCUMENT["media"],
+            {"key": "tile2", "alt_text": "tile 2", "start_color": "#778899", "end_color": "#aabbcc"},
+        ],
+        "products": [
+            {**DOCUMENT["products"][0], "secondary_image": "tile2"},
+            DOCUMENT["products"][1],
+        ],
+    }
+    PreviewImporter(db, parse_dataset(document), storage=storage).seed()
+
+    with_second = db.query(Product).filter_by(slug="prod-a").one()
+    assert len(with_second.images) == 2
+    assert with_second.images[0].is_primary is True
+    assert with_second.images[1].is_primary is False
+    assert with_second.secondary_image_url == with_second.images[1].url
+    assert with_second.secondary_image_url != with_second.primary_image_url
+
+    without = db.query(Product).filter_by(slug="prod-b").one()
+    assert without.secondary_image_url is None
+
+
+def test_dropping_a_secondary_image_removes_the_row(
+    db: Session, storage: LocalStorageProvider
+) -> None:
+    """Re-seeding without the key takes the image away rather than orphaning it."""
+    document = {
+        **DOCUMENT,
+        "media": [
+            *DOCUMENT["media"],
+            {"key": "tile2", "alt_text": "tile 2", "start_color": "#778899", "end_color": "#aabbcc"},
+        ],
+        "products": [
+            {**DOCUMENT["products"][0], "secondary_image": "tile2"},
+            DOCUMENT["products"][1],
+        ],
+    }
+    PreviewImporter(db, parse_dataset(document), storage=storage).seed()
+    assert len(db.query(Product).filter_by(slug="prod-a").one().images) == 2
+
+    PreviewImporter(db, parse_dataset(DOCUMENT), storage=storage).seed(force=True)
+    product = db.query(Product).filter_by(slug="prod-a").one()
+    assert len(product.images) == 1
+    assert product.secondary_image_url is None
+
+
 def test_plan_writes_nothing(importer: PreviewImporter, db: Session) -> None:
     plan = importer.plan()
     db.rollback()

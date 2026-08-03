@@ -282,3 +282,43 @@ def test_product_images_pick_a_primary(client: TestClient, db: Session, admin_to
         headers=auth(admin_token),
     )
     assert removed.status_code == 200
+
+
+def test_list_projection_carries_a_secondary_image(
+    client: TestClient, db: Session, admin_token: str
+) -> None:
+    """A catalogue card swaps to the second image on hover.
+
+    The field has to ride on the *list* payload: without it every card in a grid
+    would need a product-detail request just to know whether it has a second
+    picture. A product with one image reports None, which is the fallback the
+    cards render as "cover stays put".
+    """
+    product = make_product(db, slug="two-shots", name="منتج بصورتين")
+
+    single = next(
+        row
+        for row in client.get("/api/v1/products").json()["items"]
+        if row["slug"] == product.slug
+    )
+    assert single["secondary_image_url"] is None
+
+    for url in ("/media/cover.png", "/media/contents.png"):
+        created = client.post(
+            f"/api/v1/admin/products/{product.id}/images",
+            headers=auth(admin_token),
+            json={"url": url},
+        )
+        assert created.status_code == 201
+
+    listed = next(
+        row
+        for row in client.get("/api/v1/products").json()["items"]
+        if row["slug"] == product.slug
+    )
+    assert listed["primary_image_url"] == "/media/cover.png"
+    assert listed["secondary_image_url"] == "/media/contents.png"
+    # The detail projection agrees with the list one.
+    assert client.get(f"/api/v1/products/{product.slug}").json()["secondary_image_url"] == (
+        "/media/contents.png"
+    )

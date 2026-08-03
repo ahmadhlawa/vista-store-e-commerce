@@ -41,7 +41,7 @@ describe("public shell", () => {
 });
 
 describe("category navigation", () => {
-  it("opens the category panel from the header, locks the page and closes on escape", async () => {
+  it("opens the category drawer from the header, locks the page and closes on escape", async () => {
     stubApi(storefrontRoutes);
     renderApp("/");
 
@@ -50,24 +50,32 @@ describe("category navigation", () => {
 
     await userEvent.click(trigger);
     expect(openCategories()).toHaveAttribute("aria-expanded", "true");
+
+    const panel = screen.getByRole("dialog", { name: "تصنيفات المنتجات" });
+    expect(panel).toHaveAttribute("aria-modal", "true");
     // Every category comes from the API, never from a hard-coded list.
-    const panel = document.getElementById("vs-mega");
     expect(within(panel).getByText(categoryFixture.name)).toBeInTheDocument();
     expect(document.body.style.overflow).toBe("hidden");
+    // Focus moved into the dialog rather than staying behind it.
+    expect(panel).toContainElement(document.activeElement);
 
     await userEvent.keyboard("{Escape}");
-    expect(document.getElementById("vs-mega")).toBeNull();
+    await waitFor(() => expect(dialogs()).toHaveLength(0));
     expect(document.body.style.overflow).not.toBe("hidden");
+    expect(openCategories()).toHaveFocus();
   });
 
-  it("links each category card to its own route", async () => {
+  it("links each category to its own route and closes the drawer on navigation", async () => {
     stubApi(storefrontRoutes);
     renderApp("/");
 
     await userEvent.click(await screen.findByRole("button", { name: "كل الأقسام" }));
-    const panel = document.getElementById("vs-mega");
+    const panel = screen.getByRole("dialog", { name: "تصنيفات المنتجات" });
     const link = within(panel).getByText(categoryFixture.name).closest("a");
     expect(link).toHaveAttribute("href", `/category/${categoryFixture.slug}`);
+
+    await userEvent.click(link);
+    await waitFor(() => expect(dialogs()).toHaveLength(0));
   });
 });
 

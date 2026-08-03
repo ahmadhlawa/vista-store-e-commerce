@@ -132,19 +132,35 @@ describe("product card behaviour", () => {
     expect(cartStorage.load()).toHaveLength(0);
   });
 
-  it("gives a package its own card, its item count and its own action", async () => {
+  it("gives a package its own card, its contents and its own action", async () => {
     stubApi({ ...storefrontRoutes, "/api/v1/products": page([packageProduct]) });
     renderApp("/shop");
 
     const card = within(await cardOf(packageProduct.name));
     expect(card.getByText("بكج")).toBeInTheDocument();
-    expect(card.getByText("يحتوي على 3 عناصر")).toBeInTheDocument();
+    // The contents summary is whatever the payload actually knows: the item
+    // names when it carries them, never an invented list.
+    expect(card.getByText("كرت دعوة")).toBeInTheDocument();
     expect(card.getByText("340 ₪")).toBeInTheDocument();
     expect(card.getByText("410 ₪")).toBeInTheDocument();
+    expect(card.getByRole("link", { name: /التفاصيل/ })).toHaveAttribute(
+      "href",
+      "/product/wedding-package",
+    );
 
     await userEvent.click(card.getByRole("button", { name: /أضف البكج إلى العربة/ }));
     await waitFor(() => expect(cartStorage.load()).toHaveLength(1));
     expect(cartStorage.load()[0].unit).toBe(340);
+  });
+
+  it("falls back to the item count when the list payload carries no contents", async () => {
+    // What the list projection actually looks like: a count, no item rows.
+    const listShape = { ...packageProduct, package_items: [], package_item_count: 3 };
+    stubApi({ ...storefrontRoutes, "/api/v1/products": page([listShape]) });
+    renderApp("/shop");
+
+    const card = within(await cardOf(packageProduct.name));
+    expect(card.getByText("يحتوي على 3 عناصر")).toBeInTheDocument();
   });
 
   it("shows the discount on a sale product and keeps both prices legible", async () => {
@@ -178,6 +194,82 @@ describe("product card behaviour", () => {
     await waitFor(() =>
       expect(screen.queryByRole("dialog", { name: "نظرة سريعة" })).not.toBeInTheDocument(),
     );
+  });
+
+  it("carries everything a shopper acts on in the card's reveal panel", async () => {
+    stubApi(storefrontRoutes);
+    renderApp("/shop");
+
+    const card = await cardOf(productFixture.name);
+    const panel = card.querySelector(".vs-card__panel");
+    expect(panel).not.toBeNull();
+
+    // Nothing the shopper needs sits outside the panel.
+    expect(within(panel).getByText(productFixture.name)).toBeInTheDocument();
+    expect(within(panel).getByText("100 ₪")).toBeInTheDocument();
+    expect(within(panel).getByText("130 ₪")).toBeInTheDocument();
+    expect(within(panel).getByText("متوفر")).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: /أضف إلى العربة/ })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: /نظرة سريعة على/ })).toBeInTheDocument();
+  });
+
+  it("swaps to a second image only when the product has one", async () => {
+    const withSecond = {
+      ...productFixture,
+      primary_image_url: "/media/one.png",
+      secondary_image_url: "/media/two.png",
+    };
+    const withoutSecond = {
+      ...productFixture,
+      id: 9,
+      name: "شمعة معطّرة",
+      slug: "candle",
+      primary_image_url: "/media/one.png",
+      secondary_image_url: null,
+    };
+    stubApi({ ...storefrontRoutes, "/api/v1/products": page([withSecond, withoutSecond]) });
+    renderApp("/shop");
+
+    const swapper = await cardOf(withSecond.name);
+    expect(swapper.querySelector(".vs-card__img2")).toHaveAttribute("src", "/media/two.png");
+
+    // The fallback: cover stays, panel still reveals, no invented second image.
+    const plain = await cardOf(withoutSecond.name);
+    expect(plain.querySelector(".vs-card__img2")).toBeNull();
+    expect(plain.querySelector(".vs-card__panel")).not.toBeNull();
+  });
+
+  it("adds exactly one line however fast the button is pressed", async () => {
+    stubApi(storefrontRoutes);
+    renderApp("/shop");
+
+    const card = within(await cardOf(productFixture.name));
+    const button = card.getByRole("button", { name: /أضف إلى العربة/ });
+    await userEvent.click(button);
+    await userEvent.click(button, { pointerEventsCheck: 0 });
+    await userEvent.click(button, { pointerEventsCheck: 0 });
+
+    await waitFor(() => expect(cartStorage.load()).toHaveLength(1));
+    expect(cartStorage.load()[0].qty).toBe(1);
+  });
+
+  it("reveals the panel on a touch tap instead of navigating away", async () => {
+    stubApi(storefrontRoutes);
+    renderApp("/shop");
+
+    const card = await cardOf(productFixture.name);
+    expect(card).toHaveAttribute("data-revealed", "false");
+
+    // A finger, not a mouse: the first tap on the artwork reveals rather than
+    // following the card's link.
+    const media = card.querySelector(".vs-card__link");
+    await userEvent.pointer([
+      { target: media, keys: "[TouchA>]" },
+      { target: media, keys: "[/TouchA]" },
+    ]);
+
+    await waitFor(() => expect(card).toHaveAttribute("data-revealed", "true"));
+    expect(window.location.pathname).not.toContain("/product/");
   });
 
   it("keeps the add-to-cart acknowledgement when motion is reduced", async () => {
