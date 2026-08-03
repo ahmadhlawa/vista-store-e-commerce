@@ -2,19 +2,25 @@
 
 /* ── hero ──────────────────────────────────────────────────────────────── */
 
-/* One advertising image across the full content width. Nothing sits beside it,
-   so the row is a single column at every size. */
+/* One advertising image across the full storefront width. Nothing sits beside
+   it and nothing frames it: no container, no gutter, no radius — the band runs
+   edge to edge from the nav band down to the first section, and `.vs-public`'s
+   own rail gutter is what stops it short of the category rail. */
 .vs-herorow {
-  padding-block: 20px 0;
+  padding: 0;
 }
 
 /* The ratio reserves the box before the image decodes, so the page never jumps.
    It is a token, so a wide desktop banner, a squarer tablet crop and a portrait
-   mobile crop are all one decision (see tokens.css). */
+   mobile crop are all one decision (see tokens.css). The cap keeps a very wide
+   monitor from turning the same ratio into a wall of advertisement. */
 .vs-hero {
   position: relative;
+  /* Explicit, because with `aspect-ratio` and an `auto` width Chrome derives the
+     width back from the capped height and the band stops filling the row. */
+  width: 100%;
   aspect-ratio: var(--vs-ar-hero);
-  border-radius: var(--vs-r-xl);
+  max-height: var(--vs-hero-max-h);
   overflow: hidden;
   background: var(--vs-surface-2);
   isolation: isolate;
@@ -68,7 +74,7 @@
   align-items: flex-start;
   justify-content: center;
   gap: 12px;
-  padding: 40px 44px;
+  padding: 40px calc(var(--vs-gutter) + 24px);
   max-width: min(620px, 78%);
   color: #fff;
 }
@@ -99,10 +105,12 @@
   margin-block-start: 8px;
 }
 
+/* Aligned to the container gutter, so the controls sit on the same vertical as
+   the page content even though the band itself is full bleed. */
 .vs-hero__dots {
   position: absolute;
   inset-block-end: 18px;
-  inset-inline-start: 40px;
+  inset-inline-start: calc(var(--vs-gutter) + 12px);
   display: flex;
   gap: 7px;
   z-index: 3;
@@ -127,7 +135,7 @@
 .vs-hero__arrows {
   position: absolute;
   inset-block-end: 14px;
-  inset-inline-end: 16px;
+  inset-inline-end: calc(var(--vs-gutter) + 8px);
   display: flex;
   gap: 8px;
   z-index: 3;
@@ -154,10 +162,10 @@
 
 @media (max-width: 599px) {
   .vs-hero__body {
-    padding: 24px 20px 56px;
+    padding: 24px calc(var(--vs-gutter) + 4px) 56px;
   }
   .vs-hero__dots {
-    inset-inline-start: 20px;
+    inset-inline-start: calc(var(--vs-gutter) + 4px);
   }
   .vs-hero__arrows {
     display: none;
@@ -239,40 +247,54 @@
   }
 }
 
+/* A white panel with one Vista-yellow rule, not a purple slab. The page's large
+   surfaces stay white and warm off-white; purple is spent on the button, which
+   is the only thing here that is actually an action. */
 .vs-split__panel {
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 12px;
-  padding: 32px;
-  border-radius: var(--vs-r-xl);
-  background: linear-gradient(155deg, var(--vs-primary), var(--vs-primary-mid));
-  color: #fff;
+  padding: 30px;
+  border-radius: var(--vs-r-lg);
+  background: var(--vs-surface);
+  border: 1px solid var(--vs-border);
+  color: var(--vs-ink);
+}
+
+.vs-split__panel::before {
+  content: "";
+  align-self: flex-start;
+  width: 44px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--vs-accent);
 }
 
 .vs-split__title {
   font-size: var(--vs-fs-h2);
   font-weight: 800;
   line-height: 1.4;
+  color: var(--vs-ink);
 }
 
 .vs-split__desc {
   font-size: var(--vs-fs-sm);
   line-height: 1.9;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--vs-ink-3);
 }
 
 .vs-split__cta {
   align-self: flex-start;
   margin-block-start: 6px;
-  background: var(--vs-accent);
-  border-color: var(--vs-accent);
-  color: var(--vs-ink);
+  background: var(--vs-primary);
+  border-color: var(--vs-primary);
+  color: var(--vs-ink-invert);
 }
 
 .vs-split__cta:hover {
-  background: var(--vs-accent-dark);
-  border-color: var(--vs-accent-dark);
+  background: var(--vs-primary-dark);
+  border-color: var(--vs-primary-dark);
 }
 
 .vs-split__grid {
@@ -323,7 +345,11 @@
 
 /* ── hero skeleton ─────────────────────────────────────────────────────── */
 
+/* Reserves exactly the band the hero will occupy, radius and cap included, so
+   nothing on the page moves when the slides arrive. */
 .vs-hero--skel {
+  width: 100%;
   aspect-ratio: var(--vs-ar-hero);
-  border-radius: var(--vs-r-xl);
+  max-height: var(--vs-hero-max-h);
+  border-radius: 0;
 }

@@ -73,7 +73,11 @@ from.
 * **The five packages** (`preview-package-graduation`, `preview-package-wedding`,
   `preview-package-wedding-welcome`, `preview-package-eid`, `preview-package-gift`). Assembled
   from confirmed product types, but the bundles themselves are invented.
-* **The four hero slides and their copy.**
+* **The four hero slides and their copy.** Three carry an eyebrow, a paragraph and a
+  button, which is what makes the storefront print copy over their artwork. The fourth
+  (`hero-apparel`) deliberately carries none, so it demonstrates the image-only case: a
+  finished advertisement is shown as the bare image, and its title stays the slide's
+  name in Admin and the image's `alt` text.
 * **The yellow/purple placeholder palette,** inferred from the bio's 💛/💜 emoji. Used only
   for generated images; the store theme is untouched.
 

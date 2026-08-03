@@ -12,9 +12,10 @@ const SWIPE_PX = 45;
  * the full content width. There is nothing beside it — a slide is the artwork,
  * not a frame around a headline.
  *
- * Copy is rendered only where the Admin actually supplied some, so an
- * advertisement that already carries its own typography is not overprinted with
- * a second heading. The veil follows the copy for the same reason.
+ * Copy is rendered only where the Admin actually supplied supporting text — an
+ * eyebrow, a paragraph or a button — so an advertisement that already carries
+ * its own typography is not overprinted with a second heading. The veil follows
+ * the copy for the same reason.
  *
  * Autoplay stops on hover, on focus, on any manual move and while the tab is
  * hidden, and never starts at all under `prefers-reduced-motion`. Swiping is a
@@ -80,7 +81,11 @@ export default function Hero({ slides }) {
     >
       {slides.map((slide, slideIndex) => {
         const active = slideIndex === index;
-        const hasCopy = !!(slide.title || slide.desc || slide.subtitle || slide.cta);
+        // `overlay` is what marks a slide as a complete advertisement: see
+        // normalizeHeroSlide. Nothing is printed over artwork that says it is
+        // already finished — no headline, no paragraph, no eyebrow, no button.
+        const hasCopy =
+          slide.overlay && !!(slide.title || slide.desc || slide.subtitle || slide.cta);
         return (
           <div
             key={slide.id}

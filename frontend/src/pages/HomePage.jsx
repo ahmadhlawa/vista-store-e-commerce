@@ -255,7 +255,10 @@ export default function HomePage() {
 
   return (
     <>
-      <div className="vs-container vs-herorow">
+      {/* Deliberately outside `.vs-container`: the advertising band runs the full
+          storefront width, stopping only where the category rail's gutter
+          begins. Every section below it stays inside the container. */}
+      <div className="vs-herorow">
         {hero.status === "loading" ? (
           <div className="vs-skel vs-hero--skel" />
         ) : (

@@ -66,6 +66,14 @@ const BANNER_FALLBACKS = [
 ];
 
 export function normalizeHeroSlide(raw, index) {
+  // What decides whether copy is printed over the artwork: an eyebrow, a
+  // paragraph or a button — the fields an owner fills in *in addition to*
+  // naming the slide. A slide with an image and nothing but a name is a
+  // finished advertisement whose artwork already carries its own typography;
+  // its title stays the slide's label in Admin and the image's alt text, and
+  // nothing is overprinted on it. A slide with no image has only its copy, so
+  // that always shows — otherwise the slide would be a blank gradient.
+  const supporting = !!(raw.subtitle || raw.description || raw.button_label);
   return {
     id: raw.id,
     title: raw.title,
@@ -74,6 +82,7 @@ export function normalizeHeroSlide(raw, index) {
     cta: raw.button_label || "",
     href: raw.button_url || "/shop",
     imageUrl: raw.image_url || null,
+    overlay: supporting || !raw.image_url,
     fallback: HERO_FALLBACKS[index % HERO_FALLBACKS.length],
   };
 }

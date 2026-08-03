@@ -15,7 +15,7 @@ export function HeroSlidesPage() {
   return (
     <ResourceScreen
       title="شرائح الواجهة"
-      description="الشرائح المتحركة أعلى الصفحة الرئيسية."
+      description="الشرائح المتحركة أعلى الصفحة الرئيسية. إذا رفعت صورة إعلان جاهزة ولم تضف عنواناً فرعياً أو وصفاً أو زراً، تُعرض الصورة وحدها دون أي نص فوقها، ويبقى «العنوان» اسماً للشريحة ونصاً بديلاً للصورة."
       createLabel="إضافة شريحة"
       fetchList={fetchList}
       createItem={adminApi.createHeroSlide}

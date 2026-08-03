@@ -756,12 +756,13 @@ hero_slides:
     sort_order: 2
     origin: "inferred"
 
+  # A finished advertisement: artwork and nothing else. The storefront prints
+  # copy over a slide only when the owner supplies an eyebrow, a paragraph or a
+  # button, so this one renders as the bare image — which is what a designed ad
+  # that already carries its own typography needs. `title` stays the slide's
+  # name in Admin and the image's alt text; it is not shown over the artwork.
   - key: "hero-apparel"
     title: "طباعة تليق بمناسبتك"
-    subtitle: "نسخة تجريبية للمعاينة"
-    description: "هوديز وتيشيرتات وقطع صغيرة بطباعة مخصصة."
-    button_label: "استكشف الملابس"
-    button_url: "/category/printed-apparel"
     image: "hero-apparel"
     sort_order: 3
     origin: "inferred"
