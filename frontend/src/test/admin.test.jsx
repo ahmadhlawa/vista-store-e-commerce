@@ -171,6 +171,33 @@ describe("admin workspace", () => {
     expect(within(screen.getByRole("table")).getByText("بانتظار المراجعة")).toBeInTheDocument();
   });
 
+  it("offers searchable order filters and a WhatsApp customer action", async () => {
+    signedIn();
+    stubApi({
+      "/api/v1/auth/me": ADMIN,
+      "/api/v1/admin/orders": page([{
+        id: 9,
+        order_number: "ORD-260804-009",
+        status: "preparing",
+        source: "website",
+        customer_name: "سارة أحمد",
+        customer_phone: "059-123 4567",
+        delivery_area_name: "رام الله",
+        total: 120,
+        payment_method: "cash_on_delivery",
+        payment_status: "unpaid",
+        items_count: 2,
+        created_at: "2026-08-04T10:00:00Z",
+      }]),
+    });
+    renderApp("/admin/orders");
+
+    expect(await screen.findByLabelText("المصدر")).toBeInTheDocument();
+    expect(screen.getByLabelText("حالة الدفع")).toBeInTheDocument();
+    expect(screen.getByLabelText("من تاريخ")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "واتساب مع سارة أحمد" })).toHaveAttribute("href", "https://wa.me/0591234567");
+  });
+
   it("hides super-admin-only navigation from a normal admin", async () => {
     authStorage.save("valid-token", { ...ADMIN, role: "admin" });
     stubApi({

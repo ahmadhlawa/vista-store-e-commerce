@@ -98,6 +98,7 @@ export function CompleteOrderDialog({ isOpen, order, onClose, onComplete, busy =
   }, [isOpen]);
 
   if (!isOpen) return null;
+  const review = order?.final_review || order || {};
   const submit = (event) => {
     event.preventDefault();
     if (!isMoney(paidAmount)) return;
@@ -105,7 +106,8 @@ export function CompleteOrderDialog({ isOpen, order, onClose, onComplete, busy =
   };
   return <dialog ref={dialogRef} aria-modal="true" aria-label="إتمام الطلب" onCancel={(event) => { event.preventDefault(); onClose(); }} onKeyDown={(event) => { if (event.key === "Escape") onClose(); }} style={sx`border:0;border-radius:16px;padding:0;max-inline-size:560px;inline-size:calc(100% - 32px);box-shadow:0 30px 70px rgba(26,24,21,.3)`}>
     <form dir="rtl" onSubmit={submit} style={sx`display:flex;flex-direction:column;gap:14px;padding:20px`}>
-      <div><h2 style={sx`margin:0;font-size:18px`}>إتمام الطلب وإصدار الفاتورة</h2><p style={sx`margin:5px 0 0;color:#7C766D;font-size:13px`}>الإجمالي: {formatMoney(order?.total ?? "0")}</p></div>
+      <div><h2 style={sx`margin:0;font-size:18px`}>إتمام الطلب وإصدار الفاتورة</h2><p style={sx`margin:5px 0 0;color:#7C766D;font-size:13px`}>الإجمالي: {formatMoney(review.total ?? "0")}</p></div>
+      <div aria-label="مراجعة الطلب النهائية" style={sx`background:#F6F4F0;border-radius:10px;padding:12px`}><OrderTotalsSummary items={review.items || []} discount={review.discount ?? "0"} deliveryFee={review.delivery_fee ?? "0"} /></div>
       <label style={sx`display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700`}>طريقة الدفع<select ref={firstFieldRef} value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)} style={sx`height:42px;border:1px solid #DDD7CC;border-radius:8px;padding-inline:10px;font:inherit`}>{Object.entries(paymentMethodLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label style={sx`display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700`}>المبلغ المدفوع<input inputMode="decimal" value={paidAmount} onChange={(event) => setPaidAmount(event.target.value)} aria-invalid={!isMoney(paidAmount)} style={sx`height:42px;box-sizing:border-box;border:1px solid #DDD7CC;border-radius:8px;padding-inline:10px;font:inherit`} /></label>
       <label style={sx`display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700`}>تفاصيل الدفع (اختياري)<textarea value={paymentDetails} onChange={(event) => setPaymentDetails(event.target.value)} rows="3" style={sx`box-sizing:border-box;border:1px solid #DDD7CC;border-radius:8px;padding:10px;font:inherit;resize:vertical`} /></label>

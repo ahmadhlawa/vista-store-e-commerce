@@ -161,6 +161,12 @@ describe("order and invoice components", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("shows the latest persisted review totals before completing", () => {
+    render(<CompleteOrderDialog isOpen order={{ total: "12.50", final_review: { subtotal: "10.00", discount: "1.00", delivery_fee: "3.50", total: "12.50", items: [{ quantity: 2, unit_price: "5.00" }] } }} onClose={vi.fn()} onComplete={vi.fn()} />);
+
+    expect(screen.getByLabelText("مراجعة الطلب النهائية")).toHaveTextContent("12.50");
+  });
+
   it("opens the native dialog only through showModal", () => {
     const original = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, "showModal");
     const showModal = vi.fn(function showModal() {
