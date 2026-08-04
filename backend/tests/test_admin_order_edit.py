@@ -272,6 +272,25 @@ def test_notes_change_requires_reason_and_records_material_activity(
     assert event["reason"] == "Customer requested a phone call"
 
 
+def test_edit_rejects_legacy_current_statuses_outside_approved_workflow(
+    client: TestClient, db: Session, admin_token: str
+) -> None:
+    product = make_product(db, slug="admin-legacy-status", name="Legacy", price="10.00")
+    order = _create_order(client, product)
+    db_order = db.get(Order, order["id"])
+    db_order.status = "pending"
+    db.commit()
+
+    response = client.patch(
+        f"/api/v1/admin/orders/{order['id']}",
+        headers=auth(admin_token),
+        json=_edit_payload(product, status="reviewing"),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "order_status_not_editable"
+
+
 def test_both_roles_complete_an_order_once_with_an_immutable_final_invoice(
     client: TestClient, db: Session, admin_token: str, super_token: str, normal_admin, super_admin
 ) -> None:

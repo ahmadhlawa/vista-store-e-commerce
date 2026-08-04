@@ -842,6 +842,9 @@ _PATCHABLE_INCOMPLETE_STATUSES = frozenset(
         OrderStatus.CANCELLED.value,
     }
 )
+_EDITABLE_CURRENT_STATUSES = _PATCHABLE_INCOMPLETE_STATUSES - {
+    OrderStatus.CANCELLED.value
+}
 
 
 def _item_key(product_id: int, variant_id: int | None) -> tuple[int, int | None]:
@@ -888,6 +891,10 @@ def edit_incomplete_website_order(
     if order.source != OrderSource.WEBSITE.value:
         raise PermissionDeniedError(
             "ÙŠÙ…ÙƒÙ† ØªØ¹Ø¯ÙŠÙ„ Ø·Ù„Ø¨Ø§Øª Ø§Ù„Ù…ÙˆÙ‚Ø¹ ÙÙ‚Ø·.", code="order_source_not_editable"
+        )
+    if order.status not in _EDITABLE_CURRENT_STATUSES:
+        raise DomainError(
+            "Order status is not eligible for editing.", code="order_status_not_editable"
         )
     if draft.status == OrderStatus.COMPLETED.value:
         raise DomainError(
