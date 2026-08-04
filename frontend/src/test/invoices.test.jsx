@@ -28,7 +28,10 @@ const INVOICE_ROW = {
   grand_total: 220,
   currency_symbol: "₪",
   payment_method: "cash_on_delivery",
-  status: "issued",
+  status: "active",
+  payment_status: "unpaid",
+  paid_amount: 0,
+  remaining_amount: 220,
 };
 
 const INVOICE = {
@@ -55,6 +58,15 @@ const INVOICE = {
   tax_rate: 0,
   prices_include_tax: false,
   tax_amount: 0,
+  payment_status: "unpaid",
+  paid_amount: 0,
+  refunded_amount: 0,
+  remaining_amount: 220,
+  payment_details: null,
+  activities: [{ id: 1, event_type: "invoice_issued", reason: null, created_at: "2026-08-01T10:00:00Z" }],
+  history: [],
+  replacement_invoice: null,
+  replaces_invoice: null,
   cancelled_at: null,
   cancellation_reason: null,
   cancelled_by_admin_id: null,
@@ -119,7 +131,7 @@ describe("admin invoice list", () => {
     });
     renderApp("/admin/invoices");
 
-    expect(await screen.findByRole("heading", { name: "الفواتير" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "أرشيف الفواتير" })).toBeInTheDocument();
     const table = await screen.findByRole("table");
     const row = within(table);
 
@@ -127,8 +139,8 @@ describe("admin invoice list", () => {
     expect(row.getByRole("link", { name: "ORD-260801-1234" })).toBeInTheDocument();
     expect(row.getByText("سارة أحمد")).toBeInTheDocument();
     expect(row.getByText("220.00 ₪")).toBeInTheDocument();
-    expect(row.getByText("الدفع عند الاستلام")).toBeInTheDocument();
-    expect(row.getByText("صادرة")).toBeInTheDocument();
+    expect(row.getByText("غير مدفوع")).toBeInTheDocument();
+    expect(row.getByText("نشطة")).toBeInTheDocument();
     expect(row.getByRole("button", { name: "عرض" })).toBeInTheDocument();
   });
 
@@ -156,7 +168,7 @@ describe("admin invoice list", () => {
     stubApi({ "/api/v1/auth/me": ADMIN, "/api/v1/admin/invoices": page([]) });
     renderApp("/admin/invoices");
 
-    expect(await screen.findByText(/تصدر أول فاتورة عند تأكيد أول طلب/)).toBeInTheDocument();
+    expect(await screen.findByText("لا توجد فواتير مطابقة للبحث.")).toBeInTheDocument();
   });
 
   it("keeps the invoice screens behind authentication", async () => {
@@ -164,159 +176,21 @@ describe("admin invoice list", () => {
     renderApp("/admin/invoices");
 
     expect(await screen.findByRole("heading", { name: "تسجيل دخول الإدارة" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "الفواتير" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "أرشيف الفواتير" })).not.toBeInTheDocument();
   });
 });
 
 describe("admin invoice detail", () => {
-  it("renders the printable sheet with identity, items and totals", async () => {
+  it("renders an internal archive detail with final prices, activity and replacement links", async () => {
     signedIn();
-    stubApi({ "/api/v1/auth/me": ADMIN, "/api/v1/admin/invoices/INV-000001": INVOICE });
+    stubApi({ "/api/v1/auth/me": ADMIN, "/api/v1/admin/invoices/INV-000001": { ...INVOICE, replacement_invoice: { id: 6, invoice_number: "INV-000002", status: "active", issued_at: "2026-08-02T10:00:00Z" } } });
     renderApp("/admin/invoices/INV-000001");
 
     expect(await screen.findByRole("heading", { name: /INV-000001/ })).toBeInTheDocument();
-
-    const sheet = document.getElementById("invoice-sheet");
-    expect(sheet).toBeTruthy();
-    const inside = within(sheet);
-
-    expect(inside.getByText("متجر فيستا")).toBeInTheDocument();
-    expect(inside.getByText("فاتورة")).toBeInTheDocument();
-    expect(inside.getByText("سارة أحمد")).toBeInTheDocument();
-    expect(inside.getByText("رام الله، شارع الإرسال، بناية ٥")).toBeInTheDocument();
-    expect(inside.getByText("ريزن شفاف")).toBeInTheDocument();
-    expect(inside.getByText("RES-1000")).toBeInTheDocument();
-    expect(inside.getByText("الإجمالي المستحق")).toBeInTheDocument();
-    expect(inside.getByText("220.00 ₪")).toBeInTheDocument();
-    expect(inside.getByText("الدفع عند الاستلام")).toBeInTheDocument();
-    expect(inside.getByText("اتصلوا قبل التوصيل")).toBeInTheDocument();
-  });
-
-  it("prints through the browser when asked", async () => {
-    signedIn();
-    stubApi({ "/api/v1/auth/me": ADMIN, "/api/v1/admin/invoices/INV-000001": INVOICE });
-    const print = vi.fn();
-    window.print = print;
-    renderApp("/admin/invoices/INV-000001");
-
-    await userEvent.click(await screen.findByRole("button", { name: "طباعة الفاتورة" }));
-    expect(print).toHaveBeenCalledTimes(1);
-  });
-
-  it("ships print rules that hide the admin chrome and keep only the sheet", async () => {
-    signedIn();
-    stubApi({ "/api/v1/auth/me": ADMIN, "/api/v1/admin/invoices/INV-000001": INVOICE });
-    renderApp("/admin/invoices/INV-000001");
-    await screen.findByRole("heading", { name: /INV-000001/ });
-
-    const css = Array.from(document.querySelectorAll("style"))
-      .map((node) => node.textContent)
-      .join("\n");
-
-    expect(css).toContain("@media print");
-    expect(css).toContain("size: A4");
-    expect(css).toContain("#invoice-sheet");
-    expect(css).toContain(".no-print");
-    expect(css).toContain("display: table-header-group");
-  });
-
-  it("keeps the closing totals block whole across a page break", async () => {
-    signedIn();
-    stubApi({ "/api/v1/auth/me": ADMIN, "/api/v1/admin/invoices/INV-000001": INVOICE });
-    renderApp("/admin/invoices/INV-000001");
-    await screen.findByRole("heading", { name: /INV-000001/ });
-
-    const sheet = document.getElementById("invoice-sheet");
-    const summary = sheet.querySelector(".invoice-summary");
-
-    // Totals, notes and the cancellation notice are one element, so they move together.
-    expect(summary).toBeTruthy();
-    expect(summary.textContent).toContain("المجموع الفرعي");
-    expect(summary.textContent).toContain("الإجمالي المستحق");
-    expect(summary.textContent).toContain("اتصلوا قبل التوصيل");
-    // The item table is outside it, and is the only thing allowed to span pages.
-    expect(summary.querySelector("table")).toBeNull();
-    expect(sheet.querySelector(".invoice-items table")).toBeTruthy();
-
-    const css = Array.from(document.querySelectorAll("style"))
-      .map((node) => node.textContent)
-      .join("\n");
-
-    // The rule that fixes the 12-line case: the block never splits internally.
-    expect(css).toMatch(
-      /\.invoice-summary\s*\{[^}]*page-break-inside:\s*avoid[^}]*break-inside:\s*avoid/s,
-    );
-    // Item rows may continue onto the next page; the sheet must not clip them away.
-    expect(css).toMatch(/#invoice-sheet table\s*\{[^}]*break-inside:\s*auto/s);
-    expect(css).toMatch(/#invoice-sheet\s*\{[^}]*overflow:\s*visible\s*!important/s);
-  });
-
-  it("keeps the cancelled watermark on every printed page", async () => {
-    signedIn();
-    stubApi({ "/api/v1/auth/me": ADMIN, "/api/v1/admin/invoices/INV-000001": CANCELLED });
-    renderApp("/admin/invoices/INV-000001");
-    await screen.findByRole("heading", { name: /INV-000001/ });
-
-    const css = Array.from(document.querySelectorAll("style"))
-      .map((node) => node.textContent)
-      .join("\n");
-
-    // Pinned to the page box rather than the sheet, so page two is marked too, and the
-    // colour survives the browser's "background graphics" default.
-    expect(css).toMatch(
-      /\.invoice-watermark\s*\{[^}]*position:\s*fixed[^}]*print-color-adjust:\s*exact/s,
-    );
-    expect(document.querySelector("#invoice-sheet .invoice-watermark")).toBeTruthy();
-  });
-
-  it("keeps internal notes, cost prices and audit data off the printable sheet", async () => {
-    signedIn();
-    stubApi({ "/api/v1/auth/me": ADMIN, "/api/v1/admin/invoices/INV-000001": INVOICE });
-    renderApp("/admin/invoices/INV-000001");
-    await screen.findByRole("heading", { name: /INV-000001/ });
-
-    const sheet = document.getElementById("invoice-sheet");
-    expect(sheet.textContent).not.toContain("ملاحظات داخلية");
-    expect(sheet.textContent).not.toContain("سعر التكلفة");
-    expect(sheet.querySelector("nav")).toBeNull();
-    // Buttons live outside the sheet entirely, so nothing can print them.
-    expect(sheet.querySelectorAll("button").length).toBe(0);
-  });
-
-  it("shows a cancelled watermark and the cancellation reason", async () => {
-    signedIn();
-    stubApi({ "/api/v1/auth/me": ADMIN, "/api/v1/admin/invoices/INV-000001": CANCELLED });
-    renderApp("/admin/invoices/INV-000001");
-
-    await screen.findByRole("heading", { name: /INV-000001/ });
-    // "ملغاة" is deliberately in two places: the diagonal watermark and the status line.
-    const sheet = within(document.getElementById("invoice-sheet"));
-    expect(sheet.getAllByText("ملغاة")).toHaveLength(2);
-    expect(
-      document.querySelector("#invoice-sheet .invoice-watermark").textContent,
-    ).toBe("ملغاة");
-    expect(sheet.getByText(/نفدت الكمية/)).toBeInTheDocument();
-
-    // A cancelled invoice offers no second cancellation.
-    expect(screen.queryByRole("button", { name: /إلغاء الفاتورة والطلب/ })).not.toBeInTheDocument();
-  });
-
-  it("cancels through the API after confirmation", async () => {
-    signedIn();
-    const calls = stubApi({
-      "/api/v1/auth/me": ADMIN,
-      "POST /api/v1/admin/invoices/INV-000001/cancel": CANCELLED,
-      "/api/v1/admin/invoices/INV-000001": INVOICE,
-    });
-    renderApp("/admin/invoices/INV-000001");
-
-    await userEvent.click(await screen.findByRole("button", { name: "إلغاء الفاتورة والطلب" }));
-    await userEvent.click(await screen.findByRole("button", { name: "إلغاء الفاتورة" }));
-
-    await waitFor(() =>
-      expect(calls.some((call) => call.method === "POST" && call.path.endsWith("/cancel"))).toBe(true),
-    );
-    expect(await screen.findByText(/تم إلغاء الفاتورة/)).toBeInTheDocument();
+    expect(screen.getByLabelText("ملخص الأسعار النهائية")).toHaveTextContent("220.00");
+    expect(screen.getByText("سجل النشاط")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /INV-000002/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /طباعة|PDF|مشاركة/ })).not.toBeInTheDocument();
   });
 
   it("reports a missing invoice instead of rendering an empty sheet", async () => {
@@ -330,7 +204,7 @@ describe("admin invoice detail", () => {
     renderApp("/admin/invoices/INV-000999");
 
     expect(await screen.findByRole("heading", { name: "الفاتورة غير موجودة" })).toBeInTheDocument();
-    expect(document.getElementById("invoice-sheet")).toBeNull();
+    expect(screen.queryByRole("button", { name: /طباعة|PDF|مشاركة/ })).not.toBeInTheDocument();
   });
 });
 
@@ -397,6 +271,61 @@ describe("order detail invoice panel", () => {
     expect(screen.queryByLabelText("تغيير الحالة")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("ملاحظة الحالة")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "تحديث الحالة" })).not.toBeInTheDocument();
+  });
+});
+
+describe("invoice archive workflow", () => {
+  it("sends archive filters for payment, source and employee", async () => {
+    signedIn();
+    const calls = stubApi({
+      "/api/v1/auth/me": ADMIN,
+      "/api/v1/admin/invoices": page([{ ...INVOICE_ROW, status: "active", payment_status: "unpaid", paid_amount: 0, remaining_amount: 220 }]),
+    });
+    renderApp("/admin/invoices");
+
+    await screen.findByRole("table");
+    await userEvent.selectOptions(screen.getByLabelText("حالة الدفع"), "paid");
+    await userEvent.selectOptions(screen.getByLabelText("مصدر الطلب"), "whatsapp");
+    await userEvent.type(screen.getByLabelText("رقم الموظف المصدر"), "7");
+
+    await waitFor(() => {
+      const path = calls.filter((call) => call.path.includes("/admin/invoices")).at(-1).path;
+      expect(path).toContain("payment_status=paid");
+      expect(path).toContain("source=whatsapp");
+      expect(path).toContain("employee_id=7");
+    });
+  });
+
+  it("limits a normal admin to increasing payment information", async () => {
+    const normalAdmin = { ...ADMIN, role: "admin" };
+    authStorage.save("valid-token", normalAdmin);
+    const calls = stubApi({
+      "/api/v1/auth/me": normalAdmin,
+      "PATCH /api/v1/admin/invoices/INV-000001/payment": { ...INVOICE, paid_amount: 100, remaining_amount: 120 },
+      "/api/v1/admin/invoices/INV-000001": INVOICE,
+    });
+    renderApp("/admin/invoices/INV-000001");
+
+    await screen.findByLabelText("المبلغ المدفوع");
+    expect(screen.queryByLabelText("المبلغ المسترد")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("سبب التصحيح أو الاسترداد")).not.toBeInTheDocument();
+    await userEvent.clear(screen.getByLabelText("المبلغ المدفوع"));
+    await userEvent.type(screen.getByLabelText("المبلغ المدفوع"), "100");
+    await userEvent.click(screen.getByRole("button", { name: "حفظ تحديث الدفع" }));
+    await waitFor(() => expect(calls.some((call) => call.method === "PATCH")).toBe(true));
+    expect(JSON.parse(calls.find((call) => call.method === "PATCH").body)).not.toHaveProperty("refunded_amount");
+  });
+
+  it("requires a manager reason for corrections and refunds", async () => {
+    signedIn();
+    stubApi({ "/api/v1/auth/me": ADMIN, "/api/v1/admin/invoices/INV-000001": { ...INVOICE, paid_amount: 100, remaining_amount: 120 } });
+    renderApp("/admin/invoices/INV-000001");
+
+    await screen.findByLabelText("المبلغ المسترد");
+    await userEvent.clear(screen.getByLabelText("المبلغ المسترد"));
+    await userEvent.type(screen.getByLabelText("المبلغ المسترد"), "20");
+    await userEvent.click(screen.getByRole("button", { name: "حفظ تحديث الدفع" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("سبب التصحيح أو الاسترداد مطلوب");
   });
 });
 
