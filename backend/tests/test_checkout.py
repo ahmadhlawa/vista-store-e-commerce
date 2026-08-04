@@ -282,7 +282,7 @@ def test_cancelling_restores_stock_exactly_once(
         headers=auth(admin_token),
         json={"status": "processing"},
     )
-    assert reopened.status_code == 400
+    assert reopened.status_code == 422
     db.expire_all()
     assert db.get(Product, product.id).stock_quantity == 10
 

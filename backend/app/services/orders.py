@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -116,6 +116,7 @@ _ACTIVITY_SAFE_FIELDS = frozenset(
         "paid_amount",
         "refunded_amount",
         "remaining_amount",
+        "payment_details",
         "is_locked",
         "locked_at",
         "completed_at",
@@ -188,12 +189,7 @@ def record_order_activity(
 # Statuses that mean stock is currently committed to the order.
 _STOCK_HELD_STATUSES = {
     OrderStatus.NEW.value,
-    OrderStatus.PENDING.value,
-    OrderStatus.CONFIRMED.value,
-    OrderStatus.PROCESSING.value,
-    OrderStatus.READY.value,
-    OrderStatus.SHIPPED.value,
-    OrderStatus.DELIVERED.value,
+    "pending", "confirmed", "processing", "ready", "shipped", "delivered",
 }
 
 
@@ -213,10 +209,22 @@ class OrderDraft:
 
 @dataclass(frozen=True, slots=True)
 class AdminOrderItemDraft:
-    product_id: int
+    kind: Literal["catalog", "manual"]
+    order_item_id: int | None
+    product_id: int | None
     variant_id: int | None
+    name: str | None
+    description: str | None
     quantity: int
     unit_price: Decimal | None
+
+    def __post_init__(self) -> None:
+        if self.kind == "catalog" and self.product_id is None:
+            raise ValueError("catalog order items require product_id")
+        if self.kind == "manual" and (self.product_id is not None or not self.name):
+            raise ValueError("manual order items require a name and no product_id")
+        if self.kind == "manual" and self.unit_price is None:
+            raise ValueError("manual order items require unit_price")
 
 
 @dataclass(frozen=True, slots=True)
@@ -854,23 +862,146 @@ def _item_key(product_id: int, variant_id: int | None) -> tuple[int, int | None]
 def _item_snapshot(item: OrderItem) -> dict[str, Any]:
     return {
         "id": item.id,
+        "kind": item.item_kind,
+        "item_kind": item.item_kind,
         "product_id": item.product_id,
         "variant_id": item.variant_id,
         "product_name": item.product_name,
+        "name": item.product_name,
+        "manual_description": item.manual_description,
+        "description": item.manual_description,
         "quantity": item.quantity,
         "unit_price": item.unit_price,
         "line_total": item.line_total,
     }
 
 
-def edit_incomplete_website_order(
+def can_structurally_edit_order(*, order: Order, actor: AdminUser) -> bool:
+    if order.status in {OrderStatus.COMPLETED.value, OrderStatus.CANCELLED.value}:
+        return False
+    if order.source != OrderSource.WEBSITE.value or any(
+        item.item_kind == "manual" for item in order.items
+    ):
+        return actor.role == AdminRole.SUPER_ADMIN.value
+    return actor.role in {AdminRole.ADMIN.value, AdminRole.SUPER_ADMIN.value}
+
+
+def rebuild_order_items(
+    db: Session, *, order: Order, drafts: Sequence[AdminOrderItemDraft]
+) -> list[OrderItem]:
+    catalog_drafts = [item for item in drafts if item.kind == "catalog"]
+    catalog_keys = [
+        _item_key(item.product_id, item.variant_id)
+        for item in catalog_drafts
+        if item.product_id is not None
+    ]
+    if len(catalog_keys) != len(set(catalog_keys)):
+        raise DomainError("Duplicate catalog items are not allowed.", code="duplicate_order_item")
+
+    priced_by_key = {
+        _item_key(line.product.id, line.variant.id if line.variant else None): line
+        for line in price_lines(
+            db,
+            [
+                (item.product_id, item.variant_id, item.quantity)
+                for item in catalog_drafts
+                if item.product_id is not None
+            ],
+        )
+    }
+    old_catalog = {
+        _item_key(item.product_id, item.variant_id): item
+        for item in order.items
+        if item.product_id is not None
+    }
+    old_manual_by_id = {
+        item.id: item for item in order.items if item.item_kind == "manual"
+    }
+    submitted_manual_ids = [
+        item.order_item_id
+        for item in drafts
+        if item.kind == "manual" and item.order_item_id is not None
+    ]
+    if len(submitted_manual_ids) != len(set(submitted_manual_ids)):
+        raise DomainError("Duplicate order item references are not allowed.", code="duplicate_order_item")
+    items: list[OrderItem] = []
+
+    for draft in drafts:
+        if draft.kind == "catalog":
+            assert draft.product_id is not None
+            key = _item_key(draft.product_id, draft.variant_id)
+            priced = priced_by_key[key]
+            old = old_catalog.get(key)
+            unit_price = money(
+                draft.unit_price
+                if draft.unit_price is not None
+                else (old.unit_price if old is not None else priced.unit_price)
+            )
+            items.append(
+                OrderItem(
+                    product_id=priced.product.id,
+                    variant_id=priced.variant.id if priced.variant else None,
+                    item_kind="catalog",
+                    product_name=old.product_name if old is not None else priced.product.name,
+                    original_product_name=(old.original_product_name if old is not None else priced.product.name),
+                    sku=old.sku if old is not None else priced.sku,
+                    original_sku=old.original_sku if old is not None else priced.sku,
+                    variant_description=(old.variant_description if old is not None else priced.variant_description),
+                    original_variant_description=(
+                        old.original_variant_description if old is not None else priced.variant_description
+                    ),
+                    original_unit_price=(old.original_unit_price if old is not None else priced.unit_price),
+                    unit_price=unit_price,
+                    quantity=draft.quantity,
+                    line_total=money(unit_price * draft.quantity),
+                )
+            )
+            continue
+
+        old = None
+        if draft.order_item_id is not None:
+            old = old_manual_by_id.get(draft.order_item_id)
+            if old is None:
+                raise DomainError("Order item does not belong to this order.", code="order_item_not_found")
+        assert draft.name is not None and draft.unit_price is not None
+        unit_price = money(draft.unit_price)
+        if old is not None:
+            old.product_name = draft.name.strip()
+            old.manual_description = (draft.description or "").strip() or None
+            old.unit_price = unit_price
+            old.quantity = draft.quantity
+            old.line_total = money(unit_price * draft.quantity)
+            items.append(old)
+            continue
+        items.append(
+            OrderItem(
+                product_id=None,
+                variant_id=None,
+                item_kind="manual",
+                product_name=draft.name.strip(),
+                original_product_name=draft.name.strip(),
+                sku=None,
+                original_sku=None,
+                variant_description=None,
+                original_variant_description=None,
+                manual_description=(draft.description or "").strip() or None,
+                original_unit_price=unit_price,
+                unit_price=unit_price,
+                quantity=draft.quantity,
+                line_total=money(unit_price * draft.quantity),
+            )
+        )
+    return items
+
+
+def edit_incomplete_order(
     db: Session,
     *,
     order_id: int,
     draft: AdminOrderEditDraft,
     admin: AdminUser,
 ) -> Order:
-    """Replace an editable website-order draft and append its operational audit trail."""
+    """Replace an editable order draft and append its operational audit trail."""
     order = db.execute(
         select(Order)
         .options(selectinload(Order.items))
@@ -888,9 +1019,14 @@ def edit_incomplete_website_order(
             "Reopened completed orders require a super administrator.",
             code="reopened_order_manager_only",
         )
-    if order.source != OrderSource.WEBSITE.value:
+    if not can_structurally_edit_order(order=order, actor=admin):
         raise PermissionDeniedError(
             "ÙŠÙ…ÙƒÙ† ØªØ¹Ø¯ÙŠÙ„ Ø·Ù„Ø¨Ø§Øª Ø§Ù„Ù…ÙˆÙ‚Ø¹ ÙÙ‚Ø·.", code="order_source_not_editable"
+        )
+    if any(item.kind == "manual" for item in draft.items) and admin.role != AdminRole.SUPER_ADMIN.value:
+        raise PermissionDeniedError(
+            "Only super administrators can add manual order items.",
+            code="manual_items_manager_only",
         )
     if order.status not in _EDITABLE_CURRENT_STATUSES:
         raise DomainError(
@@ -906,11 +1042,18 @@ def edit_incomplete_website_order(
     if not draft.items:
         raise DomainError("Ø§Ù„Ø·Ù„Ø¨ ÙŠØ¬Ø¨ Ø£Ù† ÙŠØ­ØªÙˆÙŠ Ø¹Ù„Ù‰ Ù…Ù†ØªØ¬ ÙˆØ§Ø­Ø¯ Ø¹Ù„Ù‰ Ø§Ù„Ø£Ù‚Ù„.", code="empty_order")
 
-    requested_keys = [_item_key(item.product_id, item.variant_id) for item in draft.items]
+    requested_keys = [
+        _item_key(item.product_id, item.variant_id)
+        for item in draft.items
+        if item.kind == "catalog" and item.product_id is not None
+    ]
     if len(set(requested_keys)) != len(requested_keys):
         raise DomainError("Ù„Ø§ ÙŠÙ…ÙƒÙ† ØªÙƒØ±Ø§Ø± Ø§Ù„Ù…Ù†ØªØ¬ ÙÙŠ Ø§Ù„Ø·Ù„Ø¨.", code="duplicate_order_item")
 
     old_items = list(order.items)
+    old_manual_snapshots = {
+        item.id: _item_snapshot(item) for item in old_items if item.item_kind == "manual"
+    }
     old_discount = money(order.discount)
     old_delivery_fee = money(order.delivery_fee)
     old_by_key = {
@@ -919,7 +1062,11 @@ def edit_incomplete_website_order(
         if item.product_id is not None
     }
     old_keys = set(old_by_key)
-    requested_by_key = {_item_key(item.product_id, item.variant_id): item for item in draft.items}
+    requested_by_key = {
+        _item_key(item.product_id, item.variant_id): item
+        for item in draft.items
+        if item.kind == "catalog" and item.product_id is not None
+    }
     quantity_changed = [
         key
         for key in old_keys & set(requested_by_key)
@@ -965,44 +1112,15 @@ def edit_incomplete_website_order(
     # Return the existing reservation before validating the replacement against stock;
     # the same order's previously reserved units remain available to its new draft.
     _restore_stock(db, order)
+    new_items = rebuild_order_items(db, order=order, drafts=draft.items)
     priced_lines = price_lines(
-        db, [(item.product_id, item.variant_id, item.quantity) for item in draft.items]
+        db,
+        [
+            (item.product_id, item.variant_id, item.quantity)
+            for item in draft.items
+            if item.kind == "catalog" and item.product_id is not None
+        ],
     )
-    new_items: list[OrderItem] = []
-    for requested, priced in zip(draft.items, priced_lines, strict=True):
-        old = old_by_key.get(_item_key(requested.product_id, requested.variant_id))
-        unit_price = money(
-            requested.unit_price
-            if requested.unit_price is not None
-            else (old.unit_price if old is not None else priced.unit_price)
-        )
-        new_items.append(
-            OrderItem(
-                product_id=priced.product.id,
-                variant_id=priced.variant.id if priced.variant else None,
-                item_kind="catalog",
-                product_name=old.product_name if old is not None else priced.product.name,
-                original_product_name=(
-                    old.original_product_name if old is not None else priced.product.name
-                ),
-                sku=old.sku if old is not None else priced.sku,
-                original_sku=old.original_sku if old is not None else priced.sku,
-                variant_description=(
-                    old.variant_description if old is not None else priced.variant_description
-                ),
-                original_variant_description=(
-                    old.original_variant_description
-                    if old is not None
-                    else priced.variant_description
-                ),
-                original_unit_price=(
-                    old.original_unit_price if old is not None else priced.unit_price
-                ),
-                unit_price=unit_price,
-                quantity=requested.quantity,
-                line_total=money(unit_price * requested.quantity),
-            )
-        )
     totals = calculate_order_totals(new_items, draft.discount, draft.delivery_fee)
     for item, line_total in zip(new_items, totals.line_totals, strict=True):
         item.line_total = line_total
@@ -1045,6 +1163,53 @@ def edit_incomplete_website_order(
             before_data={"line": _item_snapshot(old_by_key[key])},
             after_data={"line": _item_snapshot(new_by_key[key])}, reason=reason,
         )
+    new_manual_items = [item for item in new_items if item.item_kind == "manual"]
+    retained_manual_ids = {item.id for item in new_manual_items if item.id is not None}
+    for item_id, snapshot in old_manual_snapshots.items():
+        if item_id not in retained_manual_ids:
+            record_order_activity(
+                db,
+                order_id=order.id,
+                invoice_id=None,
+                actor_admin_id=admin.id,
+                event_type="order_item_removed",
+                before_data={"line": snapshot},
+                after_data=None,
+                reason=reason,
+            )
+    for item in new_manual_items:
+        if item.id is None:
+            record_order_activity(
+                db,
+                order_id=order.id,
+                invoice_id=None,
+                actor_admin_id=admin.id,
+                event_type="order_item_added",
+                before_data=None,
+                after_data={"line": _item_snapshot(item)},
+                reason=reason,
+            )
+    for new in new_manual_items:
+        old = old_manual_snapshots.get(new.id)
+        if old is None:
+            continue
+        for event_type, field in (
+            ("order_manual_item_name_changed", "product_name"),
+            ("order_manual_item_description_changed", "manual_description"),
+            ("order_item_quantity_changed", "quantity"),
+            ("order_item_price_changed", "unit_price"),
+        ):
+            if old[field] != getattr(new, field):
+                record_order_activity(
+                    db,
+                    order_id=order.id,
+                    invoice_id=None,
+                    actor_admin_id=admin.id,
+                    event_type=event_type,
+                    before_data={field: old[field]},
+                    after_data={field: getattr(new, field)},
+                    reason=reason,
+                )
     for event_type, before, after, field in (
         ("order_discount_changed", old_discount, totals.discount_amount, "discount_amount"),
         ("order_delivery_fee_changed", old_delivery_fee, totals.delivery_fee, "delivery_fee"),
@@ -1135,7 +1300,7 @@ def dashboard_summary(db: Session) -> dict[str, object]:
         "coupons_active": _count(Coupon, Coupon.is_active.is_(True)),
         "orders_total": _count(Order),
         "orders_by_status": by_status,
-        "orders_pending": by_status[OrderStatus.PENDING.value],
+        "orders_pending": by_status[OrderStatus.NEW.value],
         "revenue_total": money(Decimal(str(revenue))),
         "low_stock_products": low_stock,
         "recent_orders": recent,

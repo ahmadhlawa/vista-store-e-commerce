@@ -202,7 +202,7 @@ def test_edit_rejects_completed_or_cancelled_status_and_manual_items(
     response = client.patch(
         f"/api/v1/admin/orders/{order['id']}", headers=auth(admin_token), json=manual
     )
-    assert response.status_code == 422
+    assert response.status_code == 403
 
     db_order = db.get(Order, order["id"])
     db_order.status = "cancelled"
@@ -272,6 +272,28 @@ def test_notes_change_requires_reason_and_records_material_activity(
     assert event["reason"] == "Customer requested a phone call"
 
 
+def test_full_order_edit_allows_internal_notes_only_without_reason(
+    client: TestClient, db: Session, admin_token: str
+) -> None:
+    product = make_product(db, slug="admin-notes-full-edit", name="Notes edit", price="10.00")
+    order = _create_order(client, product)
+    first = client.patch(
+        f"/api/v1/admin/orders/{order['id']}",
+        headers=auth(admin_token),
+        json=_edit_payload(product),
+    )
+    assert first.status_code == 200, first.text
+
+    notes_only = _edit_payload(product, admin_notes="Changed without reason", reason=None)
+    updated = client.patch(
+        f"/api/v1/admin/orders/{order['id']}",
+        headers=auth(admin_token),
+        json=notes_only,
+    )
+
+    assert updated.status_code == 200
+
+
 def test_edit_rejects_legacy_current_statuses_outside_approved_workflow(
     client: TestClient, db: Session, admin_token: str
 ) -> None:
@@ -307,7 +329,7 @@ def test_both_roles_complete_an_order_once_with_an_immutable_final_invoice(
             f"/api/v1/admin/orders/{order['id']}/complete",
             headers=auth(token),
             json={
-                "payment_method": "manual",
+                "payment_method": "card",
                 "paid_amount": "5.00",
                 "payment_details": "Cash received",
                 "invoice_notes": "Final internal note",
@@ -325,7 +347,7 @@ def test_both_roles_complete_an_order_once_with_an_immutable_final_invoice(
         invoice = client.get(
             f"/api/v1/admin/orders/{order['id']}/invoice", headers=auth(token)
         ).json()
-        assert invoice["payment_method"] == "manual"
+        assert invoice["payment_method"] == "card"
         assert invoice["paid_amount"] == 5.0
         assert invoice["remaining_amount"] == 5.0
         assert invoice["payment_details"] == "Cash received"
@@ -338,7 +360,7 @@ def test_both_roles_complete_an_order_once_with_an_immutable_final_invoice(
         retried = client.post(
             f"/api/v1/admin/orders/{order['id']}/complete",
             headers=auth(token),
-            json={"payment_method": "manual", "paid_amount": "5.00"},
+            json={"payment_method": "card", "paid_amount": "5.00"},
         )
         assert retried.status_code == 200, retried.text
         db.expire_all()
@@ -544,7 +566,7 @@ def _manual_order_payload(product: Product, **changes: object) -> dict:
         "customer_name": "Manual Customer",
         "customer_phone": "0591234567",
         "address": "Ramallah, Manual Street 10",
-        "payment_method": "manual",
+        "payment_method": "card",
         "customer_notes": "Customer requested pickup",
         "admin_notes": "Entered by manager",
         "discount": "5.00",
@@ -599,6 +621,214 @@ def test_super_admin_saves_mixed_manual_order_without_invoice_or_manual_catalog_
     assert db.query(Invoice).filter(Invoice.order_id == body["id"]).count() == 0
 
 
+def _manual_edit_payload(order: dict, items: list[dict]) -> dict:
+    return {
+        "customer_name": order["customer_name"],
+        "customer_phone": order["customer_phone"],
+        "customer_email": order["customer_email"],
+        "address": "Ramallah, Corrected Manual Street 20",
+        "payment_method": order["payment_method"],
+        "customer_notes": order["customer_notes"],
+        "admin_notes": "Corrected by manager",
+        "discount": str(order["discount"]),
+        "delivery_fee": str(order["delivery_fee"]),
+        "status": "reviewing",
+        "reason": "Correct the saved manual order",
+        "items": items,
+    }
+
+
+def test_super_admin_can_replace_incomplete_manual_order_items_with_manual_items(
+    client: TestClient,
+    db: Session,
+    super_token: str,
+) -> None:
+    product = make_product(db, slug="manual-edit", name="Catalog line", price="10.00", stock=20)
+    created = client.post(
+        "/api/v1/admin/orders/manual",
+        headers=auth(super_token),
+        json=_manual_order_payload(product),
+    )
+    assert created.status_code == 201, created.text
+    order = created.json()
+    edited = client.patch(
+        f"/api/v1/admin/orders/{order['id']}",
+        headers=auth(super_token),
+        json=_manual_edit_payload(
+            order,
+            [{"kind": "manual", "name": "Updated gift wrap", "quantity": 2, "unit_price": "2.00"}],
+        ),
+    )
+    assert edited.status_code == 200, edited.text
+    body = edited.json()
+    assert [item["item_kind"] for item in body["items"]] == ["manual"]
+
+
+def test_super_admin_can_edit_manual_item_fields(
+    client: TestClient, db: Session, super_token: str
+) -> None:
+    product = make_product(db, slug="manual-item-fields", name="Catalog line", price="10.00")
+    created = client.post("/api/v1/admin/orders/manual", headers=auth(super_token), json=_manual_order_payload(product))
+    assert created.status_code == 201, created.text
+    order = created.json()
+    manual_item = next(item for item in order["items"] if item["item_kind"] == "manual")
+
+    edited = client.patch(
+        f"/api/v1/admin/orders/{order['id']}",
+        headers=auth(super_token),
+        json=_manual_edit_payload(
+            order,
+            [{"kind": "manual", "name": " Updated gift wrap ", "description": "Red ribbon", "quantity": 2, "unit_price": "2.00"}],
+        ),
+    )
+    assert edited.status_code == 200, edited.text
+    item = edited.json()["items"][0]
+    assert item["product_name"] == "Updated gift wrap"
+    assert item["manual_description"] == "Red ribbon"
+    assert item["quantity"] == 2
+    assert item["unit_price"] == 2.0
+
+
+def test_manual_item_edit_records_actor_reason_and_field_before_after(
+    client: TestClient, db: Session, super_token: str
+) -> None:
+    product = make_product(db, slug="manual-item-activity", name="Catalog line", price="10.00")
+    created = client.post("/api/v1/admin/orders/manual", headers=auth(super_token), json=_manual_order_payload(product))
+    assert created.status_code == 201, created.text
+    order = created.json()
+    manual_item = next(item for item in order["items"] if item["item_kind"] == "manual")
+
+    edited = client.patch(
+        f"/api/v1/admin/orders/{order['id']}",
+        headers=auth(super_token),
+        json=_manual_edit_payload(
+            order,
+            [{"kind": "manual", "order_item_id": manual_item["id"], "name": "Updated gift wrap", "description": "Red ribbon", "quantity": 2, "unit_price": "2.00"}],
+        ),
+    )
+    assert edited.status_code == 200, edited.text
+    event = next(event for event in edited.json()["activities"] if event["event_type"] == "order_manual_item_name_changed")
+    assert event["actor_admin_id"] is not None
+    assert event["reason"] == "Correct the saved manual order"
+    assert event["before_data"]["product_name"] == "Custom gift wrap"
+    assert event["after_data"]["product_name"] == "Updated gift wrap"
+
+
+def test_admin_cannot_structurally_edit_order_containing_manual_item(
+    client: TestClient, db: Session, admin_token: str, super_token: str
+) -> None:
+    product = make_product(db, slug="manual-edit-forbidden", name="Catalog line", price="10.00")
+    created = client.post("/api/v1/admin/orders/manual", headers=auth(super_token), json=_manual_order_payload(product))
+    assert created.status_code == 201, created.text
+    order = created.json()
+
+    forbidden = client.patch(
+        f"/api/v1/admin/orders/{order['id']}",
+        headers=auth(admin_token),
+        json=_manual_edit_payload(
+            order,
+            [{"kind": "manual", "name": "Updated gift wrap", "quantity": 2, "unit_price": "2.00"}],
+        ),
+    )
+    assert forbidden.status_code == 403
+
+
+def test_manual_order_edit_does_not_create_products_or_change_inventory(
+    client: TestClient, db: Session, super_token: str
+) -> None:
+    product = make_product(db, slug="manual-edit-isolation", name="Catalog line", price="10.00", stock=20)
+    products_before = db.query(Product).count()
+    created = client.post(
+        "/api/v1/admin/orders/manual",
+        headers=auth(super_token),
+        json=_manual_order_payload(product, items=[{"kind": "manual", "name": "Gift wrap", "quantity": 1, "unit_price": "1.25"}]),
+    )
+    assert created.status_code == 201, created.text
+    order = created.json()
+    stock_before = db.get(Product, product.id).stock_quantity
+
+    edited = client.patch(
+        f"/api/v1/admin/orders/{order['id']}",
+        headers=auth(super_token),
+        json=_manual_edit_payload(
+            order,
+            [{"kind": "manual", "name": "Gift wrap", "description": "Red ribbon", "quantity": 2, "unit_price": "2.00"}],
+        ),
+    )
+    assert edited.status_code == 200, edited.text
+    db.expire_all()
+    assert db.query(Product).count() == products_before
+    assert db.get(Product, product.id).stock_quantity == stock_before
+
+
+def test_manual_edit_rejects_order_item_id_from_another_order(
+    client: TestClient, db: Session, super_token: str
+) -> None:
+    product = make_product(db, slug="manual-cross-order-id", name="Catalog line", price="10.00")
+    first = client.post("/api/v1/admin/orders/manual", headers=auth(super_token), json=_manual_order_payload(product))
+    second = client.post("/api/v1/admin/orders/manual", headers=auth(super_token), json=_manual_order_payload(product))
+    assert first.status_code == second.status_code == 201
+    first_order = first.json()
+    foreign_item = next(item for item in second.json()["items"] if item["item_kind"] == "manual")
+
+    response = client.patch(
+        f"/api/v1/admin/orders/{first_order['id']}",
+        headers=auth(super_token),
+        json=_manual_edit_payload(
+            first_order,
+            [{"kind": "manual", "order_item_id": foreign_item["id"], "name": "Gift wrap", "quantity": 1, "unit_price": "1.25"}],
+        ),
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "order_item_not_found"
+
+
+def test_existing_manual_item_id_preserves_original_price_snapshot(
+    client: TestClient, db: Session, super_token: str
+) -> None:
+    product = make_product(db, slug="manual-original-price", name="Catalog line", price="10.00")
+    created = client.post("/api/v1/admin/orders/manual", headers=auth(super_token), json=_manual_order_payload(product))
+    assert created.status_code == 201, created.text
+    order = created.json()
+    manual_item = next(item for item in order["items"] if item["item_kind"] == "manual")
+
+    edited = client.patch(
+        f"/api/v1/admin/orders/{order['id']}",
+        headers=auth(super_token),
+        json=_manual_edit_payload(
+            order,
+            [{"kind": "manual", "order_item_id": manual_item["id"], "name": "Updated gift wrap", "description": "Red ribbon", "quantity": 2, "unit_price": "2.00"}],
+        ),
+    )
+    assert edited.status_code == 200, edited.text
+    item = edited.json()["items"][0]
+    assert item["id"] == manual_item["id"]
+    assert item["product_id"] is None
+    assert item["original_unit_price"] == 1.25
+    assert item["unit_price"] == 2.0
+
+
+def test_manual_item_id_cannot_be_submitted_as_a_catalog_item(
+    client: TestClient, db: Session, super_token: str
+) -> None:
+    product = make_product(db, slug="manual-kind-conversion", name="Catalog line", price="10.00")
+    created = client.post("/api/v1/admin/orders/manual", headers=auth(super_token), json=_manual_order_payload(product))
+    assert created.status_code == 201, created.text
+    order = created.json()
+    manual_item = next(item for item in order["items"] if item["item_kind"] == "manual")
+
+    response = client.patch(
+        f"/api/v1/admin/orders/{order['id']}",
+        headers=auth(super_token),
+        json=_manual_edit_payload(
+            order,
+            [{"kind": "catalog", "order_item_id": manual_item["id"], "product_id": product.id, "quantity": 1}],
+        ),
+    )
+
+    assert response.status_code == 422
+
+
 def test_manual_order_requires_super_admin_and_rejects_empty_or_website_source(
     client: TestClient, db: Session, admin_token: str, super_token: str
 ) -> None:
@@ -633,7 +863,7 @@ def test_super_admin_can_complete_manual_order_with_one_active_invoice(
     payload = _manual_order_payload(
         product,
         completion={
-            "payment_method": "manual",
+                "payment_method": "card",
             "paid_amount": "5.00",
             "payment_details": "Cash received",
             "invoice_notes": "Manual order invoice",

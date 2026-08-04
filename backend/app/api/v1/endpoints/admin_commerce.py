@@ -23,6 +23,7 @@ from app.schemas.marketing import (
     DeliveryAreaUpdate,
 )
 from app.schemas.orders import (
+    AdminCatalogOrderItemInput,
     DashboardSummary,
     ManualCatalogOrderItemInput,
     ManualOrderCreate,
@@ -402,15 +403,30 @@ def edit_order(
         reason=payload.reason,
         items=tuple(
             orders_service.AdminOrderItemDraft(
+                kind="catalog",
+                order_item_id=None,
                 product_id=item.product_id,
                 variant_id=item.variant_id,
+                name=None,
+                description=None,
+                quantity=item.quantity,
+                unit_price=item.unit_price,
+            )
+            if isinstance(item, AdminCatalogOrderItemInput)
+            else orders_service.AdminOrderItemDraft(
+                kind="manual",
+                order_item_id=item.order_item_id,
+                product_id=None,
+                variant_id=None,
+                name=item.name,
+                description=item.description,
                 quantity=item.quantity,
                 unit_price=item.unit_price,
             )
             for item in payload.items
         ),
     )
-    orders_service.edit_incomplete_website_order(
+    orders_service.edit_incomplete_order(
         db, order_id=order_id, draft=draft, admin=admin
     )
     db.commit()

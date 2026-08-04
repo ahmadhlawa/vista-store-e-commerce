@@ -27,12 +27,6 @@ class ProductType(StrEnum):
 
 class OrderStatus(StrEnum):
     NEW = "new"
-    PENDING = "pending"
-    CONFIRMED = "confirmed"
-    PROCESSING = "processing"
-    READY = "ready"
-    SHIPPED = "shipped"
-    DELIVERED = "delivered"
     REVIEWING = "reviewing"
     PREPARING = "preparing"
     OUT_FOR_DELIVERY = "out_for_delivery"
@@ -51,7 +45,7 @@ class OrderSource(StrEnum):
 
 class PaymentStatus(StrEnum):
     UNPAID = "unpaid"
-    PARTIAL = "partial"
+    PARTIALLY_PAID = "partially_paid"
     PAID = "paid"
     PARTIALLY_REFUNDED = "partially_refunded"
     REFUNDED = "refunded"
@@ -59,7 +53,8 @@ class PaymentStatus(StrEnum):
 
 class PaymentMethod(StrEnum):
     CASH_ON_DELIVERY = "cash_on_delivery"
-    MANUAL = "manual"
+    CARD = "card"
+    BANK_TRANSFER = "bank_transfer"
 
 
 class InvoiceStatus(StrEnum):

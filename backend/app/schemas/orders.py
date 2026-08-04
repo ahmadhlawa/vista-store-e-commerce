@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from decimal import Decimal
 import re
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import EmailStr, Field, field_validator, model_validator
+from pydantic import ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.core.enums import OrderSource, OrderStatus, PaymentMethod, PaymentStatus
 from app.schemas.common import APIModel, Money, UTCDateTime
@@ -205,12 +205,42 @@ class OrderActivityOut(APIModel):
     created_at: UTCDateTime
 
 
-class AdminOrderItemInput(APIModel):
+class AdminCatalogOrderItemInput(APIModel):
+    model_config = ConfigDict(extra="forbid")
     kind: Literal["catalog"] = "catalog"
     product_id: int
     variant_id: int | None = None
     quantity: int = Field(gt=0, le=999)
     unit_price: Money | None = Field(default=None, ge=0)
+
+
+class AdminManualOrderItemInput(APIModel):
+    kind: Literal["manual"] = "manual"
+    order_item_id: int | None = Field(default=None, gt=0)
+    name: str = Field(min_length=1, max_length=250)
+    description: str | None = Field(default=None, max_length=2000)
+    quantity: int = Field(gt=0, le=999)
+    unit_price: Money = Field(ge=0)
+
+    @field_validator("name")
+    @classmethod
+    def _trim_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("manual item name must not be empty")
+        return value
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_catalog_fields(cls, value: Any) -> Any:
+        if isinstance(value, dict) and "product_id" in value:
+            raise ValueError("manual items must not include product_id")
+        return value
+
+
+AdminOrderItemInput = Annotated[
+    AdminCatalogOrderItemInput | AdminManualOrderItemInput, Field(discriminator="kind")
+]
 
 
 class OrderAdminUpdate(APIModel):
@@ -226,6 +256,18 @@ class OrderAdminUpdate(APIModel):
     status: OrderStatus
     reason: str | None = Field(default=None, max_length=500)
     items: list[AdminOrderItemInput] = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _default_legacy_catalog_item_kind(cls, value: Any) -> Any:
+        if not isinstance(value, dict) or not isinstance(value.get("items"), list):
+            return value
+        value = value.copy()
+        value["items"] = [
+            {"kind": "catalog", **item} if isinstance(item, dict) and "kind" not in item else item
+            for item in value["items"]
+        ]
+        return value
 
     @field_validator("customer_phone")
     @classmethod
