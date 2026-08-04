@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
+  INVOICE_STATUSES,
+  PAYMENT_METHODS,
+  PAYMENT_STATUSES,
   calculateOrderTotals,
   canCompleteOrder,
   canCreateManualOrder,
@@ -9,6 +12,8 @@ import {
   canReopenOrder,
   formatMoney,
   multiplyMoney,
+  paymentMethodLabels,
+  paymentStatusLabels,
 } from "../admin/orderInvoice/domain.js";
 import {
   CompleteOrderDialog,
@@ -106,13 +111,43 @@ describe("order and invoice components", () => {
       <>
         <OrderTotalsSummary items={[{ quantity: 2, unit_price: "1.50" }]} discount="0.25" deliveryFee="3.00" currencySymbol="₪" />
         <OrderStatusBadge status="completed" />
-        <PaymentStatusBadge status="partial" />
+        <PaymentStatusBadge status="partially_paid" />
       </>,
     );
 
     expect(screen.getByText("₪ 5.75")).toBeInTheDocument();
     expect(screen.getByText("مكتمل")).toBeInTheDocument();
     expect(screen.getByText("مدفوع جزئياً")).toBeInTheDocument();
+  });
+
+  // The Arabic strings here are display labels only. The values are the contract the
+  // API validates against, so a drift between the two turns a valid manager choice
+  // into a 422 "البيانات المرسلة غير صالحة." with nothing wrong on screen.
+  it("offers only the payment status values the API accepts", () => {
+    expect(PAYMENT_STATUSES.map(([value]) => value)).toEqual([
+      "unpaid",
+      "partially_paid",
+      "paid",
+      "partially_refunded",
+      "refunded",
+    ]);
+  });
+
+  it("offers only the payment method values the API accepts", () => {
+    expect(PAYMENT_METHODS.map(([value]) => value)).toEqual(["cash_on_delivery", "bank_transfer"]);
+  });
+
+  it("offers only the invoice status values the API accepts", () => {
+    expect(INVOICE_STATUSES.map(([value]) => value)).toEqual(["active", "cancelled", "replaced"]);
+  });
+
+  it("labels every canonical payment status and method the API can return", () => {
+    ["unpaid", "partially_paid", "paid", "partially_refunded", "refunded"].forEach((status) => {
+      expect(paymentStatusLabels[status]).toBeTruthy();
+    });
+    ["cash_on_delivery", "card", "bank_transfer"].forEach((method) => {
+      expect(paymentMethodLabels[method]).toBeTruthy();
+    });
   });
 
   it("keeps the totals summary visible while a monetary field is blank during editing", () => {

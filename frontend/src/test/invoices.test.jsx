@@ -311,6 +311,41 @@ describe("invoice archive workflow", () => {
     });
   });
 
+  // Browser reproduction B1: "مستبدلة" + "مدفوع جزئيًا" answered 422 because the
+  // payment option carried the non-canonical value "partial".
+  it("sends canonical values for the replaced and partially-paid Arabic filter labels", async () => {
+    signedIn();
+    const calls = stubApi({
+      "/api/v1/auth/me": ADMIN,
+      "/api/v1/admin/invoices": page([INVOICE_ROW]),
+    });
+    renderApp("/admin/invoices");
+
+    await screen.findByRole("table");
+    await userEvent.selectOptions(screen.getByLabelText("حالة الفاتورة"), "replaced");
+    await userEvent.selectOptions(screen.getByLabelText("حالة الدفع"), "partially_paid");
+
+    await waitFor(() => {
+      const path = calls.filter((call) => call.path.includes("/admin/invoices")).at(-1).path;
+      expect(path).toContain("status=replaced");
+      expect(path).toContain("payment_status=partially_paid");
+      expect(path).not.toContain("payment_status=partial&");
+    });
+  });
+
+  it("shows the Arabic label for a partially paid invoice instead of the raw API value", async () => {
+    signedIn();
+    stubApi({
+      "/api/v1/auth/me": ADMIN,
+      "/api/v1/admin/invoices": page([{ ...INVOICE_ROW, payment_status: "partially_paid" }]),
+    });
+    renderApp("/admin/invoices");
+
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("مدفوع جزئياً")).toBeInTheDocument();
+    expect(within(table).queryByText("partially_paid")).not.toBeInTheDocument();
+  });
+
   it("limits a normal admin to increasing payment information", async () => {
     const normalAdmin = { ...ADMIN, role: "admin" };
     authStorage.save("valid-token", normalAdmin);

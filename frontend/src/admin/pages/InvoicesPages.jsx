@@ -19,7 +19,7 @@ import { formatDateTime } from "../../utils/format.js";
 import { Badge, Button, Field, PageHeader, Pagination, Spinner, Table, card, input, textarea, useFeedback } from "../ui.jsx";
 
 const amount = (value, symbol) => `${Number(value || 0).toFixed(2)} ${symbol || ""}`.trim();
-const tone = (status) => ({ active: "good", cancelled: "bad", replaced: "warn", paid: "good", unpaid: "warn", partial: "warn", refunded: "neutral", partially_refunded: "warn" }[status] || "neutral");
+const tone = (status) => ({ active: "good", cancelled: "bad", replaced: "warn", paid: "good", unpaid: "warn", partially_paid: "warn", refunded: "neutral", partially_refunded: "warn" }[status] || "neutral");
 
 export function InvoicesPage() {
   const navigate = useNavigate();

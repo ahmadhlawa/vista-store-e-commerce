@@ -11,7 +11,7 @@ import {
   paymentStatusLabels,
 } from "./domain.js";
 
-const badgeTones = { new: "#8A6A1F", pending: "#8A6A1F", cancelled: "#8C2F22", active: "#1F6B4A", completed: "#1F6B4A", paid: "#1F6B4A", refunded: "#4A453E", partial: "#8A6A1F", partially_refunded: "#8A6A1F" };
+const badgeTones = { new: "#8A6A1F", pending: "#8A6A1F", cancelled: "#8C2F22", active: "#1F6B4A", completed: "#1F6B4A", paid: "#1F6B4A", refunded: "#4A453E", partially_paid: "#8A6A1F", partially_refunded: "#8A6A1F" };
 const badge = (tone) => sx`display:inline-flex;align-items:center;inline-size:max-content;padding:4px 10px;border-radius:999px;background:${tone === "#8C2F22" ? "#FBF1EF" : tone === "#1F6B4A" ? "#EEF6F1" : "#FBF3E6"};color:${tone};font-size:12px;font-weight:700`;
 
 function StatusBadge({ status, labels, fallback }) {

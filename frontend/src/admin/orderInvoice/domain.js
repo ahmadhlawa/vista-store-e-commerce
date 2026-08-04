@@ -5,21 +5,27 @@ export const ORDER_STATUSES = [
   ["out_for_delivery", "خرج للتوصيل"], ["completed", "مكتمل"], ["cancelled", "ملغى"],
 ];
 
+// The first element of every pair is the value the API validates; the second is a
+// display label only. They must never drift apart: an unknown value is rejected as
+// a 422 that reaches the manager as "البيانات المرسلة غير صالحة." with a filter that
+// looks perfectly valid on screen.
 export const PAYMENT_STATUSES = [
-  ["unpaid", "غير مدفوع"], ["partial", "مدفوع جزئياً"], ["paid", "مدفوع"],
+  ["unpaid", "غير مدفوع"], ["partially_paid", "مدفوع جزئياً"], ["paid", "مدفوع"],
   ["partially_refunded", "مسترد جزئياً"], ["refunded", "مسترد"],
 ];
 
 export const INVOICE_STATUSES = [["active", "نشطة"], ["cancelled", "ملغاة"], ["replaced", "مستبدلة"]];
 export const ORDER_SOURCES = [["website", "الموقع"], ["whatsapp", "واتساب"], ["phone", "هاتف"], ["walk_in", "داخل المتجر"], ["social", "شبكات اجتماعية"], ["other", "أخرى"]];
-export const PAYMENT_METHODS = [["cash_on_delivery", "الدفع عند الاستلام"], ["manual", "تحويل يدوي / بنكي"]];
+// Manager-selectable methods only. `card` is a value the API can return on an older
+// invoice, so it is labelled below without being offered as a new choice here.
+export const PAYMENT_METHODS = [["cash_on_delivery", "الدفع عند الاستلام"], ["bank_transfer", "تحويل يدوي / بنكي"]];
 
 const labels = (entries) => Object.fromEntries(entries);
 export const orderStatusLabels = labels(ORDER_STATUSES);
 export const paymentStatusLabels = labels(PAYMENT_STATUSES);
 export const invoiceStatusLabels = labels(INVOICE_STATUSES);
 export const orderSourceLabels = labels(ORDER_SOURCES);
-export const paymentMethodLabels = labels(PAYMENT_METHODS);
+export const paymentMethodLabels = { ...labels(PAYMENT_METHODS), card: "بطاقة" };
 
 function decimalParts(value) {
   const text = String(value ?? "0").trim();
