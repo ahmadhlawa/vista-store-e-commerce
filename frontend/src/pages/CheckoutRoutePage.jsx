@@ -40,6 +40,14 @@ export default function CheckoutRoutePage() {
   const [priced, setPriced] = useState(null);
   const clientReference = useRef(null);
   const submitting = useRef(false);
+  const formRef = useRef(null);
+  const focusValidationError = useRef(false);
+
+  useEffect(() => {
+    if (!focusValidationError.current || !Object.keys(errors).length) return;
+    focusValidationError.current = false;
+    formRef.current?.querySelector("[aria-invalid='true']")?.focus();
+  }, [errors]);
 
   // Every displayed number is recomputed by the server, so a stale cart or a
   // tampered price can never become an order total.
@@ -79,7 +87,10 @@ export default function CheckoutRoutePage() {
     if (placing || submitting.current) return;
     const found = validate(form);
     setErrors(found);
-    if (Object.keys(found).length) return;
+    if (Object.keys(found).length) {
+      focusValidationError.current = true;
+      return;
+    }
 
     submitting.current = true;
     setPlacing(true);
@@ -139,7 +150,7 @@ export default function CheckoutRoutePage() {
       <h1 className="vs-page__title">إتمام الطلب</h1>
 
       <div className="vs-checkout">
-        <form className="vs-form vs-checkout__form" onSubmit={placeOrder} noValidate>
+        <form className="vs-form vs-checkout__form" onSubmit={placeOrder} noValidate ref={formRef}>
           <fieldset className="vs-panel">
             <legend className="vs-panel__title">بيانات العميل</legend>
 
@@ -294,9 +305,9 @@ export default function CheckoutRoutePage() {
             )}
           </fieldset>
 
-          {submitError && (
+          {(submitError || Object.keys(errors).length > 0) && (
             <div className="vs-state vs-state--error vs-checkout__error" role="alert">
-              {submitError}
+              {submitError || Object.values(errors)[0]}
             </div>
           )}
 

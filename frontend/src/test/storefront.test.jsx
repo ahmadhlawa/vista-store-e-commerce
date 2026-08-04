@@ -163,10 +163,37 @@ describe("public storefront", () => {
     const submit = await screen.findByRole("button", { name: /تأكيد الطلب/ });
     await userEvent.click(submit);
 
-    expect(await screen.findByText("الرجاء إدخال الاسم الكامل")).toBeInTheDocument();
+    expect(await screen.findAllByText("الرجاء إدخال الاسم الكامل")).not.toHaveLength(0);
     expect(screen.getByText("رقم هاتف غير صالح — مثال 0591234567")).toBeInTheDocument();
     expect(screen.getByText("اختر منطقة التوصيل")).toBeInTheDocument();
     expect(screen.getByText("يجب الموافقة على الشروط قبل إتمام الطلب")).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("الرجاء إدخال الاسم الكامل");
+    expect(screen.getByPlaceholderText("مثال: سارة أحمد")).toHaveFocus();
+    expect(calls.some((call) => call.path === "/api/v1/orders")).toBe(false);
+  });
+
+  it("makes an unchecked terms agreement visible and focusable after a valid checkout click", async () => {
+    cartStorage.save([
+      { key: "1|", productId: 1, variantId: null, slug: "clear-resin", name: "ريزن شفاف", unit: 100, bg: "", variation: "", qty: 1 },
+    ]);
+    const calls = stubApi({
+      ...storefrontRoutes,
+      "POST /api/v1/cart/price": {
+        lines: [], subtotal: 100, discount: 0, delivery_fee: 20, total: 120,
+        coupon_code: null, delivery_area_name: "رام الله",
+      },
+      "POST /api/v1/orders": respond(500, { error: { code: "must_not_submit", message: "must not be called" } }),
+    });
+    renderApp("/checkout");
+
+    await userEvent.type(await screen.findByPlaceholderText("مثال: سارة أحمد"), "سارة أحمد");
+    await userEvent.type(screen.getByPlaceholderText("05XXXXXXXX"), "0591234567");
+    await userEvent.type(screen.getByPlaceholderText("الشارع، رقم البناية، أقرب معلم"), "رام الله، شارع الإرسال");
+    await userEvent.selectOptions(screen.getByLabelText(/منطقة التوصيل/), "1");
+    await userEvent.click(screen.getByRole("button", { name: /تأكيد الطلب/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("يجب الموافقة على الشروط قبل إتمام الطلب");
+    expect(screen.getByRole("checkbox")).toHaveFocus();
     expect(calls.some((call) => call.path === "/api/v1/orders")).toBe(false);
   });
 

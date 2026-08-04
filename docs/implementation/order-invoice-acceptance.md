@@ -59,7 +59,19 @@ Catalog price isolation and manual-item stock/catalog isolation are covered by `
 
 ## Browser acceptance limitation
 
-No browser automation tool is available in this session, so desktop/mobile routes, keyboard/RTL behavior, and the 22 requested real-browser scenarios were not executed. Component tests are not substituted for browser acceptance. No screenshots were captured.
+The earlier order/invoice run did not execute browser acceptance. The checkout follow-up below supersedes that limitation for the public order-confirmation flow.
+
+## Checkout acceptance follow-up
+
+Root causes: client validation blocked submission when the terms checkbox was unchecked, but only showed a field-local message outside the submit area; the development proxy also defaulted to port 8000 instead of the isolated acceptance backend on 8001.
+
+Reproduction: fill the customer and delivery controls, leave terms unchecked, and press `تأكيد الطلب`. The form received the click, made no order request, and left the submit button unchanged. The fix adds a visible Arabic alert adjacent to the submit button and focuses the first invalid control. The Vite proxy now accepts `VITE_DEV_API_TARGET`, preserving port 8000 as its default; the isolated 5175 process was started with 8001.
+
+Browser evidence: an unchecked agreement produced `يجب الموافقة على الشروط قبل إتمام الطلب`, focused the checkbox, and made zero `POST /api/v1/orders` requests. After agreement, a rapid double-click produced one 201 order request. With the explicitly isolated backend, `ORD-260804-1663` persisted in `vista_browser_acceptance_20260804-154606.db`; the order count changed from 5 to 6 and the server log recorded the same 201.
+
+Verification: focused checkout tests (16), complete `npm.cmd test`, `npm.cmd run build`, and `pytest -q tests/test_checkout.py` all passed.
+
+Original-database note: two earlier exploratory 201 responses were routed through the stale port-8000 proxy rather than the disposable database. They did not affect the disposable DB, so this document cannot attest that the non-isolated target was untouched. No further writes were made to it after this was identified.
 
 ## Commits and changed files
 
