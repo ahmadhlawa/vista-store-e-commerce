@@ -146,7 +146,8 @@ def test_a_replaced_invoice_and_its_active_replacement_can_share_an_order(
         order_id=order.id,
         status=InvoiceStatus.ACTIVE.value,
         active_invoice_marker=InvoiceStatus.ACTIVE.value,
-        order_number=order.order_number,
+            order_number=order.order_number,
+            source=order.source,
         payment_method=order.payment_method,
         store_name="Store",
         customer_name=order.customer_name,
@@ -602,20 +603,23 @@ def test_invoice_payment_updates_are_audited_and_filterable(
 
     response = client.patch(
         f"/api/v1/admin/invoices/{number}/payment",
-        json={"paid_amount": 40, "payment_method": "manual", "payment_details": "receipt 7"},
+        json={"paid_amount": 40, "payment_method": "card", "payment_details": "receipt 7"},
         headers=auth(admin_token),
     )
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["paid_amount"] == 40.0
     assert body["remaining_amount"] == 60.0
-    assert body["payment_status"] == "partial"
-    assert body["payment_method"] == "manual"
-    assert body["activities"][-1]["event_type"] == "payment_updated"
+    assert body["payment_status"] == "partially_paid"
+    assert body["payment_method"] == "card"
+    payment_activity = body["activities"][-1]
+    assert payment_activity["event_type"] == "payment_updated"
+    assert payment_activity["before_data"]["payment_details"] is None
+    assert payment_activity["after_data"]["payment_details"] == "receipt 7"
 
     filtered = client.get(
         "/api/v1/admin/invoices",
-        params={"payment_status": "partial", "source": "website", "employee_id": body["issued_by_admin_id"]},
+        params={"payment_status": "partially_paid", "source": "website", "employee_id": body["issued_by_admin_id"]},
         headers=auth(admin_token),
     )
     assert [row["invoice_number"] for row in filtered.json()["items"]] == [number]
@@ -763,9 +767,9 @@ def test_cash_on_delivery_is_the_default_and_completes_checkout(
     assert order.status == OrderStatus.NEW.value
 
 
-def test_manual_payment_is_accepted(client: TestClient, db: Session, product: Product) -> None:
-    created = _place_order(client, product, quantity=1, payment_method="manual")
-    assert created["payment_method"] == "manual"
+def test_unsupported_manual_payment_is_rejected(client: TestClient, product: Product) -> None:
+    response = client.post("/api/v1/orders", json={"client_reference": "manual-payment-rejected", "customer_name": "Sara Ahmad", "customer_phone": "0591234567", "address": "Ramallah, Main Street 5", "payment_method": "manual", "items": [{"product_id": product.id, "quantity": 1}]})
+    assert response.status_code == 422
 
 
 @pytest.mark.parametrize(
@@ -810,14 +814,14 @@ def test_no_order_is_created_when_the_payment_method_is_rejected(
 def test_the_admin_order_view_shows_the_payment_method(
     client: TestClient, db: Session, product: Product, admin_token: str
 ) -> None:
-    created = _place_order(client, product, quantity=1, payment_method="manual")
+    created = _place_order(client, product, quantity=1, payment_method="card")
     order = _order_row(db, created["order_number"])
 
     detail = client.get(f"/api/v1/admin/orders/{order.id}", headers=auth(admin_token)).json()
-    assert detail["payment_method"] == "manual"
+    assert detail["payment_method"] == "card"
 
     listing = client.get("/api/v1/admin/orders", headers=auth(admin_token)).json()
-    assert listing["items"][0]["payment_method"] == "manual"
+    assert listing["items"][0]["payment_method"] == "card"
 
 
 def test_manual_payment_instructions_are_blank_until_the_owner_supplies_them(

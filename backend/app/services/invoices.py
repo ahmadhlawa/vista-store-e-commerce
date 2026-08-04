@@ -65,7 +65,7 @@ def derive_payment_status(
         return PaymentStatus.REFUNDED if refunded == paid else PaymentStatus.PARTIALLY_REFUNDED
     if paid == 0:
         return PaymentStatus.UNPAID
-    return PaymentStatus.PAID if paid == total else PaymentStatus.PARTIAL
+    return PaymentStatus.PAID if paid == total else PaymentStatus.PARTIALLY_PAID
 
 
 def validate_payment_update(
@@ -219,6 +219,7 @@ def issue_for_order(
         replacement_invoice=predecessor,
         issued_at=utcnow(),
         order_number=order.order_number,
+        source=order.source,
         payment_method=payment_method or order.payment_method,
         customer_notes=order.customer_notes,
         store_name=settings.store_name_ar or settings.store_name,
@@ -404,7 +405,7 @@ def search(
     if employee_id is not None:
         stmt = stmt.where(Invoice.issued_by_admin_id == employee_id)
     if source:
-        stmt = stmt.join(Order, Order.id == Invoice.order_id).where(Order.source == source)
+        stmt = stmt.where(Invoice.source == source)
     if q:
         needle = f"%{q.strip()}%"
         stmt = stmt.where(
@@ -444,6 +445,14 @@ def update_payment(
     admin: AdminUser,
 ) -> Invoice:
     """Apply the narrowly permitted financial mutation and append its audit event."""
+    # Serialize concurrent financial writes and refresh rows that callers may have
+    # loaded before another transaction committed.
+    invoice = db.execute(
+        select(Invoice)
+        .where(Invoice.id == invoice.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).scalar_one()
     if invoice.status != InvoiceStatus.ACTIVE.value:
         raise ConflictError("Only an active invoice can receive a payment update.", code="invoice_not_active")
 
@@ -453,6 +462,7 @@ def update_payment(
         "paid_amount": invoice.paid_amount,
         "refunded_amount": invoice.refunded_amount,
         "remaining_amount": invoice.remaining_amount,
+        "payment_details": invoice.payment_details,
     }
     payment = validate_payment_update(
         total_amount=invoice.grand_total,
@@ -487,6 +497,7 @@ def update_payment(
             "paid_amount": invoice.paid_amount,
             "refunded_amount": invoice.refunded_amount,
             "remaining_amount": invoice.remaining_amount,
+            "payment_details": invoice.payment_details,
         },
         reason=reason,
     )

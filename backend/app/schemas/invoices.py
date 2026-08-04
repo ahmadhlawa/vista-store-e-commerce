@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pydantic import EmailStr, Field
 
-from app.core.enums import InvoiceStatus, PaymentMethod, PaymentStatus
+from app.core.enums import InvoiceStatus, OrderSource, PaymentMethod, PaymentStatus
 from app.schemas.common import APIModel, Money, UTCDateTime
 
 
@@ -28,6 +28,7 @@ class InvoiceListOut(APIModel):
     invoice_number: str
     order_id: int
     order_number: str
+    source: OrderSource
     customer_name: str
     customer_phone: str
     issued_at: UTCDateTime
@@ -67,6 +68,7 @@ class InvoiceOut(APIModel):
 
     order_id: int
     order_number: str
+    source: OrderSource
     payment_method: PaymentMethod
     customer_notes: str | None = None
 

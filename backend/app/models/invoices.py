@@ -84,6 +84,7 @@ class Invoice(TimestampMixin, Base):
 
     # ── snapshot: the order it was issued for ────────────────────────────────
     order_number: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    source: Mapped[str] = mapped_column(String(24), index=True, nullable=False)
     payment_method: Mapped[str] = mapped_column(String(32), nullable=False)
     customer_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
