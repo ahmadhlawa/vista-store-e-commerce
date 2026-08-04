@@ -38,6 +38,34 @@ describe("public shell", () => {
     expect(screen.queryByRole("button", { name: "عربة التسوّق" })).not.toBeInTheDocument();
     expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
   });
+
+  it("sends the header icon beside the cart to the isolated admin login", async () => {
+    stubApi(storefrontRoutes);
+    renderApp("/");
+
+    const adminLogin = await screen.findByRole("link", { name: "تسجيل دخول الإدارة" });
+    expect(adminLogin).toHaveAttribute("href", "/admin/login");
+
+    await userEvent.click(adminLogin);
+    expect(await screen.findByRole("heading", { name: "تسجيل دخول الإدارة" })).toBeInTheDocument();
+    expect(screen.queryByRole("banner")).not.toBeInTheDocument();
+    expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
+  });
+
+  it("keeps public navigation free of order tracking links", async () => {
+    stubApi(storefrontRoutes);
+    const { container } = renderApp("/");
+
+    await screen.findByRole("banner");
+    expect(container.querySelectorAll('a[href="/track-order"]')).toHaveLength(0);
+  });
+
+  it("treats the former tracking URL as a public not-found route", async () => {
+    stubApi(storefrontRoutes);
+    renderApp("/track-order");
+
+    expect(await screen.findByRole("heading", { name: "الصفحة غير موجودة" })).toBeInTheDocument();
+  });
 });
 
 describe("category navigation", () => {

@@ -111,9 +111,6 @@ export default function OrderSuccessRoutePage() {
         </div>
 
         <div className="vs-done__actions">
-          <Link to="/track-order" className="vs-btn vs-btn--primary vs-btn--lg">
-            تتبّع الطلب
-          </Link>
           <Link to="/shop" className="vs-btn vs-btn--ghost vs-btn--lg">
             متابعة التسوّق
           </Link>
