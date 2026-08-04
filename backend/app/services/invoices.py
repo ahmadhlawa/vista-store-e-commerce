@@ -206,7 +206,6 @@ def issue_for_order(
         .where(
             Invoice.order_id == order.id,
             Invoice.status == InvoiceStatus.REPLACED.value,
-            Invoice.replacement_invoice_id.is_(None),
         )
         .order_by(Invoice.id.desc())
         .limit(1)

@@ -432,6 +432,59 @@ def test_reopen_requires_super_admin_reason_and_completed_active_invoice(
     assert missing_invoice.json()["error"]["code"] == "active_invoice_required"
 
 
+def test_repeated_reopen_recompletion_links_each_invoice_to_its_predecessor(
+    client: TestClient, db: Session, super_token: str
+) -> None:
+    """Choosing the original replaced invoice again breaks a correction history chain."""
+    product = make_product(db, slug="reopen-chain", name="Reopen chain", price="10.00")
+    order = _create_order(client, product, suffix="reopen-chain")
+    complete_path = f"/api/v1/admin/orders/{order['id']}/complete"
+    reopen_path = f"/api/v1/admin/orders/{order['id']}/reopen"
+
+    first = client.post(
+        complete_path,
+        headers=auth(super_token),
+        json={"payment_method": "cash_on_delivery", "paid_amount": "0.00"},
+    )
+    assert first.status_code == 200, first.text
+    first_id = first.json()["active_invoice"]["id"]
+    first_reopen = client.post(
+        reopen_path, headers=auth(super_token), json={"reason": "First correction"}
+    )
+    assert first_reopen.status_code == 200, first_reopen.text
+
+    second = client.post(
+        complete_path,
+        headers=auth(super_token),
+        json={"payment_method": "cash_on_delivery", "paid_amount": "0.00"},
+    )
+    assert second.status_code == 200, second.text
+    second_id = second.json()["active_invoice"]["id"]
+    second_reopen = client.post(
+        reopen_path, headers=auth(super_token), json={"reason": "Second correction"}
+    )
+    assert second_reopen.status_code == 200, second_reopen.text
+
+    third = client.post(
+        complete_path,
+        headers=auth(super_token),
+        json={"payment_method": "cash_on_delivery", "paid_amount": "0.00"},
+    )
+    assert third.status_code == 200, third.text
+
+    db.expire_all()
+    invoices = db.query(Invoice).filter(Invoice.order_id == order["id"]).order_by(Invoice.id).all()
+    assert len(invoices) == 3
+    assert invoices[0].id == first_id
+    assert invoices[1].id == second_id
+    assert invoices[0].status == "replaced"
+    assert invoices[1].status == "replaced"
+    assert invoices[2].status == "active"
+    assert invoices[1].replacement_invoice_id == invoices[0].id
+    assert invoices[2].replacement_invoice_id == invoices[1].id
+    assert db.query(Invoice).filter(Invoice.order_id == order["id"], Invoice.status == "active").count() == 1
+
+
 def test_completion_rejects_cancelled_and_empty_orders_without_an_invoice(
     client: TestClient, db: Session, admin_token: str
 ) -> None:
