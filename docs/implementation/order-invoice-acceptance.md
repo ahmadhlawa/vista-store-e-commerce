@@ -78,3 +78,96 @@ Original-database note: two earlier exploratory 201 responses were routed throug
 Commits: `a8dbdfc fix(invoices): preserve payment and issuer snapshots`; `ebf0b75 feat(orders): support typed manager edits for manual orders`; `e6bf762 fix(migrations): harden invoice workflow downgrade safety`.
 
 Changed files are recorded by those commits plus this documentation update; no database, backup, environment, secret, credential, generated-media, or recovery file is staged.
+
+## Manual-order 405 and invoice-filter 422 (2026-08-05)
+
+Two browser defects were reported against the isolated environment: saving on
+`/admin/orders/manual` answered `Method Not Allowed`, and invoice-archive filters
+answered `البيانات المرسلة غير صالحة.` They have different causes.
+
+### Defect A — manual order returned HTTP 405
+
+Not an application defect. Evidence, in order:
+
+- `POST http://127.0.0.1:8001/api/v1/admin/orders/manual` answers **401**, so the
+  route exists and accepts POST on this branch.
+- `POST http://localhost:5175/api/v1/admin/orders/manual` — the path the browser
+  actually takes — answered **405**.
+- The OpenAPI document fetched *through the proxy* had no
+  `/api/v1/admin/orders/manual` at all and published `InvoiceStatus` as
+  `issued|cancelled`; fetched from 8001 it has the route and
+  `active|cancelled|replaced`.
+
+Root cause: `vite.config.js` falls back to `http://127.0.0.1:8000` when
+`VITE_DEV_API_TARGET` is unset, and the worktree had no `frontend/.env`. The
+5175 dev server was restarted at 21:27 without the variable, so every `/api`
+call was proxied to the unrelated pre-branch backend on 8000. There, the POST
+fell through to `GET|PATCH /admin/orders/{order_id}` and was refused as 405.
+This also produced the legacy `issued` badges in the screenshots — no row in the
+disposable database has that status (`active` 3, `cancelled` 1).
+
+This is the same stale-proxy fault recorded in the checkout follow-up above. It
+recurred because the target had only been passed inline to a process, never
+persisted. Fixed by adding a gitignored `frontend/.env` for the acceptance run
+and by documenting `VITE_DEV_API_TARGET` in `frontend/.env.example`
+(`3bbfa63`). No production code required a change; `manualOrderWorkflow.test.jsx`
+already asserted `POST /api/v1/admin/orders/manual` and already passed.
+
+After restarting only the 5175 process, the proxied POST answers 401 instead of
+405 and the proxied OpenAPI matches the 8001 contract.
+
+### Defect B — invoice filters returned 422
+
+A real code defect, independent of Defect A. Reproduction B1 (`مستبدلة` +
+`مدفوع جزئيًا`) failed even against the correct backend: the payment option
+carried the value `partial`, while the API enum is `partially_paid`, so FastAPI
+rejected the query and `main.py` returned the generic Arabic validation message.
+Reproduction B2 (`مستبدلة` + all payment statuses) failed for Defect A's reason
+instead — the 8000 backend does not know `replaced`.
+
+Two further instances of the same drift were found by auditing the whole matrix:
+an invoice stored as `partially_paid` rendered its raw English value, because the
+label and badge-tone maps were also keyed on `partial`; and the payment-method
+select offered `manual`, which the API rejects
+(`cash_on_delivery|card|bank_transfer`). That value is posted by the manual-order
+form, so choosing `تحويل يدوي / بنكي` failed a manager's save with the same 422.
+
+Fixed in `eced41a`: `frontend/src/admin/orderInvoice/domain.js`,
+`components.jsx`, `pages/InvoicesPages.jsx`. Regression tests assert submitted
+values rather than Arabic labels: six tests were confirmed failing first, one of
+them with `Value "partially_paid" not found in options` — Reproduction B1 as a
+test.
+
+No migration or backfill was needed: the disposable database holds no legacy
+`issued` rows, and `InvoiceStatus.ISSUED` is an alias of `active` rather than a
+stored value.
+
+### Verification
+
+`pytest` 367 passed, 4 pre-existing xfailed, 0 failed — no new xfails.
+`npm.cmd test` 147 passed across 14 files. `npm.cmd run build` succeeded.
+The running 5175 server serves the canonical values and proxies to 8001.
+
+Disposable database: `backend/data/vista_browser_acceptance_20260804-154606.db`,
+revision `0009_invoice_issuer_snapshot`; baseline before this work was orders 6,
+order_items 40, invoices 4, order_activities 1, and no write was made to it.
+
+### Browser acceptance limitation
+
+Real-browser acceptance was **not** executed for either defect. This session had
+no browser automation available and no manager password, so the scenarios could
+not be driven or screenshotted. Defect A is evidenced at the transport layer
+(405 → 401 through the proxy) and Defect B at the unit level; neither has
+end-to-end browser evidence, and this document does not claim any.
+
+`vista_preview.db` in the non-isolated checkout is held open by the port-8000
+backend and its mtime moved during this session. Contact with 8000 was limited
+to `GET /health`, `GET /openapi.json`, and one POST refused at routing before
+any database access. The file is locked, so it could not be hashed to attest
+byte-level equality.
+
+### Out of scope, still open
+
+`frontend/src/store.js` offers the public checkout a `manual` payment method,
+which the API also rejects. It was left unchanged because it is public behaviour
+outside both reported defects, and is recorded here as a known contract drift.
