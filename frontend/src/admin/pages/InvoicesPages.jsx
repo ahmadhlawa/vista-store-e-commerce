@@ -77,7 +77,7 @@ export function InvoicesPage() {
 }
 
 function InvoiceLinks({ invoice }) {
-  const links = [...(invoice.history || []), invoice.replacement_invoice, invoice.replaces_invoice].filter(Boolean);
+  const links = [...(invoice.history || []), invoice.replacement_invoice, invoice.replaces_invoice].filter((link) => link?.invoice_number && link.invoice_number !== invoice.invoice_number);
   const unique = [...new Map(links.map((link) => [link.invoice_number, link])).values()];
   if (!unique.length) return null;
   return <section style={{ ...card, ...sx`margin-bottom:14px` }}><h2 style={sx`margin:0 0 10px;font-size:16px`}>الفواتير المرتبطة</h2><div style={sx`display:flex;gap:10px;flex-wrap:wrap`}>{unique.map((link) => <Link key={link.invoice_number} to={`/admin/invoices/${link.invoice_number}`}>{link.invoice_number} · {invoiceStatusLabels[link.status] || link.status}</Link>)}</div></section>;

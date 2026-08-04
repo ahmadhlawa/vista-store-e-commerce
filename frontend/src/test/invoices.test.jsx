@@ -209,7 +209,7 @@ describe("admin invoice detail", () => {
 });
 
 describe("order detail invoice panel", () => {
-  it("links to the invoice and offers a print action", async () => {
+  it("links to the invoice without offering a print action", async () => {
     signedIn();
     stubApi({ "/api/v1/auth/me": ADMIN, "/api/v1/admin/orders/3": ORDER });
     renderApp("/admin/orders/3");
@@ -219,7 +219,7 @@ describe("order detail invoice panel", () => {
     expect(screen.getByRole("link", { name: "INV-000001" })).toBeInTheDocument();
     expect(screen.getByText("صادرة")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "عرض الفاتورة" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "طباعة الفاتورة" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /طباعة الفاتورة/ })).not.toBeInTheDocument();
     expect(screen.getByText("الدفع عند الاستلام")).toBeInTheDocument();
   });
 
@@ -275,6 +275,21 @@ describe("order detail invoice panel", () => {
 });
 
 describe("invoice archive workflow", () => {
+  it("hides linked invoices when history contains only the current invoice", async () => {
+    signedIn();
+    stubApi({
+      "/api/v1/auth/me": ADMIN,
+      "/api/v1/admin/invoices/INV-000001": {
+        ...INVOICE,
+        history: [{ id: 5, invoice_number: "INV-000001", status: "active", issued_at: "2026-08-01T10:00:00Z" }],
+      },
+    });
+    renderApp("/admin/invoices/INV-000001");
+
+    await screen.findByRole("heading", { name: /INV-000001/ });
+    expect(screen.queryByRole("heading", { name: "الفواتير المرتبطة" })).not.toBeInTheDocument();
+  });
+
   it("sends archive filters for payment, source and employee", async () => {
     signedIn();
     const calls = stubApi({
