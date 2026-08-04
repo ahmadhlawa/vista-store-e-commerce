@@ -361,6 +361,43 @@ describe("order detail invoice panel", () => {
     expect(screen.getByText(/تصدر الفاتورة تلقائياً عند تغيير الحالة/)).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "INV-000001" })).not.toBeInTheDocument();
   });
+
+  it("shows item and total read-only details when the order is not editable", async () => {
+    signedIn();
+    stubApi({
+      "/api/v1/auth/me": ADMIN,
+      "/api/v1/admin/orders/3": {
+        ...ORDER,
+        source: "website",
+        payment_status: "unpaid",
+        is_locked: false,
+        completed_at: null,
+        activities: [],
+        items: [{ id: 1, product_id: 7, product_name: "ريزن شفاف", sku: "RES-1000", quantity: 2, unit_price: "100.00", line_total: "200.00" }],
+      },
+    });
+    renderApp("/admin/orders/3");
+
+    await screen.findByRole("heading", { name: /ORD-260801-1234/ });
+    expect(screen.getByRole("heading", { name: "أصناف الطلب" })).toBeInTheDocument();
+    expect(screen.getByText("ريزن شفاف")).toBeInTheDocument();
+    expect(screen.getByLabelText("ملخص إجمالي الطلب")).toHaveTextContent("220.00");
+  });
+
+  it("hides workflow controls from a normal admin on a manager-reopened order", async () => {
+    authStorage.save("valid-token", { ...ADMIN, role: "admin" });
+    const normalAdmin = { ...ADMIN, role: "admin" };
+    stubApi({
+      "/api/v1/auth/me": normalAdmin,
+      "/api/v1/admin/orders/3": { ...ORDER, source: "website", payment_status: "unpaid", is_locked: false, completed_at: "2026-08-04T10:00:00Z", status: "preparing", activities: [] },
+    });
+    renderApp("/admin/orders/3");
+
+    await screen.findByRole("heading", { name: /ORD-260801-1234/ });
+    expect(screen.queryByLabelText("تغيير الحالة")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("ملاحظة الحالة")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "تحديث الحالة" })).not.toBeInTheDocument();
+  });
 });
 
 describe("storefront payment surface", () => {
