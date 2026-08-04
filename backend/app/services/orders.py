@@ -18,7 +18,7 @@ from typing import Any, Protocol
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.enums import OrderSource, OrderStatus, PaymentMethod
+from app.core.enums import AdminRole, OrderSource, OrderStatus, PaymentMethod
 from app.db.base import utcnow
 from app.models import (
     AdminUser,
@@ -539,6 +539,13 @@ def change_status(
         raise DomainError("حالة الطلب غير معروفة.", code="invalid_status")
 
     old_status = order.status
+    if order.completed_at is not None and not order.is_locked and (
+        admin is None or admin.role != AdminRole.SUPER_ADMIN.value
+    ):
+        raise PermissionDeniedError(
+            "Reopened completed orders require a super administrator.",
+            code="reopened_order_manager_only",
+        )
     if old_status == OrderStatus.COMPLETED.value:
         raise DomainError("Completed orders are locked.", code="order_locked")
     if new_status == OrderStatus.COMPLETED.value:
@@ -626,6 +633,11 @@ def complete_order(
     ).scalar_one_or_none()
     if order is None:
         raise NotFoundError("Order not found.", code="order_not_found")
+    if order.completed_at is not None and not order.is_locked and admin.role != AdminRole.SUPER_ADMIN.value:
+        raise PermissionDeniedError(
+            "Reopened completed orders require a super administrator.",
+            code="reopened_order_manager_only",
+        )
 
     existing_invoice = invoices_service.get_for_order(db, order.id)
     if order.status == OrderStatus.COMPLETED.value:
@@ -711,6 +723,65 @@ def complete_order(
     return order
 
 
+def reopen_completed_order(
+    db: Session, *, order_id: int, reason: str, admin: AdminUser
+) -> Order:
+    """Reopen a completed order for a manager correction and archive its active invoice."""
+    if admin.role != AdminRole.SUPER_ADMIN.value:
+        raise PermissionDeniedError(
+            "Only a super administrator can reopen an order.", code="reopen_manager_only"
+        )
+    normalized_reason = reason.strip()
+    if not normalized_reason:
+        raise DomainError("A reopen reason is required.", code="reopen_reason_required")
+
+    order = db.execute(
+        select(Order).where(Order.id == order_id).with_for_update()
+    ).scalar_one_or_none()
+    if order is None:
+        raise NotFoundError("Order not found.", code="order_not_found")
+    if order.status != OrderStatus.COMPLETED.value or not order.is_locked:
+        raise DomainError("Only completed orders can be reopened.", code="order_not_completed")
+
+    invoice = invoices_service.replace_for_reopen(db, order, admin=admin, reason=normalized_reason)
+    if invoice is None:
+        raise DomainError("Completed orders require an active invoice.", code="active_invoice_required")
+
+    order.status = OrderStatus.REVIEWING.value
+    order.is_locked = False
+    order.locked_at = None
+    order.updated_at = utcnow()
+    db.add(
+        OrderStatusHistory(
+            order_id=order.id,
+            old_status=OrderStatus.COMPLETED.value,
+            new_status=order.status,
+            admin_user_id=admin.id,
+            note=normalized_reason,
+        )
+    )
+    record_order_activity(
+        db,
+        order_id=order.id,
+        invoice_id=invoice.id,
+        actor_admin_id=admin.id,
+        event_type="order_reopened",
+        before_data={"status": OrderStatus.COMPLETED.value, "is_locked": True},
+        after_data={"status": order.status, "is_locked": False, "invoice_number": invoice.invoice_number},
+        reason=normalized_reason,
+    )
+    audit_service.record(
+        db,
+        admin=admin,
+        action="order.reopened",
+        entity_type="order",
+        entity_id=order.id,
+        meta={"order_number": order.order_number, "invoice_number": invoice.invoice_number},
+    )
+    db.flush()
+    return order
+
+
 def update_order_notes(
     db: Session,
     order: Order,
@@ -724,6 +795,12 @@ def update_order_notes(
         raise DomainError("Cancelled orders are locked.", code="order_cancelled")
     if order.is_locked or order.status == OrderStatus.COMPLETED.value:
         raise DomainError("Completed orders are locked.", code="order_locked")
+
+    if order.completed_at is not None and admin.role != AdminRole.SUPER_ADMIN.value:
+        raise PermissionDeniedError(
+            "Reopened completed orders require a super administrator.",
+            code="reopened_order_manager_only",
+        )
 
     before = order.admin_notes
     after = (admin_notes or "").strip() or None
@@ -803,6 +880,11 @@ def edit_incomplete_website_order(
         raise DomainError("Ù„Ø§ ÙŠÙ…ÙƒÙ† ØªØ¹Ø¯ÙŠÙ„ Ø·Ù„Ø¨ Ù…Ù„ØºÙ‰.", code="order_cancelled")
     if order.is_locked or order.status == OrderStatus.COMPLETED.value:
         raise DomainError("Ù„Ø§ ÙŠÙ…ÙƒÙ† ØªØ¹Ø¯ÙŠÙ„ Ø·Ù„Ø¨ Ù…Ù‚ÙÙ„.", code="order_locked")
+    if order.completed_at is not None and admin.role != AdminRole.SUPER_ADMIN.value:
+        raise PermissionDeniedError(
+            "Reopened completed orders require a super administrator.",
+            code="reopened_order_manager_only",
+        )
     if order.source != OrderSource.WEBSITE.value:
         raise PermissionDeniedError(
             "ÙŠÙ…ÙƒÙ† ØªØ¹Ø¯ÙŠÙ„ Ø·Ù„Ø¨Ø§Øª Ø§Ù„Ù…ÙˆÙ‚Ø¹ ÙÙ‚Ø·.", code="order_source_not_editable"

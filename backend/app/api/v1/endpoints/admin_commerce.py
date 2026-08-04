@@ -31,6 +31,7 @@ from app.schemas.orders import (
     OrderAdminListOut,
     OrderAdminOut,
     OrderCompletionRequest,
+    OrderReopenRequest,
     OrderNotesUpdate,
     OrderStatusUpdate,
 )
@@ -440,6 +441,17 @@ def complete_order(
         payment_details=payload.payment_details,
         invoice_notes=payload.invoice_notes,
         admin=admin,
+    )
+    db.commit()
+    return get_order(order_id, db, admin)
+
+
+@router.post("/orders/{order_id}/reopen", response_model=OrderAdminOut)
+def reopen_order(
+    order_id: int, payload: OrderReopenRequest, db: DbSession, admin: SuperAdmin
+):
+    orders_service.reopen_completed_order(
+        db, order_id=order_id, reason=payload.reason, admin=admin
     )
     db.commit()
     return get_order(order_id, db, admin)

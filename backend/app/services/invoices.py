@@ -201,11 +201,23 @@ def issue_for_order(
         reason=None,
     )
 
+    predecessor = db.execute(
+        select(Invoice)
+        .where(
+            Invoice.order_id == order.id,
+            Invoice.status == InvoiceStatus.REPLACED.value,
+            Invoice.replacement_invoice_id.is_(None),
+        )
+        .order_by(Invoice.id.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
     invoice = Invoice(
         invoice_number=next_invoice_number(db, prefix),
         order_id=order.id,
         status=InvoiceStatus.ISSUED.value,
         active_invoice_marker=InvoiceStatus.ACTIVE.value,
+        replacement_invoice=predecessor,
         issued_at=utcnow(),
         order_number=order.order_number,
         payment_method=payment_method or order.payment_method,
@@ -271,8 +283,38 @@ def issue_for_order(
         actor_admin_id=admin.id if admin else None,
         event_type="invoice_issued",
         before_data=None,
-        after_data={"invoice_number": invoice.invoice_number, "total_amount": invoice.grand_total},
+        after_data={
+            "invoice_number": invoice.invoice_number,
+            "total_amount": invoice.grand_total,
+            "replacement_invoice_id": predecessor.id if predecessor else None,
+        },
         reason=None,
+    )
+    return invoice
+
+
+def replace_for_reopen(
+    db: Session, order: Order, *, admin: AdminUser, reason: str
+) -> Invoice | None:
+    """Archive the current invoice while retaining its immutable snapshot for correction."""
+    invoice = get_for_order(db, order.id)
+    if invoice is None:
+        return None
+
+    invoice.status = InvoiceStatus.REPLACED.value
+    invoice.active_invoice_marker = None
+    db.flush()
+    from app.services.orders import record_order_activity
+
+    record_order_activity(
+        db,
+        order_id=order.id,
+        invoice_id=invoice.id,
+        actor_admin_id=admin.id,
+        event_type="invoice_replaced",
+        before_data={"status": InvoiceStatus.ACTIVE.value, "invoice_number": invoice.invoice_number},
+        after_data={"status": InvoiceStatus.REPLACED.value, "invoice_number": invoice.invoice_number},
+        reason=reason,
     )
     return invoice
 

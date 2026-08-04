@@ -333,6 +333,105 @@ def test_both_roles_complete_an_order_once_with_an_immutable_final_invoice(
     assert invoice["items"][0]["unit_price"] == 10.0
 
 
+def test_super_admin_reopens_completed_order_replaces_invoice_and_recompletion_links_history(
+    client: TestClient,
+    db: Session,
+    admin_token: str,
+    super_token: str,
+    super_admin,
+) -> None:
+    """Removing the reopen transition must leave the completed financial snapshot locked."""
+    product = make_product(db, slug="reopen-history", name="Reopen history", price="10.00")
+    order = _create_order(client, product, suffix="reopen-history")
+    completed = client.post(
+        f"/api/v1/admin/orders/{order['id']}/complete",
+        headers=auth(admin_token),
+        json={"payment_method": "cash_on_delivery", "paid_amount": "0.00"},
+    )
+    assert completed.status_code == 200, completed.text
+    old_invoice_id = completed.json()["active_invoice"]["id"]
+
+    reopened = client.post(
+        f"/api/v1/admin/orders/{order['id']}/reopen",
+        headers=auth(super_token),
+        json={"reason": "Correct the delivery address"},
+    )
+
+    assert reopened.status_code == 200, reopened.text
+    assert reopened.json()["is_locked"] is False
+    assert reopened.json()["active_invoice"] is None
+    assert reopened.json()["invoices"][0]["status"] == "replaced"
+
+    blocked_edit = client.patch(
+        f"/api/v1/admin/orders/{order['id']}",
+        headers=auth(admin_token),
+        json=_edit_payload(product),
+    )
+    assert blocked_edit.status_code == 403
+
+    corrected = client.patch(
+        f"/api/v1/admin/orders/{order['id']}",
+        headers=auth(super_token),
+        json=_edit_payload(product, address="Ramallah, Corrected Street 30"),
+    )
+    assert corrected.status_code == 200, corrected.text
+    recompleted = client.post(
+        f"/api/v1/admin/orders/{order['id']}/complete",
+        headers=auth(super_token),
+        json={"payment_method": "cash_on_delivery", "paid_amount": "0.00"},
+    )
+    assert recompleted.status_code == 200, recompleted.text
+
+    db.expire_all()
+    invoices = db.query(Invoice).filter(Invoice.order_id == order["id"]).order_by(Invoice.id).all()
+    assert len(invoices) == 2
+    old, replacement = invoices
+    assert old.id == old_invoice_id
+    assert old.status == "replaced"
+    assert old.active_invoice_marker is None
+    assert replacement.status == "active"
+    assert replacement.active_invoice_marker == "active"
+    assert replacement.replacement_invoice_id == old.id
+    assert replacement.invoice_number != old.invoice_number
+    assert db.query(Invoice).filter(Invoice.order_id == order["id"], Invoice.status == "active").count() == 1
+
+    activities = db.get(Order, order["id"]).activities
+    reopened_activity = next(activity for activity in activities if activity.event_type == "order_reopened")
+    assert reopened_activity.invoice_id == old.id
+    assert reopened_activity.actor_admin_id == super_admin.id
+    assert reopened_activity.reason == "Correct the delivery address"
+
+
+def test_reopen_requires_super_admin_reason_and_completed_active_invoice(
+    client: TestClient, db: Session, admin_token: str, super_token: str
+) -> None:
+    """Removing any reopen precondition would allow unauthorized or non-final corrections."""
+    product = make_product(db, slug="reopen-guards", name="Reopen guards", price="10.00")
+    order = _create_order(client, product, suffix="reopen-guards")
+    path = f"/api/v1/admin/orders/{order['id']}/reopen"
+
+    assert client.post(path, headers=auth(admin_token), json={"reason": "Correction"}).status_code == 403
+    assert client.post(path, headers=auth(super_token), json={}).status_code == 422
+    not_completed = client.post(path, headers=auth(super_token), json={"reason": "Correction"})
+    assert not_completed.status_code == 400
+    assert not_completed.json()["error"]["code"] == "order_not_completed"
+
+    completed = client.post(
+        f"/api/v1/admin/orders/{order['id']}/complete",
+        headers=auth(super_token),
+        json={"payment_method": "cash_on_delivery", "paid_amount": "0.00"},
+    )
+    assert completed.status_code == 200, completed.text
+    invoice = db.get(Invoice, completed.json()["active_invoice"]["id"])
+    invoice.status = "replaced"
+    invoice.active_invoice_marker = None
+    db.commit()
+
+    missing_invoice = client.post(path, headers=auth(super_token), json={"reason": "Correction"})
+    assert missing_invoice.status_code == 400
+    assert missing_invoice.json()["error"]["code"] == "active_invoice_required"
+
+
 def test_completion_rejects_cancelled_and_empty_orders_without_an_invoice(
     client: TestClient, db: Session, admin_token: str
 ) -> None:

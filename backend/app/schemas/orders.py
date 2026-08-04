@@ -248,6 +248,10 @@ class OrderCompletionRequest(APIModel):
     invoice_notes: str | None = Field(default=None, max_length=2000)
 
 
+class OrderReopenRequest(APIModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+
 class ManualCatalogOrderItemInput(APIModel):
     kind: Literal["catalog"] = "catalog"
     product_id: int
