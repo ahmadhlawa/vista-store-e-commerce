@@ -13,7 +13,15 @@ Date: 2026-08-04
 
 `tests/test_order_invoice_persistence.py` creates only disposable SQLite databases. It upgrades representative orders and invoices from both `0003_invoices` and `0004_import_batches` to `head`, verifies retained IDs/data and lifecycle backfills, then downgrades only the new chain to `0004_import_batches` and verifies the legacy rows remain. A separate case confirms downgrade refuses replacement-history data instead of deleting invoices.
 
-No `backend/data/*.db` database is opened for migration or backup by this verification work.
+Original databases were rechecked read-only and were not upgraded:
+
+- `backend/data/vista_preview.db`: `0004_import_batches`
+- `backend/data/vista_store_dev.db`: `0003_invoices`
+
+Timestamped, non-zero backups were created before any potential original upgrade:
+
+- `D:\Project\vista-store-e-commerce\backend\data\vista_preview.db.20260804-051436.bak` (413,696 bytes)
+- `D:\Project\vista-store-e-commerce\backend\data\vista_store_dev.db.20260804-051436.bak` (331,776 bytes)
 
 ## Verification evidence
 
