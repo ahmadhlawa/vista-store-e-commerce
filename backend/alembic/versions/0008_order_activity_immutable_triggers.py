@@ -8,12 +8,23 @@ from __future__ import annotations
 
 from typing import Sequence, Union
 
-from alembic import op
+import sqlalchemy as sa
+from alembic import context, op
 
 revision: str = "0008_order_activity_immutable_triggers"
 down_revision: Union[str, None] = "0007_active_invoice_marker_null_safe"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
+
+_SINGLE_INVOICE_REVISIONS = {None, "0001_initial", "0002_instance_metadata", "0003_invoices", "0004_import_batches"}
+
+
+def _blocks_legacy_downgrade() -> bool:
+    if context.get_revision_argument() not in _SINGLE_INVOICE_REVISIONS:
+        return False
+    return op.get_bind().execute(
+        sa.text("SELECT 1 FROM invoices GROUP BY order_id HAVING COUNT(*) > 1 LIMIT 1")
+    ).first() is not None
 
 _UPDATE_TRIGGER = "trg_order_activities_no_update"
 _DELETE_TRIGGER = "trg_order_activities_no_delete"
@@ -45,5 +56,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if _blocks_legacy_downgrade():
+        raise RuntimeError("Cannot downgrade replacement invoice history without deleting invoices.")
     _drop_trigger(_DELETE_TRIGGER)
     _drop_trigger(_UPDATE_TRIGGER)

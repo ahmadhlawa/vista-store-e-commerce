@@ -52,17 +52,22 @@ def upgrade() -> None:
             "fk_orders_completed_by_admin_id", "admin_users", ["completed_by_admin_id"], ["id"], ondelete="SET NULL"
         )
 
-    # The previous UI issued invoices at confirmation. Retain those records as completed
-    # legacy orders; all other legacy statuses are mapped to the nearest new lifecycle state.
+    # The previous UI issued invoices at confirmation. Retain active issued records as
+    # completed legacy orders; all other statuses remain completion-eligible workflow states.
     op.execute("UPDATE orders SET status = 'new' WHERE status = 'pending'")
     op.execute("UPDATE orders SET status = 'reviewing' WHERE status IN ('confirmed', 'processing')")
     op.execute("UPDATE orders SET status = 'preparing' WHERE status = 'ready'")
     op.execute("UPDATE orders SET status = 'out_for_delivery' WHERE status = 'shipped'")
-    op.execute("UPDATE orders SET status = 'completed' WHERE status = 'delivered'")
+    op.execute("UPDATE orders SET status = 'out_for_delivery' WHERE status = 'delivered'")
+    # The legacy generic manual method is no longer an accepted API enum. Preserve the
+    # financial records by normalizing it to the closest supported offline method.
+    op.execute("UPDATE orders SET payment_method = 'bank_transfer' WHERE payment_method = 'manual'")
     op.execute(
         "UPDATE orders SET status = 'completed', is_locked = 1, "
-        "completed_at = (SELECT issued_at FROM invoices WHERE invoices.order_id = orders.id) "
-        "WHERE EXISTS (SELECT 1 FROM invoices WHERE invoices.order_id = orders.id)"
+        "completed_at = (SELECT issued_at FROM invoices "
+        "WHERE invoices.order_id = orders.id AND invoices.status = 'issued') "
+        "WHERE EXISTS (SELECT 1 FROM invoices "
+        "WHERE invoices.order_id = orders.id AND invoices.status = 'issued')"
     )
     op.create_index("ix_orders_source", "orders", ["source"], unique=False)
     op.create_index("ix_orders_client_reference", "orders", ["client_reference"], unique=True)
@@ -110,14 +115,20 @@ def upgrade() -> None:
         )
         batch.add_column(sa.Column("payment_details", sa.Text(), nullable=True))
         batch.add_column(sa.Column("invoice_notes", sa.Text(), nullable=True))
+        batch.add_column(sa.Column("source", sa.String(length=24), nullable=True))
         batch.create_foreign_key(
             "fk_invoices_replacement_invoice_id", "invoices", ["replacement_invoice_id"], ["id"], ondelete="RESTRICT"
         )
         batch.create_unique_constraint("uq_invoices_replacement_invoice_id", ["replacement_invoice_id"])
 
     op.execute("UPDATE invoices SET status = 'active' WHERE status = 'issued'")
+    op.execute("UPDATE invoices SET payment_method = 'bank_transfer' WHERE payment_method = 'manual'")
     op.execute("UPDATE invoices SET remaining_amount = grand_total")
+    op.execute("UPDATE invoices SET source = (SELECT source FROM orders WHERE orders.id = invoices.order_id)")
+    with op.batch_alter_table("invoices") as batch:
+        batch.alter_column("source", existing_type=sa.String(length=24), nullable=False)
     op.create_index("ix_invoices_order_id", "invoices", ["order_id"], unique=False)
+    op.create_index("ix_invoices_source", "invoices", ["source"], unique=False)
     op.create_index(
         "ix_invoices_status_payment_created_at", "invoices", ["status", "payment_status", "created_at"], unique=False
     )
@@ -166,6 +177,7 @@ def downgrade() -> None:
         batch.drop_column("item_kind")
 
     op.drop_index("ix_invoices_status_payment_created_at", table_name="invoices")
+    op.drop_index("ix_invoices_source", table_name="invoices")
     op.drop_index("ix_invoices_order_id", table_name="invoices")
     op.execute("UPDATE invoices SET status = 'issued' WHERE status = 'active'")
     op.execute("UPDATE invoices SET status = 'cancelled' WHERE status = 'replaced'")
@@ -173,6 +185,7 @@ def downgrade() -> None:
         batch.drop_constraint("uq_invoices_replacement_invoice_id", type_="unique")
         batch.drop_constraint("fk_invoices_replacement_invoice_id", type_="foreignkey")
         batch.drop_column("invoice_notes")
+        batch.drop_column("source")
         batch.drop_column("payment_details")
         batch.drop_column("remaining_amount")
         batch.drop_column("refunded_amount")

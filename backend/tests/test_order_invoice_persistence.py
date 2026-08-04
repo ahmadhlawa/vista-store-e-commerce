@@ -3,9 +3,11 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 
-from alembic import command
+from alembic import command, context as alembic_context
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import MetaData, create_engine, inspect, select
 from sqlalchemy.orm import Session
 import sqlalchemy as sa
@@ -37,6 +39,7 @@ def _invoice(order: Order, **changes: object) -> Invoice:
         "active_invoice_marker": "active",
         "order": order,
         "order_number": order.order_number,
+        "source": order.source or "website",
         "payment_method": "cash_on_delivery",
         "store_name": "Vista",
         "customer_name": order.customer_name,
@@ -285,12 +288,19 @@ def test_upgrade_from_legacy_revision_retains_and_backfills_order_and_invoice(
                 "subtotal": Decimal("10.00"),
                 "discount": Decimal("0.00"),
                 "total": Decimal("10.00"),
-                "payment_method": "cash_on_delivery",
+                "payment_method": "manual",
                 "created_at": now,
                 "updated_at": now,
             },
         )
-        for order_id, status in ((42, "confirmed"), (43, "processing"), (44, "ready"), (45, "shipped")):
+        for order_id, status in (
+            (42, "confirmed"),
+            (43, "processing"),
+            (44, "ready"),
+            (45, "shipped"),
+            (46, "delivered"),
+            (47, "delivered"),
+        ):
             connection.execute(
                 metadata.tables["orders"].insert(),
                 {
@@ -319,7 +329,7 @@ def test_upgrade_from_legacy_revision_retains_and_backfills_order_and_invoice(
                 "status": "issued",
                 "issued_at": now,
                 "order_number": "ORD-LEGACY",
-                "payment_method": "cash_on_delivery",
+                "payment_method": "manual",
                 "store_name": "Vista",
                 "customer_name": "Legacy Customer",
                 "customer_phone": "0590000000",
@@ -334,6 +344,36 @@ def test_upgrade_from_legacy_revision_retains_and_backfills_order_and_invoice(
                 "prices_include_tax": False,
                 "tax_amount": Decimal("0.00"),
                 "grand_total": Decimal("10.00"),
+                "created_at": now,
+                "updated_at": now,
+            },
+        )
+        connection.execute(
+            metadata.tables["invoices"].insert(),
+            {
+                "id": 74,
+                "invoice_number": "INV-LEGACY-CANCELLED",
+                "order_id": 47,
+                "status": "cancelled",
+                "issued_at": now,
+                "order_number": "ORD-LEGACY-47",
+                "payment_method": "cash_on_delivery",
+                "store_name": "Vista",
+                "customer_name": "Legacy Customer",
+                "customer_phone": "0590000000",
+                "delivery_address": "Legacy address",
+                "currency_code": "ILS",
+                "currency_symbol": "â‚ª",
+                "subtotal": Decimal("10.00"),
+                "discount": Decimal("0.00"),
+                "delivery_fee": Decimal("0.00"),
+                "tax_enabled": False,
+                "tax_rate": Decimal("0.000"),
+                "prices_include_tax": False,
+                "tax_amount": Decimal("0.00"),
+                "grand_total": Decimal("10.00"),
+                "cancelled_at": now,
+                "cancellation_reason": "Legacy cancellation",
                 "created_at": now,
                 "updated_at": now,
             },
@@ -357,8 +397,10 @@ def test_upgrade_from_legacy_revision_retains_and_backfills_order_and_invoice(
     assert order["status"] == "completed"
     assert order["source"] == "website"
     assert order["is_locked"] is True
+    assert order["payment_method"] == "bank_transfer"
     assert invoice["invoice_number"] == "INV-LEGACY"
     assert invoice["status"] == "active"
+    assert invoice["payment_method"] == "bank_transfer"
     assert invoice["active_invoice_marker"] == "active"
     assert invoice["payment_status"] == "unpaid"
     assert invoice["remaining_amount"] == Decimal("10.00")
@@ -376,6 +418,28 @@ def test_upgrade_from_legacy_revision_retains_and_backfills_order_and_invoice(
         44: "preparing",
         45: "out_for_delivery",
     }
+    with engine.connect() as connection:
+        completion_eligible_orders = {
+            row.id: (row.status, row.is_locked, row.completed_at)
+            for row in connection.execute(
+                select(
+                    metadata.tables["orders"].c.id,
+                    metadata.tables["orders"].c.status,
+                    metadata.tables["orders"].c.is_locked,
+                    metadata.tables["orders"].c.completed_at,
+                ).where(metadata.tables["orders"].c.id.in_((46, 47)))
+            )
+        }
+        cancelled_invoice_status = connection.execute(
+            select(metadata.tables["invoices"].c.status).where(
+                metadata.tables["invoices"].c.id == 74
+            )
+        ).scalar_one()
+    assert completion_eligible_orders == {
+        46: ("out_for_delivery", False, None),
+        47: ("out_for_delivery", False, None),
+    }
+    assert cancelled_invoice_status == "cancelled"
     with engine.begin() as connection:
         connection.execute(
             metadata.tables["orders"].insert(),
@@ -404,6 +468,7 @@ def test_upgrade_from_legacy_revision_retains_and_backfills_order_and_invoice(
                 "issued_at": now,
                 "order_number": "ORD-DEFAULTS",
                 "payment_method": "cash_on_delivery",
+                "source": "website",
                 "store_name": "Vista",
                 "customer_name": "Default Customer",
                 "customer_phone": "0590000001",
@@ -488,6 +553,7 @@ def test_downgrade_with_replacement_history_refuses_to_stamp_invalid_0004(
             "issued_at": now,
             "order_number": "ORD-HISTORY",
             "payment_method": "cash_on_delivery",
+            "source": "website",
             "store_name": "Vista",
             "customer_name": "History Customer",
             "customer_phone": "0590000002",
@@ -533,3 +599,93 @@ def test_downgrade_with_replacement_history_refuses_to_stamp_invalid_0004(
     with engine.connect() as connection:
         assert connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0009_invoice_issuer_snapshot"
     engine.dispose()
+
+
+@pytest.mark.parametrize(
+    ("starting_revision", "ddl_method"),
+    (
+        ("0009_invoice_issuer_snapshot", "batch_alter_table"),
+        ("0008_order_activity_immutable_triggers", "execute"),
+        ("0007_active_invoice_marker_null_safe", "batch_alter_table"),
+        ("0006_active_invoice_marker", "batch_alter_table"),
+    ),
+)
+def test_mysql_legacy_downgrade_refuses_replacement_history_before_ddl(
+    starting_revision: str, ddl_method: str, monkeypatch
+) -> None:
+    """MySQL cannot roll back revision DDL performed before the 0005 safety check."""
+    migration = ScriptDirectory.from_config(Config("alembic.ini")).get_revision(
+        starting_revision
+    ).module
+    inspected_statements: list[str] = []
+    destructive_ddl_started = False
+
+    class ReplacementHistoryResult:
+        def first(self) -> tuple[int]:
+            return (1,)
+
+    class MySQLBind:
+        dialect = SimpleNamespace(name="mysql")
+
+        def execute(self, statement: object) -> ReplacementHistoryResult:
+            inspected_statements.append(str(statement))
+            return ReplacementHistoryResult()
+
+    def begin_destructive_ddl(*args: object, **kwargs: object) -> None:
+        nonlocal destructive_ddl_started
+        destructive_ddl_started = True
+        raise AssertionError("destructive DDL started before downgrade safety check")
+
+    monkeypatch.setattr(alembic_context, "get_revision_argument", lambda: "0004_import_batches")
+    monkeypatch.setattr(migration.op, "get_bind", lambda: MySQLBind())
+    monkeypatch.setattr(migration.op, ddl_method, begin_destructive_ddl)
+
+    with pytest.raises(RuntimeError, match="replacement invoice history"):
+        migration.downgrade()
+
+    assert len(inspected_statements) == 1
+    assert destructive_ddl_started is False
+
+
+@pytest.mark.parametrize(
+    ("starting_revision", "target_revision", "ddl_method"),
+    (
+        (
+            "0009_invoice_issuer_snapshot",
+            "0008_order_activity_immutable_triggers",
+            "batch_alter_table",
+        ),
+        ("0008_order_activity_immutable_triggers", "0005_order_invoice_workflow", "execute"),
+        ("0006_active_invoice_marker", "0005_order_invoice_workflow", "batch_alter_table"),
+    ),
+)
+def test_mysql_downgrade_preserves_supported_replacement_history_targets(
+    starting_revision: str, target_revision: str, ddl_method: str, monkeypatch
+) -> None:
+    """Revisions at or above 0005 retain replacement rows and may still be targeted."""
+    migration = ScriptDirectory.from_config(Config("alembic.ini")).get_revision(
+        starting_revision
+    ).module
+
+    class DDLStarted(Exception):
+        pass
+
+    class ReplacementHistoryResult:
+        def first(self) -> tuple[int]:
+            return (1,)
+
+    class MySQLBind:
+        dialect = SimpleNamespace(name="mysql")
+
+        def execute(self, statement: object) -> ReplacementHistoryResult:
+            return ReplacementHistoryResult()
+
+    def begin_destructive_ddl(*args: object, **kwargs: object) -> None:
+        raise DDLStarted
+
+    monkeypatch.setattr(alembic_context, "get_revision_argument", lambda: target_revision)
+    monkeypatch.setattr(migration.op, "get_bind", lambda: MySQLBind())
+    monkeypatch.setattr(migration.op, ddl_method, begin_destructive_ddl)
+
+    with pytest.raises(DDLStarted):
+        migration.downgrade()
