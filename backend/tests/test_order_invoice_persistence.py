@@ -256,14 +256,15 @@ def test_order_invoice_view_selects_the_active_invoice_deterministically(db: Ses
     assert db.get(Order, order.id).invoice.id == active.id
 
 
-def test_upgrade_from_0004_retains_and_backfills_legacy_order_and_invoice(
-    tmp_path: Path, monkeypatch
+@pytest.mark.parametrize("legacy_revision", ("0003_invoices", "0004_import_batches"))
+def test_upgrade_from_legacy_revision_retains_and_backfills_order_and_invoice(
+    legacy_revision: str, tmp_path: Path, monkeypatch
 ) -> None:
     """An upgrade must retain IDs and translate the legacy issued invoice into its active workflow state."""
-    database_url = f"sqlite+pysqlite:///{(tmp_path / 'legacy.db').as_posix()}"
+    database_url = f"sqlite+pysqlite:///{(tmp_path / f'legacy-{legacy_revision}.db').as_posix()}"
     monkeypatch.setattr(settings, "DATABASE_URL", database_url)
     config = Config("alembic.ini")
-    command.upgrade(config, "0004_import_batches")
+    command.upgrade(config, legacy_revision)
 
     engine = create_engine(database_url)
     metadata = MetaData()
@@ -430,6 +431,23 @@ def test_upgrade_from_0004_retains_and_backfills_legacy_order_and_invoice(
         ).scalar_one()
     assert default_order_status == "new"
     assert default_invoice_status == "active"
+
+    command.downgrade(config, "0004_import_batches")
+    metadata = MetaData()
+    metadata.reflect(engine, only=["orders", "invoices"])
+    with engine.connect() as connection:
+        version = connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
+        legacy_order = connection.execute(
+            select(metadata.tables["orders"]).where(metadata.tables["orders"].c.id == 41)
+        ).mappings().one()
+        legacy_invoice = connection.execute(
+            select(metadata.tables["invoices"]).where(metadata.tables["invoices"].c.id == 73)
+        ).mappings().one()
+    assert version == "0004_import_batches"
+    assert legacy_order["order_number"] == "ORD-LEGACY"
+    assert legacy_order["status"] == "delivered"
+    assert legacy_invoice["invoice_number"] == "INV-LEGACY"
+    assert legacy_invoice["status"] == "issued"
     engine.dispose()
 
 
