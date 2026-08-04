@@ -591,6 +591,79 @@ def test_invoices_can_be_filtered_by_status_and_date(
     assert long_ago["total"] == 0
 
 
+def test_invoice_payment_updates_are_audited_and_filterable(
+    client: TestClient, db: Session, product: Product, admin_token: str
+) -> None:
+    created = _place_order(client, product, quantity=1, client_reference="payment-list-1")
+    order = _order_row(db, created["order_number"])
+    completed = client.post(
+        f"/api/v1/admin/orders/{order.id}/complete",
+        json={"payment_method": "cash_on_delivery"},
+        headers=auth(admin_token),
+    )
+    number = completed.json()["invoice"]["invoice_number"]
+
+    response = client.patch(
+        f"/api/v1/admin/invoices/{number}/payment",
+        json={"paid_amount": 40, "payment_method": "manual", "payment_details": "receipt 7"},
+        headers=auth(admin_token),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["paid_amount"] == 40.0
+    assert body["remaining_amount"] == 60.0
+    assert body["payment_status"] == "partial"
+    assert body["payment_method"] == "manual"
+    assert body["activities"][-1]["event_type"] == "payment_updated"
+
+    filtered = client.get(
+        "/api/v1/admin/invoices",
+        params={"payment_status": "partial", "source": "website", "employee_id": body["issued_by_admin_id"]},
+        headers=auth(admin_token),
+    )
+    assert [row["invoice_number"] for row in filtered.json()["items"]] == [number]
+
+
+def test_payment_corrections_and_refunds_are_super_admin_only(
+    client: TestClient, db: Session, product: Product, admin_token: str, super_token: str
+) -> None:
+    created = _place_order(client, product, quantity=1, client_reference="payment-correction-1")
+    order = _order_row(db, created["order_number"])
+    completed = client.post(
+        f"/api/v1/admin/orders/{order.id}/complete",
+        json={"payment_method": "cash_on_delivery"},
+        headers=auth(admin_token),
+    )
+    number = completed.json()["invoice"]["invoice_number"]
+    assert client.patch(
+        f"/api/v1/admin/invoices/{number}/payment", json={"paid_amount": 100}, headers=auth(admin_token)
+    ).status_code == 200
+
+    lowered = client.patch(
+        f"/api/v1/admin/invoices/{number}/payment", json={"paid_amount": 90}, headers=auth(admin_token)
+    )
+    assert lowered.status_code == 403
+    assert client.get(f"/api/v1/admin/invoices/{number}", headers=auth(admin_token)).json()["paid_amount"] == 100.0
+
+    forbidden = client.patch(
+        f"/api/v1/admin/invoices/{number}/payment", json={"refunded_amount": 10}, headers=auth(admin_token)
+    )
+    assert forbidden.status_code == 403
+
+    missing_reason = client.patch(
+        f"/api/v1/admin/invoices/{number}/payment", json={"refunded_amount": 10}, headers=auth(super_token)
+    )
+    assert missing_reason.status_code == 400
+
+    refunded = client.patch(
+        f"/api/v1/admin/invoices/{number}/payment",
+        json={"refunded_amount": 10, "reason": "Returned one item"},
+        headers=auth(super_token),
+    )
+    assert refunded.status_code == 200
+    assert refunded.json()["payment_status"] == "partially_refunded"
+
+
 def test_an_unknown_invoice_number_is_a_clean_404(
     client: TestClient, admin_token: str
 ) -> None:

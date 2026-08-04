@@ -34,7 +34,27 @@ class InvoiceListOut(APIModel):
     grand_total: Money
     currency_symbol: str
     payment_method: PaymentMethod
+    payment_status: PaymentStatus
+    paid_amount: Money
+    remaining_amount: Money
     status: InvoiceStatus
+
+
+class InvoiceLinkOut(APIModel):
+    id: int
+    invoice_number: str
+    status: InvoiceStatus
+    issued_at: UTCDateTime
+
+
+class InvoiceActivityOut(APIModel):
+    id: int
+    actor_admin_id: int | None = None
+    event_type: str
+    before_data: dict | None = None
+    after_data: dict | None = None
+    reason: str | None = None
+    created_at: UTCDateTime
 
 
 class InvoiceOut(APIModel):
@@ -92,6 +112,10 @@ class InvoiceOut(APIModel):
     cancelled_by_admin_id: int | None = None
 
     items: list[InvoiceItemOut] = Field(default_factory=list)
+    history: list[InvoiceLinkOut] = Field(default_factory=list)
+    replacement_invoice: InvoiceLinkOut | None = None
+    replaces_invoice: InvoiceLinkOut | None = None
+    activities: list[InvoiceActivityOut] = Field(default_factory=list)
 
 
 class InvoiceSummary(APIModel):
@@ -105,4 +129,12 @@ class InvoiceSummary(APIModel):
 
 
 class InvoiceCancelRequest(APIModel):
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class InvoicePaymentUpdate(APIModel):
+    paid_amount: Money | None = Field(default=None, ge=0)
+    refunded_amount: Money | None = Field(default=None, ge=0)
+    payment_method: PaymentMethod | None = None
+    payment_details: str | None = Field(default=None, max_length=2000)
     reason: str | None = Field(default=None, max_length=500)

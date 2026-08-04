@@ -72,6 +72,7 @@ def validate_payment_update(
     *,
     total_amount: Decimal,
     current_paid_amount: Decimal,
+    current_refunded_amount: Decimal = ZERO,
     paid_amount: Decimal,
     refunded_amount: Decimal,
     actor_role: str,
@@ -80,10 +81,13 @@ def validate_payment_update(
     """Validate a payment snapshot before an invoice service persists it."""
     total = _nonnegative_payment_amount(total_amount, field="total_amount")
     current_paid = _nonnegative_payment_amount(current_paid_amount, field="current_paid_amount")
+    current_refunded = _nonnegative_payment_amount(
+        current_refunded_amount, field="current_refunded_amount"
+    )
     paid = _nonnegative_payment_amount(paid_amount, field="paid_amount")
     refunded = _nonnegative_payment_amount(refunded_amount, field="refunded_amount")
     status = derive_payment_status(total, paid, refunded)
-    correction_or_refund = paid < current_paid or refunded > 0
+    correction_or_refund = paid < current_paid or refunded != current_refunded
 
     if actor_role != AdminRole.SUPER_ADMIN.value and correction_or_refund:
         raise PermissionDeniedError(
@@ -313,7 +317,12 @@ def cancel_for_order(
 def get_by_number(db: Session, invoice_number: str) -> Invoice:
     invoice = db.execute(
         select(Invoice)
-        .options(selectinload(Invoice.items))
+        .options(
+            selectinload(Invoice.items),
+            selectinload(Invoice.activities),
+            selectinload(Invoice.replacement_invoice),
+            selectinload(Invoice.replaces_invoice),
+        )
         .where(Invoice.invoice_number == invoice_number.strip().upper())
     ).scalar_one_or_none()
     if invoice is None:
@@ -339,6 +348,9 @@ def search(
     *,
     q: str | None = None,
     status: str | None = None,
+    payment_status: str | None = None,
+    source: str | None = None,
+    employee_id: int | None = None,
     issued_from=None,
     issued_to=None,
 ):
@@ -346,6 +358,12 @@ def search(
     stmt = select(Invoice)
     if status:
         stmt = stmt.where(Invoice.status == status)
+    if payment_status:
+        stmt = stmt.where(Invoice.payment_status == payment_status)
+    if employee_id is not None:
+        stmt = stmt.where(Invoice.issued_by_admin_id == employee_id)
+    if source:
+        stmt = stmt.join(Order, Order.id == Invoice.order_id).where(Order.source == source)
     if q:
         needle = f"%{q.strip()}%"
         stmt = stmt.where(
@@ -359,3 +377,77 @@ def search(
     if issued_to is not None:
         stmt = stmt.where(Invoice.issued_at <= issued_to)
     return stmt.order_by(Invoice.id.desc())
+
+
+def history_for_invoice(db: Session, invoice: Invoice) -> list[Invoice]:
+    """Return only immutable invoice rows for the same order; never hydrate live order data."""
+    return list(
+        db.execute(
+            select(Invoice)
+            .where(Invoice.order_id == invoice.order_id)
+            .order_by(Invoice.id.asc())
+        ).scalars()
+    )
+
+
+def update_payment(
+    db: Session,
+    invoice: Invoice,
+    *,
+    paid_amount: Decimal | None,
+    refunded_amount: Decimal | None,
+    payment_method: str | None,
+    payment_details: str | None,
+    details_provided: bool,
+    reason: str | None,
+    admin: AdminUser,
+) -> Invoice:
+    """Apply the narrowly permitted financial mutation and append its audit event."""
+    if invoice.status != InvoiceStatus.ACTIVE.value:
+        raise ConflictError("Only an active invoice can receive a payment update.", code="invoice_not_active")
+
+    before = {
+        "payment_method": invoice.payment_method,
+        "payment_status": invoice.payment_status,
+        "paid_amount": invoice.paid_amount,
+        "refunded_amount": invoice.refunded_amount,
+        "remaining_amount": invoice.remaining_amount,
+    }
+    payment = validate_payment_update(
+        total_amount=invoice.grand_total,
+        current_paid_amount=invoice.paid_amount,
+        current_refunded_amount=invoice.refunded_amount,
+        paid_amount=invoice.paid_amount if paid_amount is None else paid_amount,
+        refunded_amount=invoice.refunded_amount if refunded_amount is None else refunded_amount,
+        actor_role=admin.role,
+        reason=reason,
+    )
+    invoice.paid_amount = payment.paid_amount
+    invoice.refunded_amount = payment.refunded_amount
+    invoice.remaining_amount = payment.remaining_amount
+    invoice.payment_status = payment.status.value
+    if payment_method is not None:
+        invoice.payment_method = payment_method
+    if details_provided:
+        invoice.payment_details = (payment_details or "").strip() or None
+
+    from app.services.orders import record_order_activity
+
+    record_order_activity(
+        db,
+        order_id=invoice.order_id,
+        invoice_id=invoice.id,
+        actor_admin_id=admin.id,
+        event_type="payment_updated",
+        before_data=before,
+        after_data={
+            "payment_method": invoice.payment_method,
+            "payment_status": invoice.payment_status,
+            "paid_amount": invoice.paid_amount,
+            "refunded_amount": invoice.refunded_amount,
+            "remaining_amount": invoice.remaining_amount,
+        },
+        reason=reason,
+    )
+    db.flush()
+    return invoice
