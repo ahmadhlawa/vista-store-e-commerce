@@ -67,7 +67,7 @@ export function calculateOrderTotals({ items = [], discount = "0", delivery_fee 
   const scale = Math.max(2, ...parts.map((part) => part.scale));
   const subtotal = items.reduce((sum, item) => sum + (isWholeQuantity(item.quantity) ? withScale(decimalParts(item.unit_price ?? "0"), scale) * BigInt(String(item.quantity)) : 0n), 0n);
   const total = subtotal - withScale(decimalParts(discount), scale) + withScale(decimalParts(deliveryFee ?? delivery_fee), scale);
-  return { subtotal: scaledText(subtotal, scale), total: scaledText(total, scale) };
+  return { subtotal: scaledText(subtotal, scale), total: scaledText(total < 0n ? 0n : total, scale) };
 }
 
 export function formatMoney(value, currencySymbol = "") {

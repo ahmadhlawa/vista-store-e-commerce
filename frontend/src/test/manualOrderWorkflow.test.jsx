@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { authStorage } from "../storage/authStorage.js";
 import { page, renderApp, stubApi } from "./utils.jsx";
@@ -18,6 +18,17 @@ describe("manual order workspace", () => {
 
     expect(await screen.findByRole("heading", { name: "لوحة التحكم" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "طلب يدوي جديد" })).not.toBeInTheDocument();
+  });
+
+  it("searches the paginated catalog before adding a product line", async () => {
+    authStorage.save("manager-token", manager);
+    const calls = stubApi({ "/api/v1/auth/me": manager, "/api/v1/admin/products": page([product]) });
+    renderApp("/admin/orders/manual");
+
+    await userEvent.type(await screen.findByLabelText("بحث في الكتالوج"), "راتنج");
+    await userEvent.keyboard("{Enter}");
+
+    await waitFor(() => expect(calls.some((call) => new URL(`http://test${call.path}`).searchParams.get("q") === "راتنج")).toBe(true));
   });
 
   it("lets a manager save a mixed manual order with customer, source, totals, notes, and completion", async () => {
@@ -72,6 +83,10 @@ describe("manual order workspace", () => {
     expect(screen.getByRole("link", { name: "INV-8" })).toHaveAttribute("href", "/admin/invoices/INV-8");
     await userEvent.type(screen.getByLabelText("سبب إعادة الفتح"), "تصحيح عنوان التوصيل");
     await userEvent.click(screen.getByRole("button", { name: "إعادة فتح الطلب" }));
+    expect(screen.getByRole("dialog", { name: "تأكيد إعادة فتح الطلب" })).toBeInTheDocument();
+    expect(screen.getByLabelText("سبب إعادة الفتح")).toHaveValue("تصحيح عنوان التوصيل");
+    expect(calls.find((call) => call.method === "POST" && call.path === "/api/v1/admin/orders/8/reopen")).toBeUndefined();
+    await userEvent.click(screen.getByRole("button", { name: "تأكيد إعادة الفتح" }));
 
     const request = calls.find((call) => call.method === "POST" && call.path === "/api/v1/admin/orders/8/reopen");
     expect(JSON.parse(request.body)).toEqual({ reason: "تصحيح عنوان التوصيل" });

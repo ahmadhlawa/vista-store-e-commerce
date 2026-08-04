@@ -34,6 +34,7 @@ describe("order and invoice domain", () => {
     });
 
     expect(totals).toEqual({ subtotal: "2.80", total: "6.95" });
+    expect(calculateOrderTotals({ items: [{ unit_price: "2.00", quantity: 1 }], discount: "9.00", delivery_fee: "0.00" })).toEqual({ subtotal: "2.00", total: "0.00" });
     expect(multiplyMoney("2", 3)).toBe("6.00");
     expect(formatMoney("1000000000000000.05", "₪")).toBe("₪ 1,000,000,000,000,000.05");
   });

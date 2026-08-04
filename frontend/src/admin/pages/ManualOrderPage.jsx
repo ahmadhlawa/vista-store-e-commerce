@@ -13,7 +13,7 @@ const initialValues = () => ({
   items: [], complete: false, paid_amount: "0.00", payment_details: "", invoice_notes: "",
 });
 
-function OrderLines({ items, products, onChange, disabled }) {
+function OrderLines({ items, products, catalogQuery, onCatalogQueryChange, onCatalogSearch, onChange, disabled }) {
   const [productId, setProductId] = useState("");
   const update = (index, values) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...values } : item));
   const addCatalog = () => {
@@ -30,7 +30,7 @@ function OrderLines({ items, products, onChange, disabled }) {
       <Field title="سعر القطعة"><input aria-label={item.kind === "manual" ? `سعر الصنف اليدوي ${index + 1}` : `سعر الصنف ${index + 1}`} inputMode="decimal" required value={item.unit_price} onChange={(event) => update(index, { unit_price: event.target.value })} style={input} /></Field>
       <Button variant="danger" aria-label={`حذف الصنف ${index + 1}`} disabled={disabled} onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}>حذف</Button>
     </fieldset>)}
-    <div style={sx`display:flex;gap:8px;align-items:end;flex-wrap:wrap`}><Field title="إضافة منتج من الكتالوج"><select aria-label="إضافة منتج من الكتالوج" value={productId} onChange={(event) => setProductId(event.target.value)} disabled={disabled} style={input}><option value="">اختر منتجاً</option>{products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.sku || "—"}</option>)}</select></Field><Button variant="secondary" disabled={disabled || !productId} onClick={addCatalog}>إضافة المنتج</Button><Button variant="secondary" disabled={disabled} onClick={() => onChange([...items, blankManualItem()])}>إضافة صنف يدوي</Button></div>
+    <div style={sx`display:flex;gap:8px;align-items:end;flex-wrap:wrap`}><Field title="بحث في الكتالوج"><input aria-label="بحث في الكتالوج" type="search" value={catalogQuery} onChange={(event) => onCatalogQueryChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); onCatalogSearch(); } }} disabled={disabled} style={input} /></Field><Button variant="secondary" disabled={disabled} onClick={onCatalogSearch}>بحث</Button><Field title="إضافة منتج من الكتالوج"><select aria-label="إضافة منتج من الكتالوج" value={productId} onChange={(event) => setProductId(event.target.value)} disabled={disabled} style={input}><option value="">اختر منتجاً</option>{products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.sku || "—"}</option>)}</select></Field><Button variant="secondary" disabled={disabled || !productId} onClick={addCatalog}>إضافة المنتج</Button><Button variant="secondary" disabled={disabled} onClick={() => onChange([...items, blankManualItem()])}>إضافة صنف يدوي</Button></div>
   </section>;
 }
 
@@ -40,12 +40,15 @@ export default function ManualOrderPage() {
   const [values, setValues] = useState(initialValues);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [catalogBusy, setCatalogBusy] = useState(false);
+  const [catalogQuery, setCatalogQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const change = (key) => (event) => setValues((current) => ({ ...current, [key]: event.target.type === "checkbox" ? event.target.checked : event.target.value }));
-  const load = useCallback(async () => {
-    try { const result = await adminApi.listProducts({ page_size: 100 }); setProducts(result.items || []); }
+  const load = useCallback(async (query = "") => {
+    setCatalogBusy(true);
+    try { const result = await adminApi.listProducts({ page_size: 100, ...(query ? { q: query } : {}) }); setProducts(result.items || []); }
     catch (error) { feedback.error(error.message || "تعذّر تحميل الكتالوج."); }
-    finally { setLoading(false); }
+    finally { setLoading(false); setCatalogBusy(false); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -77,7 +80,7 @@ export default function ManualOrderPage() {
         <Field title="ملاحظة المصدر" hint={values.source === "other" ? "مطلوبة للمصدر الآخر." : "اختيارية."}><input required={values.source === "other"} value={values.source_note} onChange={change("source_note")} style={input} /></Field>
         <Field title="اسم العميل"><input aria-label="اسم العميل" required value={values.customer_name} onChange={change("customer_name")} style={input} /></Field><Field title="الهاتف"><input aria-label="الهاتف" required inputMode="tel" value={values.customer_phone} onChange={change("customer_phone")} style={input} /></Field><Field title="البريد الإلكتروني"><input type="email" value={values.customer_email} onChange={change("customer_email")} style={input} /></Field><Field title="العنوان"><input aria-label="العنوان" required value={values.address} onChange={change("address")} style={input} /></Field>
       </div></section>
-      <section style={card}><h2 style={sx`margin:0 0 14px;font-size:16px`}>الأصناف والأسعار</h2><OrderLines items={values.items} products={products} disabled={busy} onChange={(items) => setValues((current) => ({ ...current, items }))} /></section>
+      <section style={card}><h2 style={sx`margin:0 0 14px;font-size:16px`}>الأصناف والأسعار</h2><OrderLines items={values.items} products={products} catalogQuery={catalogQuery} onCatalogQueryChange={setCatalogQuery} onCatalogSearch={() => load(catalogQuery.trim())} disabled={busy || catalogBusy} onChange={(items) => setValues((current) => ({ ...current, items }))} /></section>
       <section style={card}><h2 style={sx`margin:0 0 14px;font-size:16px`}>الدفع والملاحظات</h2><div style={sx`display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px`}><Field title="طريقة الدفع"><select value={values.payment_method} onChange={change("payment_method")} style={input}>{PAYMENT_METHODS.map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></Field><Field title="الخصم"><input aria-label="الخصم" inputMode="decimal" value={values.discount} onChange={change("discount")} style={input} /></Field><Field title="رسوم التوصيل"><input aria-label="رسوم التوصيل" inputMode="decimal" value={values.delivery_fee} onChange={change("delivery_fee")} style={input} /></Field><Field title="ملاحظات العميل"><textarea aria-label="ملاحظات العميل" rows="3" value={values.customer_notes} onChange={change("customer_notes")} style={textarea} /></Field><Field title="ملاحظات داخلية"><textarea aria-label="ملاحظات داخلية" rows="3" value={values.admin_notes} onChange={change("admin_notes")} style={textarea} /></Field></div></section>
       <section style={card}><label style={sx`display:flex;align-items:center;gap:9px;font-weight:800;cursor:pointer`}><input aria-label="إتمام الطلب وإصدار فاتورة" type="checkbox" checked={values.complete} onChange={change("complete")} />إتمام الطلب وإصدار فاتورة</label>{values.complete && <div style={sx`display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:14px`}><Field title="المبلغ المدفوع"><input aria-label="المبلغ المدفوع" inputMode="decimal" value={values.paid_amount} onChange={change("paid_amount")} style={input} /></Field><Field title="تفاصيل الدفع"><input aria-label="تفاصيل الدفع" value={values.payment_details} onChange={change("payment_details")} style={input} /></Field><Field title="ملاحظات الفاتورة"><input value={values.invoice_notes} onChange={change("invoice_notes")} style={input} /></Field></div>}<div aria-label="ملخص إجمالي الطلب" style={sx`margin-top:16px;padding:12px;border-radius:10px;background:#F6F4F0;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-weight:800`}><span>المجموع الفرعي: {formatMoney(totals.subtotal)}</span><span>الإجمالي: {formatMoney(totals.total)}</span></div><div style={sx`display:flex;gap:10px;flex-wrap:wrap;margin-top:14px`}><Button type="submit" disabled={busy}>{busy ? "جارٍ الحفظ…" : "حفظ الطلب اليدوي"}</Button><Button variant="ghost" disabled={busy} onClick={() => setValues(initialValues())}>إعادة تعيين</Button></div></section>
     </form>
