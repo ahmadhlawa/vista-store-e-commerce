@@ -364,3 +364,117 @@ def test_completion_rejects_cancelled_and_empty_orders_without_an_invoice(
     db.expire_all()
     assert db.get(Order, empty["id"]).status != "completed"
     assert db.query(Invoice).filter(Invoice.order_id == empty["id"]).count() == 0
+
+
+def _manual_order_payload(product: Product, **changes: object) -> dict:
+    payload = {
+        "source": "whatsapp",
+        "source_note": "WhatsApp conversation",
+        "customer_name": "Manual Customer",
+        "customer_phone": "0591234567",
+        "address": "Ramallah, Manual Street 10",
+        "payment_method": "manual",
+        "customer_notes": "Customer requested pickup",
+        "admin_notes": "Entered by manager",
+        "discount": "5.00",
+        "delivery_fee": "7.00",
+        "items": [
+            {"kind": "catalog", "product_id": product.id, "quantity": 2, "unit_price": "12.50"},
+            {
+                "kind": "manual",
+                "name": "Custom gift wrap",
+                "description": "Blue ribbon",
+                "quantity": 3,
+                "unit_price": "1.25",
+            },
+        ],
+    }
+    payload.update(changes)
+    return payload
+
+
+def test_super_admin_saves_mixed_manual_order_without_invoice_or_manual_catalog_changes(
+    client: TestClient, db: Session, super_token: str
+) -> None:
+    product = make_product(db, slug="manual-mixed", name="Catalog line", price="10.00", stock=20)
+    products_before = db.query(Product).count()
+
+    response = client.post(
+        "/api/v1/admin/orders/manual",
+        headers=auth(super_token),
+        json=_manual_order_payload(product),
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["source"] == "whatsapp"
+    assert body["status"] == "new"
+    assert body["subtotal"] == 28.75
+    assert body["total"] == 30.75
+    assert body["active_invoice"] is None
+    assert body["invoices"] == []
+    catalog, manual = body["items"]
+    assert catalog["product_id"] == product.id
+    assert catalog["original_unit_price"] == 10.0
+    assert catalog["unit_price"] == 12.5
+    assert manual["item_kind"] == "manual"
+    assert manual["product_id"] is None
+    assert manual["product_name"] == "Custom gift wrap"
+    assert manual["manual_description"] == "Blue ribbon"
+    db.expire_all()
+    assert db.get(Product, product.id).price == Decimal("10.00")
+    assert db.get(Product, product.id).stock_quantity == 18
+    assert db.query(Product).count() == products_before
+    assert db.query(Invoice).filter(Invoice.order_id == body["id"]).count() == 0
+
+
+def test_manual_order_requires_super_admin_and_rejects_empty_or_website_source(
+    client: TestClient, db: Session, admin_token: str, super_token: str
+) -> None:
+    product = make_product(db, slug="manual-restrictions", name="Manual restrictions")
+
+    forbidden = client.post(
+        "/api/v1/admin/orders/manual",
+        headers=auth(admin_token),
+        json=_manual_order_payload(product),
+    )
+    assert forbidden.status_code == 403
+
+    empty = client.post(
+        "/api/v1/admin/orders/manual",
+        headers=auth(super_token),
+        json=_manual_order_payload(product, items=[]),
+    )
+    assert empty.status_code == 422
+
+    website = client.post(
+        "/api/v1/admin/orders/manual",
+        headers=auth(super_token),
+        json=_manual_order_payload(product, source="website"),
+    )
+    assert website.status_code == 422
+
+
+def test_super_admin_can_complete_manual_order_with_one_active_invoice(
+    client: TestClient, db: Session, super_token: str
+) -> None:
+    product = make_product(db, slug="manual-complete", name="Manual completion")
+    payload = _manual_order_payload(
+        product,
+        completion={
+            "payment_method": "manual",
+            "paid_amount": "5.00",
+            "payment_details": "Cash received",
+            "invoice_notes": "Manual order invoice",
+        },
+    )
+
+    response = client.post("/api/v1/admin/orders/manual", headers=auth(super_token), json=payload)
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["is_locked"] is True
+    assert body["active_invoice"] is not None
+    db.expire_all()
+    assert db.query(Invoice).filter(Invoice.order_id == body["id"], Invoice.status == "active").count() == 1

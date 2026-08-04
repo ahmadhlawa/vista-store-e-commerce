@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from decimal import Decimal
 import re
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import EmailStr, Field, field_validator
+from pydantic import EmailStr, Field, field_validator, model_validator
 
 from app.core.enums import OrderSource, OrderStatus, PaymentMethod, PaymentStatus
 from app.schemas.common import APIModel, Money, UTCDateTime
@@ -246,6 +246,57 @@ class OrderCompletionRequest(APIModel):
     paid_amount: Money = Field(default=Decimal("0.00"), ge=0)
     payment_details: str | None = Field(default=None, max_length=2000)
     invoice_notes: str | None = Field(default=None, max_length=2000)
+
+
+class ManualCatalogOrderItemInput(APIModel):
+    kind: Literal["catalog"] = "catalog"
+    product_id: int
+    variant_id: int | None = None
+    quantity: int = Field(gt=0, le=999)
+    unit_price: Money | None = Field(default=None, ge=0)
+
+
+class ManualOrderItemInput(APIModel):
+    kind: Literal["manual"] = "manual"
+    name: str = Field(min_length=1, max_length=250)
+    description: str | None = Field(default=None, max_length=2000)
+    quantity: int = Field(gt=0, le=999)
+    unit_price: Money = Field(ge=0)
+
+
+ManualOrderItemInputUnion = Annotated[
+    ManualCatalogOrderItemInput | ManualOrderItemInput, Field(discriminator="kind")
+]
+
+
+class ManualOrderCreate(APIModel):
+    source: Literal["whatsapp", "phone", "walk_in", "social", "other"]
+    source_note: str | None = Field(default=None, max_length=250)
+    customer_name: str = Field(min_length=3, max_length=150)
+    customer_phone: str = Field(min_length=7, max_length=40)
+    customer_email: EmailStr | None = None
+    address: str = Field(min_length=6, max_length=1000)
+    payment_method: PaymentMethod = PaymentMethod.CASH_ON_DELIVERY
+    customer_notes: str | None = Field(default=None, max_length=1000)
+    admin_notes: str | None = Field(default=None, max_length=2000)
+    discount: Money = Field(default=Decimal("0.00"), ge=0)
+    delivery_fee: Money = Field(default=Decimal("0.00"), ge=0)
+    items: list[ManualOrderItemInputUnion] = Field(min_length=1, max_length=100)
+    completion: OrderCompletionRequest | None = None
+
+    @field_validator("customer_phone")
+    @classmethod
+    def _normalize_phone(cls, value: str) -> str:
+        cleaned = re.sub(r"[\s\-()]", "", value)
+        if not PHONE_PATTERN.match(cleaned):
+            raise ValueError("phone number must contain 7 to 15 digits")
+        return cleaned
+
+    @model_validator(mode="after")
+    def _require_other_source_note(self) -> "ManualOrderCreate":
+        if self.source == "other" and not (self.source_note or "").strip():
+            raise ValueError("source_note is required when source is other")
+        return self
 
 
 class OrderNotesUpdate(APIModel):

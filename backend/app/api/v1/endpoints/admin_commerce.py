@@ -10,7 +10,7 @@ from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import selectinload
 
 from app.api.crud import apply_updates, get_or_404
-from app.api.deps import CurrentAdmin, DbSession, PageParams
+from app.api.deps import CurrentAdmin, DbSession, PageParams, SuperAdmin
 from app.core.enums import OrderSource, OrderStatus, PaymentStatus
 from app.models import Coupon, DeliveryArea, Invoice, Order, OrderItem
 from app.schemas.common import MessageResponse, Page
@@ -24,6 +24,9 @@ from app.schemas.marketing import (
 )
 from app.schemas.orders import (
     DashboardSummary,
+    ManualCatalogOrderItemInput,
+    ManualOrderCreate,
+    ManualOrderItemInput,
     OrderAdminUpdate,
     OrderAdminListOut,
     OrderAdminOut,
@@ -327,6 +330,57 @@ def get_order(order_id: int, db: DbSession, admin: CurrentAdmin):
             active_invoice.payment_status if active_invoice else PaymentStatus.UNPAID.value
         ),
     }
+
+
+@router.post("/orders/manual", response_model=OrderAdminOut, status_code=status.HTTP_201_CREATED)
+def create_manual_order(payload: ManualOrderCreate, db: DbSession, admin: SuperAdmin):
+    items: list[orders_service.ManualOrderItemDraft] = []
+    for item in payload.items:
+        if isinstance(item, ManualCatalogOrderItemInput):
+            items.append(
+                orders_service.ManualCatalogOrderItemDraft(
+                    product_id=item.product_id,
+                    variant_id=item.variant_id,
+                    quantity=item.quantity,
+                    unit_price=item.unit_price,
+                )
+            )
+        elif isinstance(item, ManualOrderItemInput):
+            items.append(
+                orders_service.ManualFreeformOrderItemDraft(
+                    name=item.name,
+                    description=item.description,
+                    quantity=item.quantity,
+                    unit_price=item.unit_price,
+                )
+            )
+    draft = orders_service.ManualOrderDraft(
+        source=payload.source,
+        source_note=payload.source_note,
+        customer_name=payload.customer_name,
+        customer_phone=payload.customer_phone,
+        customer_email=str(payload.customer_email) if payload.customer_email else None,
+        address=payload.address,
+        payment_method=payload.payment_method.value,
+        customer_notes=payload.customer_notes,
+        admin_notes=payload.admin_notes,
+        discount=payload.discount,
+        delivery_fee=payload.delivery_fee,
+        items=tuple(items),
+    )
+    order = orders_service.create_manual_order(db, draft=draft, admin=admin)
+    if payload.completion is not None:
+        orders_service.complete_order(
+            db,
+            order_id=order.id,
+            payment_method=payload.completion.payment_method.value,
+            paid_amount=payload.completion.paid_amount,
+            payment_details=payload.completion.payment_details,
+            invoice_notes=payload.completion.invoice_notes,
+            admin=admin,
+        )
+    db.commit()
+    return get_order(order.id, db, admin)
 
 
 @router.patch("/orders/{order_id}", response_model=OrderAdminOut)

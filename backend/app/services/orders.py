@@ -235,6 +235,41 @@ class AdminOrderEditDraft:
     items: tuple[AdminOrderItemDraft, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class ManualCatalogOrderItemDraft:
+    product_id: int
+    variant_id: int | None
+    quantity: int
+    unit_price: Decimal | None
+
+
+@dataclass(frozen=True, slots=True)
+class ManualFreeformOrderItemDraft:
+    name: str
+    description: str | None
+    quantity: int
+    unit_price: Decimal
+
+
+ManualOrderItemDraft = ManualCatalogOrderItemDraft | ManualFreeformOrderItemDraft
+
+
+@dataclass(frozen=True, slots=True)
+class ManualOrderDraft:
+    source: str
+    source_note: str | None
+    customer_name: str
+    customer_phone: str
+    customer_email: str | None
+    address: str
+    payment_method: str
+    customer_notes: str | None
+    admin_notes: str | None
+    discount: Decimal
+    delivery_fee: Decimal
+    items: tuple[ManualOrderItemDraft, ...]
+
+
 def generate_order_number(db: Session) -> str:
     """Human readable and unique: ORD-260731-4821."""
     stamp = utcnow().strftime("%y%m%d")
@@ -244,6 +279,133 @@ def generate_order_number(db: Session) -> str:
         if exists is None:
             return candidate
     raise DomainError("تعذّر توليد رقم طلب فريد، حاول مرة أخرى.", code="order_number_exhausted")
+
+
+def create_manual_order(db: Session, *, draft: ManualOrderDraft, admin: AdminUser) -> Order:
+    """Create an incomplete manager-entered order without issuing an invoice."""
+    if draft.source == OrderSource.WEBSITE.value:
+        raise DomainError("Manual orders cannot use the website source.", code="invalid_manual_source")
+    if draft.source not in {
+        OrderSource.WHATSAPP.value,
+        OrderSource.PHONE.value,
+        OrderSource.WALK_IN.value,
+        OrderSource.SOCIAL.value,
+        OrderSource.OTHER.value,
+    }:
+        raise DomainError("Manual order source is invalid.", code="invalid_manual_source")
+    if draft.source == OrderSource.OTHER.value and not (draft.source_note or "").strip():
+        raise DomainError("Other sources require a note.", code="source_note_required")
+    if not draft.items:
+        raise DomainError("An order must contain at least one item.", code="empty_order")
+
+    catalog_drafts = [item for item in draft.items if isinstance(item, ManualCatalogOrderItemDraft)]
+    catalog_keys = [(item.product_id, item.variant_id) for item in catalog_drafts]
+    if len(catalog_keys) != len(set(catalog_keys)):
+        raise DomainError("Duplicate catalog items are not allowed.", code="duplicate_order_item")
+    priced_catalog = price_lines(
+        db, [(item.product_id, item.variant_id, item.quantity) for item in catalog_drafts]
+    )
+    priced_by_key = {
+        (line.product.id, line.variant.id if line.variant else None): line for line in priced_catalog
+    }
+    items: list[OrderItem] = []
+    for item in draft.items:
+        if isinstance(item, ManualCatalogOrderItemDraft):
+            line = priced_by_key[(item.product_id, item.variant_id)]
+            unit_price = money(item.unit_price if item.unit_price is not None else line.unit_price)
+            items.append(
+                OrderItem(
+                    product_id=line.product.id,
+                    variant_id=line.variant.id if line.variant else None,
+                    item_kind="catalog",
+                    product_name=line.product.name,
+                    original_product_name=line.product.name,
+                    sku=line.sku,
+                    original_sku=line.sku,
+                    variant_description=line.variant_description,
+                    original_variant_description=line.variant_description,
+                    original_unit_price=line.unit_price,
+                    unit_price=unit_price,
+                    quantity=item.quantity,
+                    line_total=money(unit_price * item.quantity),
+                )
+            )
+        else:
+            unit_price = money(item.unit_price)
+            name = item.name.strip()
+            if not name:
+                raise DomainError("Manual item name is required.", code="manual_item_name_required")
+            items.append(
+                OrderItem(
+                    product_id=None,
+                    variant_id=None,
+                    item_kind="manual",
+                    product_name=name,
+                    original_product_name=name,
+                    sku=None,
+                    original_sku=None,
+                    variant_description=None,
+                    original_variant_description=None,
+                    manual_description=(item.description or "").strip() or None,
+                    original_unit_price=unit_price,
+                    unit_price=unit_price,
+                    quantity=item.quantity,
+                    line_total=money(unit_price * item.quantity),
+                )
+            )
+
+    totals = calculate_order_totals(items, draft.discount, draft.delivery_fee)
+    for item, line_total in zip(items, totals.line_totals, strict=True):
+        item.line_total = line_total
+    order = Order(
+        order_number=generate_order_number(db),
+        public_token=secrets.token_urlsafe(24),
+        status=OrderStatus.NEW.value,
+        source=draft.source,
+        source_note=(draft.source_note or "").strip() or None,
+        customer_name=draft.customer_name.strip(),
+        customer_phone=draft.customer_phone.strip(),
+        customer_email=(draft.customer_email or "").strip() or None,
+        address=draft.address.strip(),
+        delivery_fee=totals.delivery_fee,
+        subtotal=totals.subtotal,
+        discount=totals.discount_amount,
+        total=totals.total_amount,
+        payment_method=draft.payment_method,
+        customer_notes=(draft.customer_notes or "").strip() or None,
+        admin_notes=(draft.admin_notes or "").strip() or None,
+    )
+    order.items.extend(items)
+    order.status_history.append(
+        OrderStatusHistory(
+            old_status=None,
+            new_status=OrderStatus.NEW.value,
+            admin_user_id=admin.id,
+            note="Manual order created.",
+        )
+    )
+    _apply_stock_delta(priced_catalog, sign=-1)
+    db.add(order)
+    db.flush()
+    record_order_activity(
+        db,
+        order_id=order.id,
+        invoice_id=None,
+        actor_admin_id=admin.id,
+        event_type="manual_order_created",
+        before_data=None,
+        after_data={"source": order.source, "status": order.status, "total_amount": order.total},
+        reason=None,
+    )
+    audit_service.record(
+        db,
+        admin=admin,
+        action="order.manual_created",
+        entity_type="order",
+        entity_id=order.id,
+        meta={"order_number": order.order_number, "source": order.source},
+    )
+    return order
 
 
 def _apply_stock_delta(lines: Sequence[PricedLine], sign: int) -> None:
