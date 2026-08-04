@@ -52,17 +52,32 @@ describe("public shell", () => {
     expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
   });
 
-  it("keeps public navigation free of order tracking links", async () => {
+  it("renders the real footer without an order-tracking entry", async () => {
     stubApi(storefrontRoutes);
-    const { container } = renderApp("/");
+    renderApp("/");
 
-    await screen.findByRole("banner");
-    expect(container.querySelectorAll('a[href="/track-order"]')).toHaveLength(0);
+    const footer = await screen.findByRole("contentinfo");
+    expect(within(footer).queryByText("تتبّع الطلب")).not.toBeInTheDocument();
+    expect(footer.querySelectorAll('a[href="/track-order"]')).toHaveLength(0);
   });
 
-  it("treats the former tracking URL as a public not-found route", async () => {
+  it("keeps the header and opened mobile navigation free of tracking links", async () => {
     stubApi(storefrontRoutes);
-    renderApp("/track-order");
+    renderApp("/");
+
+    const header = await screen.findByRole("banner");
+    expect(header.querySelectorAll('a[href="/track-order"]')).toHaveLength(0);
+    expect(screen.getByRole("link", { name: "تسجيل دخول الإدارة" })).toHaveAttribute("href", "/admin/login");
+
+    await userEvent.click(screen.getByRole("button", { name: "فتح القائمة" }));
+    const mobileNavigation = screen.getByRole("dialog", { name: "قائمة التنقّل" });
+    expect(mobileNavigation.querySelectorAll('a[href="/track-order"]')).toHaveLength(0);
+    expect(within(mobileNavigation).queryByText("تتبّع الطلب")).not.toBeInTheDocument();
+  });
+
+  it.each(["/track-order", "/track", "/order-tracking"])("treats %s as a public not-found route", async (path) => {
+    stubApi(storefrontRoutes);
+    renderApp(path);
 
     expect(await screen.findByRole("heading", { name: "الصفحة غير موجودة" })).toBeInTheDocument();
   });
