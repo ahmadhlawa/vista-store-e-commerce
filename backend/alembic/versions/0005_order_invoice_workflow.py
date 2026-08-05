@@ -95,6 +95,23 @@ def upgrade() -> None:
         "original_variant_description = variant_description, original_unit_price = unit_price"
     )
 
+    # An order may have several invoices once replacements exist, so the unique
+    # constraint on invoices.order_id has to become a plain index. The order of
+    # those two steps is not cosmetic on MySQL: 0003 created the table with the
+    # foreign key and the unique constraint together, InnoDB backed the foreign
+    # key with that unique index instead of building a second one, and MySQL
+    # refuses to drop the last index a constraint can use:
+    #
+    #   (1553, "Cannot drop index 'uq_invoices_order_id':
+    #           needed in a foreign key constraint")
+    #
+    # Creating the replacement index first gives the foreign key somewhere else
+    # to rest, after which the unique index can go. SQLite never reached this
+    # branch of the problem because batch_alter_table rebuilds the table rather
+    # than issuing DROP INDEX, which is why the SQLite suite stayed green while
+    # MySQL could not migrate at all.
+    op.create_index("ix_invoices_order_id", "invoices", ["order_id"], unique=False)
+
     has_order_unique_constraint = _has_order_unique_constraint()
     with op.batch_alter_table("invoices") as batch:
         batch.alter_column("status", existing_type=sa.String(length=16), server_default="active")
@@ -127,7 +144,6 @@ def upgrade() -> None:
     op.execute("UPDATE invoices SET source = (SELECT source FROM orders WHERE orders.id = invoices.order_id)")
     with op.batch_alter_table("invoices") as batch:
         batch.alter_column("source", existing_type=sa.String(length=24), nullable=False)
-    op.create_index("ix_invoices_order_id", "invoices", ["order_id"], unique=False)
     op.create_index("ix_invoices_source", "invoices", ["source"], unique=False)
     op.create_index(
         "ix_invoices_status_payment_created_at", "invoices", ["status", "payment_status", "created_at"], unique=False
@@ -167,9 +183,11 @@ def downgrade() -> None:
         raise RuntimeError(
             "Cannot downgrade replacement invoice history without deleting invoices."
         )
-    op.drop_index("ix_order_activities_created_at", table_name="order_activities")
-    op.drop_index("ix_order_activities_invoice_id", table_name="order_activities")
-    op.drop_index("ix_order_activities_order_id", table_name="order_activities")
+    # Dropping the table removes its indexes with it. Dropping them individually
+    # first raises MySQL 1553 on ix_order_activities_order_id and
+    # ix_order_activities_invoice_id: InnoDB creates an index for each foreign key
+    # when the table is built, then discards its own once these equivalent ones
+    # appear, leaving them as the only indexes those constraints can use.
     op.drop_table("order_activities")
 
     with op.batch_alter_table("invoice_items") as batch:
@@ -178,12 +196,23 @@ def downgrade() -> None:
 
     op.drop_index("ix_invoices_status_payment_created_at", table_name="invoices")
     op.drop_index("ix_invoices_source", table_name="invoices")
+    # Mirror image of the upgrade hazard: dropping ix_invoices_order_id while it
+    # is the only index behind the foreign key raises MySQL 1553 just the same.
+    # Restore the unique constraint first, then remove the plain index. The
+    # duplicate check at the top of this function has already established that
+    # one invoice per order still holds, so the constraint can be satisfied.
+    with op.batch_alter_table("invoices") as batch:
+        batch.create_unique_constraint("uq_invoices_order_id", ["order_id"])
     op.drop_index("ix_invoices_order_id", table_name="invoices")
     op.execute("UPDATE invoices SET status = 'issued' WHERE status = 'active'")
     op.execute("UPDATE invoices SET status = 'cancelled' WHERE status = 'replaced'")
     with op.batch_alter_table("invoices") as batch:
-        batch.drop_constraint("uq_invoices_replacement_invoice_id", type_="unique")
+        # The foreign key goes before the unique constraint it leans on. InnoDB
+        # built an index for the constraint when it was created and dropped that
+        # one again once the unique index appeared, so reversing these two raises
+        # MySQL 1553 on uq_invoices_replacement_invoice_id.
         batch.drop_constraint("fk_invoices_replacement_invoice_id", type_="foreignkey")
+        batch.drop_constraint("uq_invoices_replacement_invoice_id", type_="unique")
         batch.drop_column("invoice_notes")
         batch.drop_column("source")
         batch.drop_column("payment_details")
@@ -193,8 +222,6 @@ def downgrade() -> None:
         batch.drop_column("payment_status")
         batch.drop_column("replacement_invoice_id")
         batch.alter_column("status", existing_type=sa.String(length=16), server_default=None)
-    with op.batch_alter_table("invoices") as batch:
-        batch.create_unique_constraint("uq_invoices_order_id", ["order_id"])
 
     with op.batch_alter_table("order_items") as batch:
         batch.drop_column("original_unit_price")
