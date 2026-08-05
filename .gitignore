@@ -15,6 +15,12 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
+# Browser acceptance artefacts: screenshots and traces are captured only on failure
+# and are evidence for one run, never source.
+frontend/e2e/.artifacts/
+frontend/playwright-report/
+frontend/test-results/
+
 # Test coverage
 .coverage
 coverage.xml
