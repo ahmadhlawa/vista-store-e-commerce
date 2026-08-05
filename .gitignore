@@ -26,10 +26,14 @@ frontend/test-results/
 coverage.xml
 htmlcov/
 
-# Local databases
+# Local databases. The .bak rules cover the timestamped copies taken before a
+# migration: they are whole SQLite files and carry the same admin credential
+# hashes and customer records as the database they were copied from.
 *.db
 *.db-journal
 *.sqlite3
+*.bak
+*.db.bak
 
 # Environment and secrets
 .env
