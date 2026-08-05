@@ -131,8 +131,17 @@ jobs:
 
       - name: Confirm no runtime artefact was committed
         working-directory: .
+        # The previous pattern anchored databases on `.db$` and environment files on
+        # `.env$`. Both were too narrow: four backups named `<name>.db.<stamp>.bak`
+        # and a `.env.mysql.local` would all have passed it. `.env.example` is the
+        # documented template and is the only member of that family allowed through.
+        #
+        # backend/tests/test_repository_hygiene.py asserts the same rules from the
+        # test suite, so a developer sees this locally before CI does.
         run: |
-          if git ls-files | grep -Ei '(^|/)(\.env$|.*\.db$|node_modules/|dist/)'; then
+          if git ls-files \
+            | grep -Ev '(^|/)\.env\.example$' \
+            | grep -Ei '(^|/)\.env(\..+)?$|\.(db|sqlite|sqlite3|bak|dump)$|(^|/)(node_modules|dist|build|htmlcov)/'; then
             echo "a runtime artefact is tracked"
             exit 1
           fi

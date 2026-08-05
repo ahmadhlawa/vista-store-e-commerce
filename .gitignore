@@ -31,9 +31,14 @@ htmlcov/
 # hashes and customer records as the database they were copied from.
 *.db
 *.db-journal
+*.sqlite
 *.sqlite3
 *.bak
-*.db.bak
+*.dump
+# Timestamped copies taken before a migration, e.g.
+# vista_preview.db.20260805-212228.pre-0009.bak — covered by *.bak above, and
+# named here so the intent survives an edit to these rules.
+backend/data/*.bak
 
 # Environment and secrets
 .env
