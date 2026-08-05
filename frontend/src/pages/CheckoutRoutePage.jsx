@@ -276,7 +276,7 @@ export default function CheckoutRoutePage() {
               </label>
             ))}
 
-            {form.payment === "manual" && store.settings.manualPaymentInstructions && (
+            {form.payment === "bank_transfer" && store.settings.manualPaymentInstructions && (
               <div className="vs-payopt__instructions">
                 {store.settings.manualPaymentInstructions}
               </div>

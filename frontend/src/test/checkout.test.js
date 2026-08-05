@@ -12,6 +12,7 @@ vi.mock("../api/publicApi.js", () => ({
 }));
 
 import { buildOrderWhatsAppMessage, checkoutService } from "../services/checkout.js";
+import { paymentMethodLabels, paymentMethods } from "../store.js";
 
 describe("checkout confirmation", () => {
   beforeEach(() => {
@@ -65,5 +66,26 @@ describe("checkout confirmation", () => {
     expect(message).toContain("Delivery area API");
     expect(message).toContain("اتصل قبل الوصول");
     expect(message).not.toContain("Untrusted");
+  });
+});
+
+/**
+ * The API's PaymentMethod enum is the contract. The storefront may only ever offer
+ * values it accepts: anything else is rejected with a 422 the customer cannot act on,
+ * after they have already filled the whole form.
+ */
+describe("checkout payment methods", () => {
+  const CANONICAL = ["cash_on_delivery", "card", "bank_transfer"];
+
+  it("offers only payment values the orders API accepts", () => {
+    for (const method of paymentMethods) {
+      expect(CANONICAL, `unsupported payment key "${method.key}"`).toContain(method.key);
+    }
+  });
+
+  it("labels every offered payment method", () => {
+    for (const method of paymentMethods) {
+      expect(paymentMethodLabels[method.key], `no label for "${method.key}"`).toBeTruthy();
+    }
   });
 });

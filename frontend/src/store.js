@@ -62,7 +62,10 @@ export const paymentMethods = [
     desc: "ادفع نقداً للمندوب عند التسليم",
   },
   {
-    key: "manual",
+    // Must stay one of the API's PaymentMethod values (cash_on_delivery, card,
+    // bank_transfer). The storefront used to send "manual" here, which the orders
+    // endpoint rejected with a 422 only after the customer had filled the form.
+    key: "bank_transfer",
     label: "تحويل بنكي / يدوي",
     desc: "نرسل تفاصيل الحساب بعد تأكيد الطلب",
   },
@@ -70,7 +73,7 @@ export const paymentMethods = [
 
 export const paymentMethodLabels = {
   cash_on_delivery: "الدفع عند الاستلام",
-  manual: "تحويل بنكي / يدوي",
+  bank_transfer: "تحويل بنكي / يدوي",
 };
 
 export const invoiceStatusLabels = {
