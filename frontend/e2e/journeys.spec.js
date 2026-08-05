@@ -3,26 +3,32 @@ import { EMPLOYEE, MANAGER, apiToken, expectClean, login, watchPage } from "./he
 
 const PRODUCT = "vfx-resin-clear-1l";
 
-/** Never let an acceptance run reach WhatsApp, and record that it was attempted. */
-async function blockWhatsApp(page) {
-  const attempts = [];
-  await page.context().route(/wa\.me|whatsapp\.com/, (route) => {
-    attempts.push(route.request().url());
-    return route.abort();
+/**
+ * Never let an acceptance run reach WhatsApp, and record the hand-off deterministically.
+ *
+ * Replacing `window.open` rather than watching for a popup: a blocked or immediately
+ * closed popup is not reliably observable, and this is the exact call the checkout page
+ * makes, so recording it is both stricter and stable.
+ */
+async function stubWhatsApp(page) {
+  await page.addInitScript(() => {
+    window.__whatsappOpens = [];
+    window.open = (url) => {
+      window.__whatsappOpens.push(String(url));
+      return null;
+    };
   });
-  page.on("popup", (popup) => {
-    attempts.push(popup.url());
-    popup.close().catch(() => {});
-  });
-  return attempts;
+  await page.context().route(/wa\.me|whatsapp\.com/, (route) => route.abort());
 }
+
+const whatsappOpens = (page) => page.evaluate(() => window.__whatsappOpens || []);
 
 test.describe("journey C — website order lifecycle", () => {
   test("checkout persists exactly one order, clears the cart and shows it in admin", async ({
     page,
     request,
   }) => {
-    const whatsapp = await blockWhatsApp(page);
+    await stubWhatsApp(page);
     const watcher = watchPage(page);
 
     await page.goto(`/product/${PRODUCT}`);
@@ -63,9 +69,13 @@ test.describe("journey C — website order lifecycle", () => {
     const order = await response.json();
     expect(order.payment_method).toBe("bank_transfer");
 
-    // Persisted before WhatsApp, and the customer lands on the confirmation route.
+    // The hand-off happens only after the order exists, and it carries the server's
+    // order number rather than anything the browser made up.
+    const opened = await whatsappOpens(page);
+    expect(opened, "no WhatsApp hand-off was attempted").toHaveLength(1);
+    expect(decodeURIComponent(opened[0])).toContain(order.order_number);
+
     await page.waitForURL(new RegExp(`/order-success/${order.order_number}$`));
-    expect(whatsapp.length, "WhatsApp hand-off was attempted after persistence").toBeGreaterThan(0);
 
     // The cart is emptied only after the order exists.
     await page.goto("/cart");
