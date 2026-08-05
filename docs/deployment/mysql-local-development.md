@@ -111,9 +111,45 @@ environment only.
 | 21 | Preview purge, `--confirm` | ✅ `delete=66` (53 rows + 12 objects + the batch); status reports the batch is gone |
 | 22 | Re-seed after purge | ✅ `create=54`, `seed_count` back to 1, 53 owned records, 0 owner-edited |
 
+### Migration 0008 needs a privilege that a schema-scoped grant cannot give
+
+This is a **deployment prerequisite, not only a test detail.** Migration
+`0008_order_activity_triggers` creates the two triggers that make `order_activities`
+append-only. MySQL 8 turns binary logging on by default and then refuses `CREATE TRIGGER`
+from an account holding neither `SUPER` nor `SET_USER_ID`:
+
+```
+(1419, 'You do not have the SUPER privilege and binary logging is enabled
+        (you *might* want to use the less safe log_bin_trust_function_creators variable)')
+```
+
+Confirmed on MySQL 8.0.46 with `log_bin = 1` and `log_bin_trust_function_creators = 0`,
+using an account granted `SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, INDEX,
+REFERENCES, TRIGGER` on its own schema. **The `TRIGGER` privilege alone is not enough.**
+
+There are three ways to satisfy it. Any one is sufficient:
+
+| Option | Command | Notes |
+| --- | --- | --- |
+| Grant the dynamic privilege | `GRANT SET_USER_ID ON *.* TO '<user>'@'<host>';` | Narrowest, and revocable once the migration has run. Still global — `SET_USER_ID` has no schema-scoped form. |
+| Trust the creator | `SET GLOBAL log_bin_trust_function_creators = 1;` | Server-wide, and reverts on restart unless written to the config file. |
+| Turn binary logging off | server configuration | Only sensible where no replication or point-in-time recovery is wanted. |
+
+CI takes the second option: `.github/workflows/mysql-compatibility.yml` sets it as root
+during setup so the unprivileged CI account can still run the chain. Granting the CI
+account `SUPER` was rejected as it would make the gate less like the deployment it stands
+in for.
+
+**Check this before a cPanel handover.** Shared hosting frequently grants neither `SUPER`
+nor `SET_USER_ID` and leaves `log_bin_trust_function_creators` at `0`. On such a host
+migration 0008 cannot be applied at all, and because MySQL has no transactional DDL the
+failure lands mid-chain rather than rolling back. If the host permits none of the three,
+the append-only guarantee has to move into the application layer before deployment — it
+must not simply be skipped, because the triggers are what make order history tamper-proof.
+
 ### What is still blocked
 
-Four tests in `tests_mysql` skip because they need **two further disposable databases** of
+Five tests in `tests_mysql` skip because they need **further disposable databases** of
 their own, and creating a database requires an administrator the application user is not:
 
 | Test | Needs |
@@ -122,14 +158,21 @@ their own, and creating a database requires an administrator the application use
 | `test_instance_metadata_is_recorded_and_manifest_has_no_secrets` | `MYSQL_LIFECYCLE_URL` |
 | `test_a_conflicting_instance_slug_is_refused` | `MYSQL_LIFECYCLE_URL` |
 | `test_the_demo_seed_is_idempotent_on_mysql` | `MYSQL_SEED_URL` |
+| every test in `test_mysql_migration_order.py` | `MYSQL_MIGRATION_URL` |
 
-To unblock them, an account that can `CREATE DATABASE` must create two more schemas and
-grant the application user access, then both variables must be set:
+To unblock them, an account that can `CREATE DATABASE` must create the schemas and grant
+the application user access, then the variables must be set:
 
 ```
 MYSQL_LIFECYCLE_URL=mysql+pymysql://vista_store_dev_user:<password>@127.0.0.1:3306/vista_store_dev_lifecycle?charset=utf8mb4
 MYSQL_SEED_URL=mysql+pymysql://vista_store_dev_user:<password>@127.0.0.1:3306/vista_store_dev_seed?charset=utf8mb4
+MYSQL_MIGRATION_URL=mysql+pymysql://vista_store_dev_user:<password>@127.0.0.1:3306/vista_store_dev_migration?charset=utf8mb4
 ```
+
+`MYSQL_MIGRATION_URL` must point at a schema of its own and **nothing else**. Those tests
+start each case from an empty database, so they drop every table and trigger they find.
+`reset()` refuses to run unless the schema name ends in `_migration`, but that guard is a
+backstop and not a substitute for pointing the variable somewhere disposable.
 
 The `MYSQL_ADMIN_PASSWORD` currently recorded in `.env.mysql.local` is **rejected by the
 server** (`ERROR 1045 Access denied for user 'root'@'localhost'`), so this could not be

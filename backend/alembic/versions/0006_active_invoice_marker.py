@@ -70,6 +70,11 @@ def downgrade() -> None:
     if op.get_bind().dialect.name == "sqlite":
         op.execute("PRAGMA foreign_keys=OFF")
     with op.batch_alter_table("invoices") as batch:
+        # order_id is the leftmost column of this constraint and carries a foreign
+        # key, so MySQL would refuse the drop if this were the only index it could
+        # use. It is safe because 0005 leaves ix_invoices_order_id in place until
+        # its own downgrade runs, which is after this one. Anything that moves that
+        # index drop earlier brings back MySQL error 1553 here.
         batch.drop_constraint("uq_invoices_order_active_marker", type_="unique")
         batch.drop_constraint("ck_invoices_active_invoice_marker", type_="check")
         batch.drop_column("active_invoice_marker")

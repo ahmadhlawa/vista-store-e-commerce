@@ -513,6 +513,22 @@ def test_upgrade_from_legacy_revision_retains_and_backfills_order_and_invoice(
     assert legacy_order["status"] == "delivered"
     assert legacy_invoice["invoice_number"] == "INV-LEGACY"
     assert legacy_invoice["status"] == "issued"
+
+    # 0004 is the one-invoice-per-order schema, so the unique constraint has to be
+    # back and the plain index it was swapped for has to be gone. The downgrade
+    # restores the constraint in a batch block of its own, before dropping the
+    # index, because MySQL will not drop the last index a foreign key can use;
+    # on SQLite each of those blocks rebuilds the table, so assert the end state
+    # rather than trusting the rebuild to have carried both across.
+    inspector = sa.inspect(engine)
+    unique_constraints = {
+        constraint["name"] for constraint in inspector.get_unique_constraints("invoices")
+    }
+    index_names = {index["name"] for index in inspector.get_indexes("invoices")}
+    assert "uq_invoices_order_id" in unique_constraints | index_names, (
+        f"unique constraints={unique_constraints} indexes={index_names}"
+    )
+    assert "ix_invoices_order_id" not in index_names, index_names
     engine.dispose()
 
 

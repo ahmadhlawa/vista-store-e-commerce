@@ -63,11 +63,23 @@ def run_ok(url: str, *args: str) -> subprocess.CompletedProcess:
 
 
 def reset(url: str) -> None:
-    """Drop everything so each test starts from a genuinely empty schema."""
+    """Drop everything so each test starts from a genuinely empty schema.
+
+    This is the most destructive helper in the test suite: it removes every table
+    and trigger in whatever schema the URL resolves to. `env_url` only checks that
+    the value looks like a MySQL URL, so a mistyped MYSQL_MIGRATION_URL would
+    otherwise erase a real database. The schema name is therefore checked against
+    the server before anything is dropped.
+    """
     engine = build_engine(url)
     try:
         with engine.begin() as connection:
             schema = connection.execute(text("SELECT DATABASE()")).scalar_one()
+            assert schema and schema.endswith(("_migration", "_migr_audit")), (
+                f"reset() drops every table and refuses to run against {schema!r}; "
+                "point MYSQL_MIGRATION_URL at a disposable schema whose name ends "
+                "in _migration"
+            )
             triggers = connection.execute(
                 text(
                     "SELECT TRIGGER_NAME FROM information_schema.TRIGGERS "
@@ -178,6 +190,38 @@ def test_0005_leaves_the_order_foreign_key_indexed_and_no_longer_unique(
     assert foreign_keys_on(migration_url, "invoices", "order_id"), (
         "the foreign key must survive the index swap"
     )
+
+
+def test_0005_leaves_order_activities_foreign_keys_on_the_explicit_indexes(
+    migration_url: str,
+) -> None:
+    """Pin the behaviour that makes dropping those indexes individually unsafe.
+
+    `order_activities` is created with three foreign keys and no covering
+    indexes, so InnoDB builds one per key, and the migration then adds explicit
+    ix_* indexes for two of the three columns. The downgrade drops the table
+    rather than the indexes because those explicit indexes end up being the ones
+    the constraints rely on. That is an observation about InnoDB rather than
+    something the migration states, so it is asserted instead of assumed.
+    """
+    reset(migration_url)
+    run_ok(migration_url, "upgrade", "0005_order_invoice_workflow")
+
+    for column, expected in (
+        ("order_id", "ix_order_activities_order_id"),
+        ("invoice_id", "ix_order_activities_invoice_id"),
+    ):
+        names = indexes_on(migration_url, "order_activities", column)
+        assert names == [expected], (
+            f"expected the explicit index to be the only one on {column}, got {names}"
+        )
+        assert foreign_keys_on(migration_url, "order_activities", column)
+
+    # actor_admin_id never got an explicit index, so InnoDB's own survives. The
+    # contrast is the evidence that the other two were replaced rather than
+    # duplicated.
+    actor = indexes_on(migration_url, "order_activities", "actor_admin_id")
+    assert actor and not any(name.startswith("ix_") for name in actor), actor
 
 
 def test_every_revision_applies_one_at_a_time_up_to_head(migration_url: str) -> None:
