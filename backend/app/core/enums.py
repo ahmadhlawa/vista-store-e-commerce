@@ -26,25 +26,45 @@ class ProductType(StrEnum):
 
 
 class OrderStatus(StrEnum):
-    PENDING = "pending"
-    CONFIRMED = "confirmed"
-    PROCESSING = "processing"
-    READY = "ready"
-    SHIPPED = "shipped"
-    DELIVERED = "delivered"
+    NEW = "new"
+    REVIEWING = "reviewing"
+    PREPARING = "preparing"
+    OUT_FOR_DELIVERY = "out_for_delivery"
+    COMPLETED = "completed"
     CANCELLED = "cancelled"
+
+
+class OrderSource(StrEnum):
+    WEBSITE = "website"
+    WHATSAPP = "whatsapp"
+    PHONE = "phone"
+    WALK_IN = "walk_in"
+    SOCIAL = "social"
+    OTHER = "other"
+
+
+class PaymentStatus(StrEnum):
+    UNPAID = "unpaid"
+    PARTIALLY_PAID = "partially_paid"
+    PAID = "paid"
+    PARTIALLY_REFUNDED = "partially_refunded"
+    REFUNDED = "refunded"
 
 
 class PaymentMethod(StrEnum):
     CASH_ON_DELIVERY = "cash_on_delivery"
-    MANUAL = "manual"
+    CARD = "card"
+    BANK_TRANSFER = "bank_transfer"
 
 
 class InvoiceStatus(StrEnum):
-    """An invoice is issued once and either stands or is cancelled. It is never deleted."""
+    """Internal invoice lifecycle; rows are never deleted."""
 
-    ISSUED = "issued"
+    ACTIVE = "active"
+    # Compatibility alias for callers that still refer to issuance.
+    ISSUED = "active"
     CANCELLED = "cancelled"
+    REPLACED = "replaced"
 
 
 class DiscountType(StrEnum):

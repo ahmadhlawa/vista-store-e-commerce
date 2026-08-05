@@ -21,11 +21,7 @@ export default function MobileMenu({ open, onClose }) {
       label="قائمة التنقّل"
       head={<strong className="vs-drawer__title">{settings.storeName}</strong>}
       footer={
-        <>
-          <Link to="/track-order" className="vs-btn vs-btn--ghost vs-btn--block" onClick={onClose}>
-            تتبّع الطلب
-          </Link>
-          {wa !== "#" && (
+        wa !== "#" && (
             <a
               href={wa}
               target="_blank"
@@ -34,8 +30,7 @@ export default function MobileMenu({ open, onClose }) {
             >
               <WhatsAppIcon size={18} /> تواصل عبر واتساب
             </a>
-          )}
-        </>
+        )
       }
     >
       <div className="vs-menu">

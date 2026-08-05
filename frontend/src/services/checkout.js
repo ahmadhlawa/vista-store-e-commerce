@@ -9,6 +9,34 @@ const toItems = (cart) =>
     quantity: line.qty,
   }));
 
+const displayMoney = (value) => String(value ?? 0);
+
+/** The server response is the only source for this operator-facing message. */
+export function buildOrderWhatsAppMessage(order) {
+  const lines = (order.items || []).map(
+    (item) =>
+      `- ${item.product_name}${item.sku ? ` (${item.sku})` : ""} × ${item.quantity}: ${displayMoney(item.line_total)}`,
+  );
+  return [
+    "طلب جديد من الموقع",
+    `رقم الطلب: ${order.order_number}`,
+    "",
+    "بيانات العميل:",
+    `الاسم: ${order.customer_name}`,
+    `الهاتف: ${order.customer_phone}`,
+    `العنوان: ${order.address}`,
+    "",
+    "المنتجات:",
+    ...lines,
+    "",
+    `المجموع الفرعي: ${displayMoney(order.subtotal)}`,
+    `الخصم: ${displayMoney(order.discount)}`,
+    `التوصيل${order.delivery_area_name ? ` (${order.delivery_area_name})` : ""}: ${displayMoney(order.delivery_fee)}`,
+    `الإجمالي: ${displayMoney(order.total)}`,
+    ...(order.customer_notes ? ["", `ملاحظات: ${order.customer_notes}`] : []),
+  ].join("\n");
+}
+
 export const checkoutService = {
   /** Re-price the cart server-side. Returns null for an empty cart. */
   async price(cart, { couponCode = null, deliveryAreaId = null } = {}) {
@@ -31,8 +59,9 @@ export const checkoutService = {
 
   validateCoupon: (code, subtotal) => publicApi.validateCoupon(code, subtotal),
 
-  async placeOrder(cart, customer) {
+  async placeOrder(cart, customer, clientReference) {
     return publicApi.createOrder({
+      client_reference: clientReference,
       customer_name: customer.name,
       customer_phone: customer.phone,
       customer_email: customer.email || null,

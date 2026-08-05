@@ -63,8 +63,12 @@ export const adminApi = {
 
   listOrders: (params) => api.get("/admin/orders", withParams(params)),
   getOrder: (id) => api.get(`/admin/orders/${id}`, authed),
+  createManualOrder: (payload) => api.post("/admin/orders/manual", payload, authed),
+  updateOrder: (id, payload) => api.patch(`/admin/orders/${id}`, payload, authed),
   updateOrderStatus: (id, status, note) =>
     api.post(`/admin/orders/${id}/status`, { status, note }, authed),
+  completeOrder: (id, payload) => api.post(`/admin/orders/${id}/complete`, payload, authed),
+  reopenOrder: (id, reason) => api.post(`/admin/orders/${id}/reopen`, { reason }, authed),
   updateOrderNotes: (id, adminNotes) =>
     api.patch(`/admin/orders/${id}/notes`, { admin_notes: adminNotes }, authed),
 
@@ -73,6 +77,8 @@ export const adminApi = {
   listInvoices: (params) => api.get("/admin/invoices", withParams(params)),
   getInvoice: (invoiceNumber) => api.get(`/admin/invoices/${invoiceNumber}`, authed),
   getOrderInvoice: (orderId) => api.get(`/admin/orders/${orderId}/invoice`, authed),
+  updateInvoicePayment: (invoiceNumber, payload) =>
+    api.patch(`/admin/invoices/${invoiceNumber}/payment`, payload, authed),
   cancelInvoice: (invoiceNumber, reason) =>
     api.post(`/admin/invoices/${invoiceNumber}/cancel`, { reason }, authed),
 

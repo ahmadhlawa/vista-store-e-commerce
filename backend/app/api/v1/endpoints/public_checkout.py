@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import DbSession
 from app.core.enums import DiscountType
@@ -79,6 +80,7 @@ def price_cart(payload: CartPricingRequest, db: DbSession) -> CartPricingRespons
 @router.post("/orders", response_model=OrderCreatedOut, status_code=status.HTTP_201_CREATED)
 def create_order(payload: OrderCreate, db: DbSession) -> OrderCreatedOut:
     draft = orders_service.OrderDraft(
+        client_reference=payload.client_reference,
         customer_name=payload.customer_name,
         customer_phone=payload.customer_phone,
         customer_email=payload.customer_email,
@@ -89,8 +91,14 @@ def create_order(payload: OrderCreate, db: DbSession) -> OrderCreatedOut:
         customer_notes=payload.customer_notes,
         items=[(item.product_id, item.variant_id, item.quantity) for item in payload.items],
     )
-    order = orders_service.create_order(db, draft)
-    db.commit()
+    try:
+        order = orders_service.create_order(db, draft)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        order = orders_service.get_by_client_reference(db, payload.client_reference)
+        if order is None:
+            raise
     db.refresh(order)
     return OrderCreatedOut.model_validate(order)
 

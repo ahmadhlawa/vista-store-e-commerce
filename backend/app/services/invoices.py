@@ -16,22 +16,89 @@ Three rules the rest of the codebase depends on:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.enums import InvoiceStatus, OrderStatus
+from app.core.enums import AdminRole, InvoiceStatus, OrderStatus, PaymentStatus
 from app.db.base import utcnow
 from app.models import AdminUser, Invoice, InvoiceItem, InvoiceSequence, Order
 from app.models.invoices import DEFAULT_INVOICE_PREFIX
 from app.services import store_settings as settings_service
-from app.services.errors import ConflictError, NotFoundError
+from app.services.errors import ConflictError, DomainError, NotFoundError, PermissionDeniedError
 from app.services.pricing import ZERO, money
 
 # Zero-padding for the numeric part: INV-000001. Six digits keeps a million invoices
 # aligned in a printed list; past that the number simply grows.
 NUMBER_WIDTH = 6
+
+
+@dataclass(frozen=True, slots=True)
+class PaymentUpdate:
+    paid_amount: Decimal
+    refunded_amount: Decimal
+    remaining_amount: Decimal
+    status: PaymentStatus
+
+
+def _nonnegative_payment_amount(value: Decimal, *, field: str) -> Decimal:
+    raw = Decimal(str(value))
+    if raw < 0:
+        raise DomainError(f"{field} cannot be negative.", code=f"negative_{field}")
+    return money(raw)
+
+
+def derive_payment_status(
+    total_amount: Decimal,
+    paid_amount: Decimal,
+    refunded_amount: Decimal,
+) -> PaymentStatus:
+    """Derive, rather than trust, the persisted payment status."""
+    total = _nonnegative_payment_amount(total_amount, field="total_amount")
+    paid = _nonnegative_payment_amount(paid_amount, field="paid_amount")
+    refunded = _nonnegative_payment_amount(refunded_amount, field="refunded_amount")
+    if paid > total or refunded > paid:
+        raise DomainError("Payment amounts are outside the invoice bounds.", code="payment_out_of_bounds")
+    if refunded > 0:
+        return PaymentStatus.REFUNDED if refunded == paid else PaymentStatus.PARTIALLY_REFUNDED
+    if paid == 0:
+        return PaymentStatus.UNPAID
+    return PaymentStatus.PAID if paid == total else PaymentStatus.PARTIALLY_PAID
+
+
+def validate_payment_update(
+    *,
+    total_amount: Decimal,
+    current_paid_amount: Decimal,
+    current_refunded_amount: Decimal = ZERO,
+    paid_amount: Decimal,
+    refunded_amount: Decimal,
+    actor_role: str,
+    reason: str | None,
+) -> PaymentUpdate:
+    """Validate a payment snapshot before an invoice service persists it."""
+    total = _nonnegative_payment_amount(total_amount, field="total_amount")
+    current_paid = _nonnegative_payment_amount(current_paid_amount, field="current_paid_amount")
+    current_refunded = _nonnegative_payment_amount(
+        current_refunded_amount, field="current_refunded_amount"
+    )
+    paid = _nonnegative_payment_amount(paid_amount, field="paid_amount")
+    refunded = _nonnegative_payment_amount(refunded_amount, field="refunded_amount")
+    status = derive_payment_status(total, paid, refunded)
+    correction_or_refund = paid < current_paid or refunded != current_refunded
+
+    if actor_role != AdminRole.SUPER_ADMIN.value and correction_or_refund:
+        raise PermissionDeniedError(
+            "Only a super admin may correct a payment or record a refund.",
+            code="payment_correction_forbidden",
+        )
+    if actor_role == AdminRole.SUPER_ADMIN.value and correction_or_refund and not (reason or "").strip():
+        raise DomainError("A reason is required for a payment correction or refund.", code="reason_required")
+
+    remaining = money(max(Decimal("0.00"), total - (paid - refunded)))
+    return PaymentUpdate(paid, refunded, remaining, status)
 
 
 def _normalize_prefix(raw: str | None) -> str:
@@ -84,11 +151,26 @@ def get_for_order(db: Session, order_id: int) -> Invoice | None:
     return db.execute(
         select(Invoice)
         .options(selectinload(Invoice.items))
-        .where(Invoice.order_id == order_id)
+        .where(
+            Invoice.order_id == order_id,
+            Invoice.status == InvoiceStatus.ACTIVE.value,
+            Invoice.active_invoice_marker == InvoiceStatus.ACTIVE.value,
+        )
+        .order_by(Invoice.id.desc())
+        .limit(1)
     ).scalar_one_or_none()
 
 
-def issue_for_order(db: Session, order: Order) -> Invoice:
+def issue_for_order(
+    db: Session,
+    order: Order,
+    *,
+    admin: AdminUser | None = None,
+    payment_method: str | None = None,
+    paid_amount: Decimal = ZERO,
+    payment_details: str | None = None,
+    invoice_notes: str | None = None,
+) -> Invoice:
     """Issue the invoice for `order`, or return the one it already has.
 
     Idempotent by design: confirming an already-invoiced order is a no-op that returns
@@ -110,14 +192,35 @@ def issue_for_order(db: Session, order: Order) -> Invoice:
     )
     # Inclusive tax is already inside the order total, so it must not be added again.
     grand_total = order_total if (inclusive or not tax_enabled) else money(order_total + tax_amount)
+    payment = validate_payment_update(
+        total_amount=grand_total,
+        current_paid_amount=ZERO,
+        paid_amount=paid_amount,
+        refunded_amount=ZERO,
+        actor_role=admin.role if admin is not None else AdminRole.ADMIN.value,
+        reason=None,
+    )
+
+    predecessor = db.execute(
+        select(Invoice)
+        .where(
+            Invoice.order_id == order.id,
+            Invoice.status == InvoiceStatus.REPLACED.value,
+        )
+        .order_by(Invoice.id.desc())
+        .limit(1)
+    ).scalar_one_or_none()
 
     invoice = Invoice(
         invoice_number=next_invoice_number(db, prefix),
         order_id=order.id,
         status=InvoiceStatus.ISSUED.value,
+        active_invoice_marker=InvoiceStatus.ACTIVE.value,
+        replacement_invoice=predecessor,
         issued_at=utcnow(),
         order_number=order.order_number,
-        payment_method=order.payment_method,
+        source=order.source,
+        payment_method=payment_method or order.payment_method,
         customer_notes=order.customer_notes,
         store_name=settings.store_name_ar or settings.store_name,
         store_phone=settings.phone,
@@ -144,6 +247,15 @@ def issue_for_order(db: Session, order: Order) -> Invoice:
         prices_include_tax=inclusive,
         tax_amount=tax_amount,
         grand_total=grand_total,
+        payment_status=payment.status.value,
+        paid_amount=payment.paid_amount,
+        refunded_amount=payment.refunded_amount,
+        remaining_amount=payment.remaining_amount,
+        payment_details=(payment_details or "").strip() or None,
+        invoice_notes=(invoice_notes or "").strip() or None,
+        issued_by_admin_id=admin.id if admin else None,
+        issued_by_admin_name=admin.full_name if admin else None,
+        issued_by_admin_email=admin.email if admin else None,
     )
 
     for item in order.items:
@@ -152,6 +264,8 @@ def issue_for_order(db: Session, order: Order) -> Invoice:
                 product_name=item.product_name,
                 sku=item.sku,
                 variant_description=item.variant_description,
+                item_kind=item.item_kind,
+                manual_description=item.manual_description,
                 unit_price=money(item.unit_price),
                 quantity=item.quantity,
                 line_total=money(item.line_total),
@@ -160,6 +274,48 @@ def issue_for_order(db: Session, order: Order) -> Invoice:
 
     db.add(invoice)
     db.flush()
+    from app.services.orders import record_order_activity
+
+    record_order_activity(
+        db,
+        order_id=order.id,
+        invoice_id=invoice.id,
+        actor_admin_id=admin.id if admin else None,
+        event_type="invoice_issued",
+        before_data=None,
+        after_data={
+            "invoice_number": invoice.invoice_number,
+            "total_amount": invoice.grand_total,
+            "replacement_invoice_id": predecessor.id if predecessor else None,
+        },
+        reason=None,
+    )
+    return invoice
+
+
+def replace_for_reopen(
+    db: Session, order: Order, *, admin: AdminUser, reason: str
+) -> Invoice | None:
+    """Archive the current invoice while retaining its immutable snapshot for correction."""
+    invoice = get_for_order(db, order.id)
+    if invoice is None:
+        return None
+
+    invoice.status = InvoiceStatus.REPLACED.value
+    invoice.active_invoice_marker = None
+    db.flush()
+    from app.services.orders import record_order_activity
+
+    record_order_activity(
+        db,
+        order_id=order.id,
+        invoice_id=invoice.id,
+        actor_admin_id=admin.id,
+        event_type="invoice_replaced",
+        before_data={"status": InvoiceStatus.ACTIVE.value, "invoice_number": invoice.invoice_number},
+        after_data={"status": InvoiceStatus.REPLACED.value, "invoice_number": invoice.invoice_number},
+        reason=reason,
+    )
     return invoice
 
 
@@ -180,17 +336,35 @@ def cancel_for_order(
         return invoice
 
     invoice.status = InvoiceStatus.CANCELLED.value
+    invoice.active_invoice_marker = None
     invoice.cancelled_at = utcnow()
     invoice.cancellation_reason = (reason or "").strip()[:500] or None
     invoice.cancelled_by_admin_id = admin.id if admin else None
     db.flush()
+    from app.services.orders import record_order_activity
+
+    record_order_activity(
+        db,
+        order_id=order.id,
+        invoice_id=invoice.id,
+        actor_admin_id=admin.id if admin else None,
+        event_type="invoice_cancelled",
+        before_data={"status": InvoiceStatus.ACTIVE.value},
+        after_data={"status": InvoiceStatus.CANCELLED.value},
+        reason=reason,
+    )
     return invoice
 
 
 def get_by_number(db: Session, invoice_number: str) -> Invoice:
     invoice = db.execute(
         select(Invoice)
-        .options(selectinload(Invoice.items))
+        .options(
+            selectinload(Invoice.items),
+            selectinload(Invoice.activities),
+            selectinload(Invoice.replacement_invoice),
+            selectinload(Invoice.replaces_invoice),
+        )
         .where(Invoice.invoice_number == invoice_number.strip().upper())
     ).scalar_one_or_none()
     if invoice is None:
@@ -216,6 +390,9 @@ def search(
     *,
     q: str | None = None,
     status: str | None = None,
+    payment_status: str | None = None,
+    source: str | None = None,
+    employee_id: int | None = None,
     issued_from=None,
     issued_to=None,
 ):
@@ -223,6 +400,12 @@ def search(
     stmt = select(Invoice)
     if status:
         stmt = stmt.where(Invoice.status == status)
+    if payment_status:
+        stmt = stmt.where(Invoice.payment_status == payment_status)
+    if employee_id is not None:
+        stmt = stmt.where(Invoice.issued_by_admin_id == employee_id)
+    if source:
+        stmt = stmt.where(Invoice.source == source)
     if q:
         needle = f"%{q.strip()}%"
         stmt = stmt.where(
@@ -236,3 +419,87 @@ def search(
     if issued_to is not None:
         stmt = stmt.where(Invoice.issued_at <= issued_to)
     return stmt.order_by(Invoice.id.desc())
+
+
+def history_for_invoice(db: Session, invoice: Invoice) -> list[Invoice]:
+    """Return only immutable invoice rows for the same order; never hydrate live order data."""
+    return list(
+        db.execute(
+            select(Invoice)
+            .where(Invoice.order_id == invoice.order_id)
+            .order_by(Invoice.id.asc())
+        ).scalars()
+    )
+
+
+def update_payment(
+    db: Session,
+    invoice: Invoice,
+    *,
+    paid_amount: Decimal | None,
+    refunded_amount: Decimal | None,
+    payment_method: str | None,
+    payment_details: str | None,
+    details_provided: bool,
+    reason: str | None,
+    admin: AdminUser,
+) -> Invoice:
+    """Apply the narrowly permitted financial mutation and append its audit event."""
+    # Serialize concurrent financial writes and refresh rows that callers may have
+    # loaded before another transaction committed.
+    invoice = db.execute(
+        select(Invoice)
+        .where(Invoice.id == invoice.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).scalar_one()
+    if invoice.status != InvoiceStatus.ACTIVE.value:
+        raise ConflictError("Only an active invoice can receive a payment update.", code="invoice_not_active")
+
+    before = {
+        "payment_method": invoice.payment_method,
+        "payment_status": invoice.payment_status,
+        "paid_amount": invoice.paid_amount,
+        "refunded_amount": invoice.refunded_amount,
+        "remaining_amount": invoice.remaining_amount,
+        "payment_details": invoice.payment_details,
+    }
+    payment = validate_payment_update(
+        total_amount=invoice.grand_total,
+        current_paid_amount=invoice.paid_amount,
+        current_refunded_amount=invoice.refunded_amount,
+        paid_amount=invoice.paid_amount if paid_amount is None else paid_amount,
+        refunded_amount=invoice.refunded_amount if refunded_amount is None else refunded_amount,
+        actor_role=admin.role,
+        reason=reason,
+    )
+    invoice.paid_amount = payment.paid_amount
+    invoice.refunded_amount = payment.refunded_amount
+    invoice.remaining_amount = payment.remaining_amount
+    invoice.payment_status = payment.status.value
+    if payment_method is not None:
+        invoice.payment_method = payment_method
+    if details_provided:
+        invoice.payment_details = (payment_details or "").strip() or None
+
+    from app.services.orders import record_order_activity
+
+    record_order_activity(
+        db,
+        order_id=invoice.order_id,
+        invoice_id=invoice.id,
+        actor_admin_id=admin.id,
+        event_type="payment_updated",
+        before_data=before,
+        after_data={
+            "payment_method": invoice.payment_method,
+            "payment_status": invoice.payment_status,
+            "paid_amount": invoice.paid_amount,
+            "refunded_amount": invoice.refunded_amount,
+            "remaining_amount": invoice.remaining_amount,
+            "payment_details": invoice.payment_details,
+        },
+        reason=reason,
+    )
+    db.flush()
+    return invoice

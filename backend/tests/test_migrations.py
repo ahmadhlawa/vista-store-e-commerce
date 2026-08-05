@@ -31,6 +31,7 @@ EXPECTED_TABLES = {
     "invoices",
     "media_assets",
     "order_items",
+    "order_activities",
     "order_status_history",
     "orders",
     "package_items",

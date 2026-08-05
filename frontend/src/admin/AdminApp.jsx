@@ -15,6 +15,7 @@ import {
   StaticPagesPage,
 } from "./pages/ContentScreens.jsx";
 import { OrderDetailPage, OrdersPage } from "./pages/OrdersPages.jsx";
+import ManualOrderPage from "./pages/ManualOrderPage.jsx";
 import { InvoiceDetailPage, InvoicesPage } from "./pages/InvoicesPages.jsx";
 import MediaPage from "./pages/MediaPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
@@ -61,6 +62,7 @@ export default function AdminApp() {
           <Route path="products/:productId" element={<ProductEditorPage />} />
           <Route path="categories" element={<CategoriesPage />} />
           <Route path="orders" element={<OrdersPage />} />
+          <Route path="orders/manual" element={<RequireSuperAdmin><ManualOrderPage /></RequireSuperAdmin>} />
           <Route path="orders/:orderId" element={<OrderDetailPage />} />
           <Route path="invoices" element={<InvoicesPage />} />
           <Route path="invoices/:invoiceNumber" element={<InvoiceDetailPage />} />

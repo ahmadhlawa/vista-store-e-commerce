@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from itertools import count
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,6 +16,8 @@ from app.services import orders as orders_service
 from app.services import store_settings as settings_service
 from tests.conftest import auth, make_product
 
+_client_reference_sequence = count(1)
+
 
 def _place_order(
     client: TestClient,
@@ -24,6 +27,7 @@ def _place_order(
     **overrides,
 ) -> dict:
     payload = {
+        "client_reference": f"invoice-test-{next(_client_reference_sequence)}",
         "customer_name": "سارة أحمد",
         "customer_phone": "0591234567",
         "address": "رام الله، شارع الإرسال، بناية ٥",
@@ -48,6 +52,14 @@ def _set_status(client: TestClient, token: str, order_id: int, status: str, note
     )
 
 
+def _complete_order(client: TestClient, token: str, order_id: int):
+    return client.post(
+        f"/api/v1/admin/orders/{order_id}/complete",
+        json={"payment_method": "cash_on_delivery"},
+        headers=auth(token),
+    )
+
+
 @pytest.fixture()
 def product(db: Session, category) -> Product:
     return make_product(db, price="100.00", stock=50, category_id=category.id)
@@ -60,7 +72,7 @@ def test_a_pending_order_has_no_invoice(
     created = _place_order(client, product)
     order = _order_row(db, created["order_number"])
 
-    assert order.status == OrderStatus.PENDING.value
+    assert order.status == OrderStatus.NEW.value
     assert invoices_service.get_for_order(db, order.id) is None
 
     detail = client.get(f"/api/v1/admin/orders/{order.id}", headers=auth(admin_token))
@@ -73,13 +85,13 @@ def test_a_pending_order_has_no_invoice(
     assert missing.json()["error"]["code"] == "invoice_not_found"
 
 
-def test_confirming_an_order_issues_exactly_one_invoice(
+def test_completing_an_order_issues_exactly_one_invoice(
     client: TestClient, db: Session, product: Product, admin_token: str
 ) -> None:
     created = _place_order(client, product)
     order = _order_row(db, created["order_number"])
 
-    response = _set_status(client, admin_token, order.id, OrderStatus.CONFIRMED.value)
+    response = _complete_order(client, admin_token, order.id)
     assert response.status_code == 200
 
     summary = response.json()["invoice"]
@@ -91,33 +103,27 @@ def test_confirming_an_order_issues_exactly_one_invoice(
     assert db.query(Invoice).filter(Invoice.order_id == order.id).count() == 1
 
 
-def test_repeating_the_same_confirmation_creates_no_duplicate(
+def test_repeating_completion_creates_no_duplicate(
     client: TestClient, db: Session, product: Product, admin_token: str
 ) -> None:
     created = _place_order(client, product)
     order = _order_row(db, created["order_number"])
 
-    first = _set_status(client, admin_token, order.id, OrderStatus.CONFIRMED.value)
+    first = _complete_order(client, admin_token, order.id)
     number = first.json()["invoice"]["invoice_number"]
 
-    # Same status again — the transition is a no-op.
-    again = _set_status(client, admin_token, order.id, OrderStatus.CONFIRMED.value)
+    # Repeating explicit completion is idempotent.
+    again = _complete_order(client, admin_token, order.id)
     assert again.json()["invoice"]["invoice_number"] == number
-
-    # And a genuine round trip away from confirmed and back.
-    _set_status(client, admin_token, order.id, OrderStatus.PROCESSING.value)
-    reconfirmed = _set_status(client, admin_token, order.id, OrderStatus.CONFIRMED.value)
-    assert reconfirmed.json()["invoice"]["invoice_number"] == number
 
     db.expire_all()
     assert db.query(Invoice).filter(Invoice.order_id == order.id).count() == 1
 
 
-def test_only_one_invoice_per_order_at_the_database_level(
+def test_a_replaced_invoice_and_its_active_replacement_can_share_an_order(
     db: Session, product: Product
 ) -> None:
-    """The service check is a courtesy; the constraint is the guarantee."""
-    from sqlalchemy.exc import IntegrityError
+    """Archived invoices remain when a corrected invoice replaces them."""
 
     order = orders_service.create_order(
         db,
@@ -133,11 +139,15 @@ def test_only_one_invoice_per_order_at_the_database_level(
     first = invoices_service.issue_for_order(db, order)
     db.commit()
 
-    duplicate = Invoice(
+    first.status = InvoiceStatus.REPLACED.value
+    first.active_invoice_marker = None
+    replacement = Invoice(
         invoice_number="INV-999999",
         order_id=order.id,
-        status=InvoiceStatus.ISSUED.value,
-        order_number=order.order_number,
+        status=InvoiceStatus.ACTIVE.value,
+        active_invoice_marker=InvoiceStatus.ACTIVE.value,
+            order_number=order.order_number,
+            source=order.source,
         payment_method=order.payment_method,
         store_name="Store",
         customer_name=order.customer_name,
@@ -150,13 +160,13 @@ def test_only_one_invoice_per_order_at_the_database_level(
         delivery_fee=order.delivery_fee,
         tax_amount=Decimal("0.00"),
         grand_total=order.total,
+        replacement_invoice=first,
     )
-    db.add(duplicate)
-    with pytest.raises(IntegrityError):
-        db.flush()
-    db.rollback()
+    db.add(replacement)
+    db.commit()
 
-    assert first.invoice_number != "INV-999999"
+    assert replacement.replacement_invoice_id == first.id
+    assert replacement.invoice_number == "INV-999999"
 
 
 # ── numbering ────────────────────────────────────────────────────────────────
@@ -167,27 +177,24 @@ def test_invoice_numbers_are_sequential_and_unique(
     for _ in range(3):
         created = _place_order(client, product, quantity=1)
         order = _order_row(db, created["order_number"])
-        response = _set_status(client, admin_token, order.id, OrderStatus.CONFIRMED.value)
+        response = _complete_order(client, admin_token, order.id)
         numbers.append(response.json()["invoice"]["invoice_number"])
 
     assert numbers == ["INV-000001", "INV-000002", "INV-000003"]
     assert len(set(numbers)) == 3
 
 
-def test_a_cancelled_invoice_number_is_never_reused(
+def test_a_completed_invoice_number_is_never_reused(
     client: TestClient, db: Session, product: Product, admin_token: str
 ) -> None:
     first = _place_order(client, product, quantity=1)
     first_order = _order_row(db, first["order_number"])
-    _set_status(client, admin_token, first_order.id, OrderStatus.CONFIRMED.value)
-    cancelled = _set_status(
-        client, admin_token, first_order.id, OrderStatus.CANCELLED.value, note="اختبار"
-    )
-    burned_number = cancelled.json()["invoice"]["invoice_number"]
+    completed = _complete_order(client, admin_token, first_order.id)
+    burned_number = completed.json()["invoice"]["invoice_number"]
 
     second = _place_order(client, product, quantity=1)
     second_order = _order_row(db, second["order_number"])
-    reissued = _set_status(client, admin_token, second_order.id, OrderStatus.CONFIRMED.value)
+    reissued = _complete_order(client, admin_token, second_order.id)
 
     assert reissued.json()["invoice"]["invoice_number"] != burned_number
     assert reissued.json()["invoice"]["invoice_number"] == "INV-000002"
@@ -203,7 +210,7 @@ def test_the_number_prefix_is_configurable(
     )
     created = _place_order(client, product, quantity=1)
     order = _order_row(db, created["order_number"])
-    response = _set_status(client, admin_token, order.id, OrderStatus.CONFIRMED.value)
+    response = _complete_order(client, admin_token, order.id)
 
     assert response.json()["invoice"]["invoice_number"] == "VS-000001"
 
@@ -231,7 +238,7 @@ def test_the_invoice_matches_the_order_it_was_issued_for(
         customer_notes="اتصلوا قبل التوصيل",
     )
     order = _order_row(db, created["order_number"])
-    _set_status(client, admin_token, order.id, OrderStatus.CONFIRMED.value)
+    _complete_order(client, admin_token, order.id)
 
     invoice = client.get(
         f"/api/v1/admin/orders/{order.id}/invoice", headers=auth(admin_token)
@@ -267,7 +274,7 @@ def test_editing_the_product_afterwards_does_not_change_the_invoice(
 ) -> None:
     created = _place_order(client, product, quantity=2)
     order = _order_row(db, created["order_number"])
-    _set_status(client, admin_token, order.id, OrderStatus.CONFIRMED.value)
+    _complete_order(client, admin_token, order.id)
 
     number = invoices_service.get_for_order(db, order.id).invoice_number
 
@@ -291,7 +298,7 @@ def test_renaming_the_store_afterwards_does_not_change_the_invoice(
 ) -> None:
     created = _place_order(client, product, quantity=1)
     order = _order_row(db, created["order_number"])
-    _set_status(client, admin_token, order.id, OrderStatus.CONFIRMED.value)
+    _complete_order(client, admin_token, order.id)
     number = invoices_service.get_for_order(db, order.id).invoice_number
 
     client.patch(
@@ -311,7 +318,7 @@ def test_an_issued_invoice_cannot_be_edited_or_deleted(
 ) -> None:
     created = _place_order(client, product, quantity=1)
     order = _order_row(db, created["order_number"])
-    _set_status(client, admin_token, order.id, OrderStatus.CONFIRMED.value)
+    _complete_order(client, admin_token, order.id)
     number = invoices_service.get_for_order(db, order.id).invoice_number
 
     for method in ("patch", "put"):
@@ -329,37 +336,39 @@ def test_an_issued_invoice_cannot_be_edited_or_deleted(
 
 
 # ── cancellation ─────────────────────────────────────────────────────────────
-def test_cancelling_the_order_cancels_its_invoice_but_keeps_it(
-    client: TestClient, db: Session, product: Product, admin_token: str, normal_admin
+def test_cancelling_a_completed_order_is_rejected_and_keeps_its_active_invoice(
+    client: TestClient, db: Session, product: Product, admin_token: str
 ) -> None:
     created = _place_order(client, product, quantity=2)
     order = _order_row(db, created["order_number"])
-    _set_status(client, admin_token, order.id, OrderStatus.CONFIRMED.value)
+    _complete_order(client, admin_token, order.id)
     number = invoices_service.get_for_order(db, order.id).invoice_number
 
-    _set_status(
+    rejected = _set_status(
         client, admin_token, order.id, OrderStatus.CANCELLED.value, note="طلب العميل الإلغاء"
     )
 
     invoice = client.get(
         f"/api/v1/admin/invoices/{number}", headers=auth(admin_token)
     ).json()
-    assert invoice["status"] == InvoiceStatus.CANCELLED.value
+    assert rejected.status_code == 400
+    assert rejected.json()["error"]["code"] == "order_locked"
+    assert invoice["status"] == InvoiceStatus.ACTIVE.value
     assert invoice["invoice_number"] == number
-    assert invoice["cancelled_at"] is not None
-    assert invoice["cancellation_reason"] == "طلب العميل الإلغاء"
-    assert invoice["cancelled_by_admin_id"] == normal_admin.id
-    # The snapshot survives cancellation untouched.
+    assert invoice["cancelled_at"] is None
+    assert invoice["cancellation_reason"] is None
+    assert invoice["cancelled_by_admin_id"] is None
+    # The completed snapshot remains untouched.
     assert invoice["grand_total"] == 200.0
     assert len(invoice["items"]) == 1
 
 
-def test_cancelling_from_the_invoice_screen_cancels_the_order_too(
+def test_cancelling_from_the_invoice_screen_rejects_a_completed_order(
     client: TestClient, db: Session, product: Product, admin_token: str
 ) -> None:
     created = _place_order(client, product, quantity=2)
     order = _order_row(db, created["order_number"])
-    _set_status(client, admin_token, order.id, OrderStatus.CONFIRMED.value)
+    _complete_order(client, admin_token, order.id)
     number = invoices_service.get_for_order(db, order.id).invoice_number
 
     response = client.post(
@@ -367,41 +376,42 @@ def test_cancelling_from_the_invoice_screen_cancels_the_order_too(
         json={"reason": "نفدت الكمية"},
         headers=auth(admin_token),
     )
-    assert response.status_code == 200
-    assert response.json()["status"] == InvoiceStatus.CANCELLED.value
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "order_locked"
 
     order_detail = client.get(
         f"/api/v1/admin/orders/{order.id}", headers=auth(admin_token)
     ).json()
-    assert order_detail["status"] == OrderStatus.CANCELLED.value
+    assert order_detail["status"] == OrderStatus.COMPLETED.value
 
-    # Stock came back exactly once.
+    # Rejection does not restore reserved stock.
     db.expire_all()
-    assert db.get(Product, product.id).stock_quantity == 50
+    assert db.get(Product, product.id).stock_quantity == 48
 
 
-def test_cancelling_an_already_cancelled_order_is_rejected_not_double_applied(
+def test_repeated_invoice_cancellation_cannot_modify_a_completed_order(
     client: TestClient, db: Session, product: Product, admin_token: str
 ) -> None:
     created = _place_order(client, product, quantity=2)
     order = _order_row(db, created["order_number"])
-    _set_status(client, admin_token, order.id, OrderStatus.CONFIRMED.value)
+    _complete_order(client, admin_token, order.id)
     number = invoices_service.get_for_order(db, order.id).invoice_number
 
     first = client.post(
         f"/api/v1/admin/invoices/{number}/cancel", json={}, headers=auth(admin_token)
     )
-    assert first.status_code == 200
+    assert first.status_code == 400
+    assert first.json()["error"]["code"] == "order_locked"
 
     second = client.post(
         f"/api/v1/admin/invoices/{number}/cancel", json={}, headers=auth(admin_token)
     )
-    assert second.status_code == 409
-    assert second.json()["error"]["code"] == "order_already_cancelled"
+    assert second.status_code == 400
+    assert second.json()["error"]["code"] == "order_locked"
 
-    # Inventory restoration stayed idempotent.
+    # Repeated rejection leaves stock unchanged.
     db.expire_all()
-    assert db.get(Product, product.id).stock_quantity == 50
+    assert db.get(Product, product.id).stock_quantity == 48
 
 
 def test_a_cancelled_order_never_gets_a_second_invoice(
@@ -409,16 +419,15 @@ def test_a_cancelled_order_never_gets_a_second_invoice(
 ) -> None:
     created = _place_order(client, product, quantity=1)
     order = _order_row(db, created["order_number"])
-    _set_status(client, admin_token, order.id, OrderStatus.CONFIRMED.value)
     _set_status(client, admin_token, order.id, OrderStatus.CANCELLED.value)
 
-    # A cancelled order refuses any further transition, so it can never re-issue.
-    blocked = _set_status(client, admin_token, order.id, OrderStatus.CONFIRMED.value)
+    # A cancelled order refuses completion, so it can never receive an invoice.
+    blocked = _complete_order(client, admin_token, order.id)
     assert blocked.status_code == 400
     assert blocked.json()["error"]["code"] == "order_cancelled"
 
     db.expire_all()
-    assert db.query(Invoice).filter(Invoice.order_id == order.id).count() == 1
+    assert db.query(Invoice).filter(Invoice.order_id == order.id).count() == 0
 
 
 def test_cancelling_an_uninvoiced_order_still_works(
@@ -446,7 +455,7 @@ def test_tax_is_disabled_by_default_and_totals_match_the_order(
 
     created = _place_order(client, product, quantity=3)
     order = _order_row(db, created["order_number"])
-    _set_status(client, admin_token, order.id, OrderStatus.CONFIRMED.value)
+    _complete_order(client, admin_token, order.id)
 
     invoice = invoices_service.get_for_order(db, order.id)
     assert invoice.tax_enabled is False
@@ -464,7 +473,7 @@ def test_enabling_exclusive_tax_adds_it_on_top(
     )
     created = _place_order(client, product, quantity=1)  # total 100.00
     order = _order_row(db, created["order_number"])
-    _set_status(client, admin_token, order.id, OrderStatus.CONFIRMED.value)
+    _complete_order(client, admin_token, order.id)
 
     invoice = invoices_service.get_for_order(db, order.id)
     assert invoice.tax_amount == Decimal("16.00")
@@ -481,7 +490,7 @@ def test_inclusive_tax_is_reported_without_inflating_the_total(
     )
     created = _place_order(client, product, quantity=1)  # total 100.00
     order = _order_row(db, created["order_number"])
-    _set_status(client, admin_token, order.id, OrderStatus.CONFIRMED.value)
+    _complete_order(client, admin_token, order.id)
 
     invoice = invoices_service.get_for_order(db, order.id)
     assert invoice.grand_total == order.total == Decimal("100.00")
@@ -493,7 +502,7 @@ def test_legal_and_tax_identity_is_blank_unless_the_owner_sets_it(
 ) -> None:
     created = _place_order(client, product, quantity=1)
     order = _order_row(db, created["order_number"])
-    _set_status(client, admin_token, order.id, OrderStatus.CONFIRMED.value)
+    _complete_order(client, admin_token, order.id)
 
     invoice = invoices_service.get_for_order(db, order.id)
     assert invoice.legal_business_name is None
@@ -507,7 +516,7 @@ def _two_invoices(client: TestClient, db: Session, product: Product, token: str)
     for name in ("سارة أحمد", "محمود خالد"):
         created = _place_order(client, product, quantity=1, customer_name=name)
         order = _order_row(db, created["order_number"])
-        response = _set_status(client, token, order.id, OrderStatus.CONFIRMED.value)
+        response = _complete_order(client, token, order.id)
         numbers.append(response.json()["invoice"]["invoice_number"])
     return numbers
 
@@ -560,19 +569,10 @@ def test_invoices_can_be_filtered_by_status_and_date(
     client: TestClient, db: Session, product: Product, admin_token: str
 ) -> None:
     numbers = _two_invoices(client, db, product, admin_token)
-    client.post(
-        f"/api/v1/admin/invoices/{numbers[0]}/cancel", json={}, headers=auth(admin_token)
-    )
-
-    issued = client.get(
-        "/api/v1/admin/invoices", params={"status": "issued"}, headers=auth(admin_token)
+    active = client.get(
+        "/api/v1/admin/invoices", params={"status": "active"}, headers=auth(admin_token)
     ).json()
-    assert [row["invoice_number"] for row in issued["items"]] == [numbers[1]]
-
-    cancelled = client.get(
-        "/api/v1/admin/invoices", params={"status": "cancelled"}, headers=auth(admin_token)
-    ).json()
-    assert [row["invoice_number"] for row in cancelled["items"]] == [numbers[0]]
+    assert {row["invoice_number"] for row in active["items"]} == set(numbers)
 
     today = client.get(
         "/api/v1/admin/invoices",
@@ -587,6 +587,82 @@ def test_invoices_can_be_filtered_by_status_and_date(
         headers=auth(admin_token),
     ).json()
     assert long_ago["total"] == 0
+
+
+def test_invoice_payment_updates_are_audited_and_filterable(
+    client: TestClient, db: Session, product: Product, admin_token: str
+) -> None:
+    created = _place_order(client, product, quantity=1, client_reference="payment-list-1")
+    order = _order_row(db, created["order_number"])
+    completed = client.post(
+        f"/api/v1/admin/orders/{order.id}/complete",
+        json={"payment_method": "cash_on_delivery"},
+        headers=auth(admin_token),
+    )
+    number = completed.json()["invoice"]["invoice_number"]
+
+    response = client.patch(
+        f"/api/v1/admin/invoices/{number}/payment",
+        json={"paid_amount": 40, "payment_method": "card", "payment_details": "receipt 7"},
+        headers=auth(admin_token),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["paid_amount"] == 40.0
+    assert body["remaining_amount"] == 60.0
+    assert body["payment_status"] == "partially_paid"
+    assert body["payment_method"] == "card"
+    payment_activity = body["activities"][-1]
+    assert payment_activity["event_type"] == "payment_updated"
+    assert payment_activity["before_data"]["payment_details"] is None
+    assert payment_activity["after_data"]["payment_details"] == "receipt 7"
+
+    filtered = client.get(
+        "/api/v1/admin/invoices",
+        params={"payment_status": "partially_paid", "source": "website", "employee_id": body["issued_by_admin_id"]},
+        headers=auth(admin_token),
+    )
+    assert [row["invoice_number"] for row in filtered.json()["items"]] == [number]
+
+
+def test_payment_corrections_and_refunds_are_super_admin_only(
+    client: TestClient, db: Session, product: Product, admin_token: str, super_token: str
+) -> None:
+    created = _place_order(client, product, quantity=1, client_reference="payment-correction-1")
+    order = _order_row(db, created["order_number"])
+    completed = client.post(
+        f"/api/v1/admin/orders/{order.id}/complete",
+        json={"payment_method": "cash_on_delivery"},
+        headers=auth(admin_token),
+    )
+    number = completed.json()["invoice"]["invoice_number"]
+    assert client.patch(
+        f"/api/v1/admin/invoices/{number}/payment", json={"paid_amount": 100}, headers=auth(admin_token)
+    ).status_code == 200
+
+    lowered = client.patch(
+        f"/api/v1/admin/invoices/{number}/payment", json={"paid_amount": 90}, headers=auth(admin_token)
+    )
+    assert lowered.status_code == 403
+    assert client.get(f"/api/v1/admin/invoices/{number}", headers=auth(admin_token)).json()["paid_amount"] == 100.0
+
+    forbidden = client.patch(
+        f"/api/v1/admin/invoices/{number}/payment", json={"refunded_amount": 10}, headers=auth(admin_token)
+    )
+    assert forbidden.status_code == 403
+
+    missing_reason = client.patch(
+        f"/api/v1/admin/invoices/{number}/payment", json={"refunded_amount": 10}, headers=auth(super_token)
+    )
+    assert missing_reason.status_code == 400
+
+    refunded = client.patch(
+        f"/api/v1/admin/invoices/{number}/payment",
+        json={"refunded_amount": 10, "reason": "Returned one item"},
+        headers=auth(super_token),
+    )
+    assert refunded.status_code == 200
+    assert refunded.json()["payment_status"] == "partially_refunded"
 
 
 def test_an_unknown_invoice_number_is_a_clean_404(
@@ -626,7 +702,7 @@ def test_a_normal_admin_may_use_the_invoice_screens(
     """Invoices are day-to-day work, not a super-admin-only area."""
     created = _place_order(client, product, quantity=1)
     order = _order_row(db, created["order_number"])
-    _set_status(client, admin_token, order.id, OrderStatus.CONFIRMED.value)
+    _complete_order(client, admin_token, order.id)
 
     assert client.get("/api/v1/admin/invoices", headers=auth(admin_token)).status_code == 200
 
@@ -636,7 +712,7 @@ def test_the_public_order_view_leaks_nothing_about_the_invoice(
 ) -> None:
     created = _place_order(client, product, quantity=1)
     order = _order_row(db, created["order_number"])
-    _set_status(client, admin_token, order.id, OrderStatus.CONFIRMED.value)
+    _complete_order(client, admin_token, order.id)
 
     public = client.get(
         f"/api/v1/orders/{order.order_number}",
@@ -688,12 +764,12 @@ def test_cash_on_delivery_is_the_default_and_completes_checkout(
 
     order = _order_row(db, created["order_number"])
     assert order.payment_method == "cash_on_delivery"
-    assert order.status == OrderStatus.PENDING.value
+    assert order.status == OrderStatus.NEW.value
 
 
-def test_manual_payment_is_accepted(client: TestClient, db: Session, product: Product) -> None:
-    created = _place_order(client, product, quantity=1, payment_method="manual")
-    assert created["payment_method"] == "manual"
+def test_unsupported_manual_payment_is_rejected(client: TestClient, product: Product) -> None:
+    response = client.post("/api/v1/orders", json={"client_reference": "manual-payment-rejected", "customer_name": "Sara Ahmad", "customer_phone": "0591234567", "address": "Ramallah, Main Street 5", "payment_method": "manual", "items": [{"product_id": product.id, "quantity": 1}]})
+    assert response.status_code == 422
 
 
 @pytest.mark.parametrize(
@@ -738,14 +814,14 @@ def test_no_order_is_created_when_the_payment_method_is_rejected(
 def test_the_admin_order_view_shows_the_payment_method(
     client: TestClient, db: Session, product: Product, admin_token: str
 ) -> None:
-    created = _place_order(client, product, quantity=1, payment_method="manual")
+    created = _place_order(client, product, quantity=1, payment_method="card")
     order = _order_row(db, created["order_number"])
 
     detail = client.get(f"/api/v1/admin/orders/{order.id}", headers=auth(admin_token)).json()
-    assert detail["payment_method"] == "manual"
+    assert detail["payment_method"] == "card"
 
     listing = client.get("/api/v1/admin/orders", headers=auth(admin_token)).json()
-    assert listing["items"][0]["payment_method"] == "manual"
+    assert listing["items"][0]["payment_method"] == "card"
 
 
 def test_manual_payment_instructions_are_blank_until_the_owner_supplies_them(

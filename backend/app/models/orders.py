@@ -4,18 +4,22 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
     Integer,
+    JSON,
     Numeric,
     String,
     Text,
+    event,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.enums import OrderStatus, PaymentMethod
+from app.core.enums import OrderSource, OrderStatus, PaymentMethod
 from app.db.base import Base, TimestampMixin, utcnow
+from app.services.errors import ImmutableActivityError
 
 
 class Order(TimestampMixin, Base):
@@ -27,7 +31,30 @@ class Order(TimestampMixin, Base):
     order_number: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
     public_token: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     status: Mapped[str] = mapped_column(
-        String(32), default=OrderStatus.PENDING.value, nullable=False, index=True
+        String(32),
+        default=OrderStatus.NEW.value,
+        server_default=OrderStatus.NEW.value,
+        nullable=False,
+        index=True,
+    )
+    source: Mapped[str] = mapped_column(
+        String(24),
+        default=OrderSource.WEBSITE.value,
+        server_default=OrderSource.WEBSITE.value,
+        nullable=False,
+        index=True,
+    )
+    source_note: Mapped[str | None] = mapped_column(String(250), nullable=True)
+    client_reference: Mapped[str | None] = mapped_column(
+        String(64), unique=True, nullable=True, index=True
+    )
+    is_locked: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_by_admin_id: Mapped[int | None] = mapped_column(
+        ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True
     )
 
     customer_name: Mapped[str] = mapped_column(String(150), nullable=False)
@@ -64,9 +91,22 @@ class Order(TimestampMixin, Base):
         cascade="all, delete-orphan",
         order_by="OrderStatusHistory.id",
     )
-    # At most one, ever. Not cascaded: an invoice outlives any attempt to tidy up orders,
-    # and the FK is RESTRICT so an invoiced order cannot be deleted out from under it.
-    invoice = relationship("Invoice", back_populates="order", uselist=False)
+    invoices: Mapped[list["Invoice"]] = relationship(
+        back_populates="order", order_by="Invoice.id"
+    )
+    # Compatibility accessor for the pre-replacement admin response. New workflow code
+    # uses ``invoices`` and selects the active row explicitly.
+    invoice = relationship(
+        "Invoice",
+        primaryjoin="and_(Order.id == Invoice.order_id, Invoice.status == 'active')",
+        order_by="Invoice.id.desc()",
+        uselist=False,
+        viewonly=True,
+        overlaps="invoices,order",
+    )
+    activities: Mapped[list["OrderActivity"]] = relationship(
+        back_populates="order", order_by="OrderActivity.id", passive_deletes=True
+    )
 
     __table_args__ = (
         CheckConstraint("subtotal >= 0", name="ck_orders_subtotal_non_negative"),
@@ -90,9 +130,21 @@ class OrderItem(Base):
         ForeignKey("product_variants.id", ondelete="SET NULL"), nullable=True
     )
 
+    item_kind: Mapped[str] = mapped_column(
+        String(16), default="catalog", server_default="catalog", nullable=False
+    )
     product_name: Mapped[str] = mapped_column(String(250), nullable=False)
+    original_product_name: Mapped[str] = mapped_column(
+        String(250), default="", server_default="", nullable=False
+    )
     sku: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    original_sku: Mapped[str | None] = mapped_column(String(64), nullable=True)
     variant_description: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    original_variant_description: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    manual_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    original_unit_price: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=Decimal("0.00"), server_default="0.00", nullable=False
+    )
     unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     line_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
@@ -118,3 +170,38 @@ class OrderStatusHistory(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
     order: Mapped[Order] = relationship(back_populates="status_history")
+
+
+class OrderActivity(Base):
+    """Append-only operational history for order and invoice changes."""
+
+    __tablename__ = "order_activities"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    order_id: Mapped[int] = mapped_column(
+        ForeignKey("orders.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    invoice_id: Mapped[int | None] = mapped_column(
+        ForeignKey("invoices.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    actor_admin_id: Mapped[int | None] = mapped_column(
+        ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True
+    )
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    before_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    after_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+    order: Mapped[Order] = relationship(back_populates="activities")
+    invoice: Mapped["Invoice | None"] = relationship(back_populates="activities")
+
+
+@event.listens_for(OrderActivity, "before_update")
+def _reject_order_activity_update(*_args) -> None:
+    raise ImmutableActivityError()
+
+
+@event.listens_for(OrderActivity, "before_delete")
+def _reject_order_activity_delete(*_args) -> None:
+    raise ImmutableActivityError()

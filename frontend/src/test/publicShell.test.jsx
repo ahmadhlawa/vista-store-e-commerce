@@ -38,6 +38,49 @@ describe("public shell", () => {
     expect(screen.queryByRole("button", { name: "عربة التسوّق" })).not.toBeInTheDocument();
     expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
   });
+
+  it("sends the header icon beside the cart to the isolated admin login", async () => {
+    stubApi(storefrontRoutes);
+    renderApp("/");
+
+    const adminLogin = await screen.findByRole("link", { name: "تسجيل دخول الإدارة" });
+    expect(adminLogin).toHaveAttribute("href", "/admin/login");
+
+    await userEvent.click(adminLogin);
+    expect(await screen.findByRole("heading", { name: "تسجيل دخول الإدارة" })).toBeInTheDocument();
+    expect(screen.queryByRole("banner")).not.toBeInTheDocument();
+    expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
+  });
+
+  it("renders the real footer without an order-tracking entry", async () => {
+    stubApi(storefrontRoutes);
+    renderApp("/");
+
+    const footer = await screen.findByRole("contentinfo");
+    expect(within(footer).queryByText("تتبّع الطلب")).not.toBeInTheDocument();
+    expect(footer.querySelectorAll('a[href="/track-order"]')).toHaveLength(0);
+  });
+
+  it("keeps the header and opened mobile navigation free of tracking links", async () => {
+    stubApi(storefrontRoutes);
+    renderApp("/");
+
+    const header = await screen.findByRole("banner");
+    expect(header.querySelectorAll('a[href="/track-order"]')).toHaveLength(0);
+    expect(screen.getByRole("link", { name: "تسجيل دخول الإدارة" })).toHaveAttribute("href", "/admin/login");
+
+    await userEvent.click(screen.getByRole("button", { name: "فتح القائمة" }));
+    const mobileNavigation = screen.getByRole("dialog", { name: "قائمة التنقّل" });
+    expect(mobileNavigation.querySelectorAll('a[href="/track-order"]')).toHaveLength(0);
+    expect(within(mobileNavigation).queryByText("تتبّع الطلب")).not.toBeInTheDocument();
+  });
+
+  it.each(["/track-order", "/track", "/order-tracking"])("treats %s as a public not-found route", async (path) => {
+    stubApi(storefrontRoutes);
+    renderApp(path);
+
+    expect(await screen.findByRole("heading", { name: "الصفحة غير موجودة" })).toBeInTheDocument();
+  });
 });
 
 describe("category navigation", () => {
