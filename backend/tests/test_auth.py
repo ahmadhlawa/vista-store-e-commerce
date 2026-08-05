@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -7,6 +8,13 @@ from app.core.enums import AdminRole
 from app.initial_data import main as initial_data_main
 from app.initial_data import upsert_admin
 from app.models import AdminUser
+from app.cli.reset_admin_password import (
+    PasswordMismatchError,
+    UnknownAdminError,
+    ensure_password_confirmation,
+    reset_password,
+)
+from app.core.security import verify_password
 from tests.conftest import ADMIN_EMAIL, TEST_PASSWORD, auth, login, make_admin
 
 
@@ -43,6 +51,26 @@ def test_initial_admin_command_refuses_a_short_password(capsys) -> None:
         assert exc.code == 2
     else:  # pragma: no cover - the command must not accept a weak password
         raise AssertionError("expected the command to reject a short password")
+
+
+def test_reset_admin_password_preserves_account_state(db: Session, super_admin: AdminUser) -> None:
+    reset_password(db, identifier=super_admin.email.upper(), password="ResetPassw0rd!42")
+    db.commit()
+    db.refresh(super_admin)
+
+    assert verify_password("ResetPassw0rd!42", super_admin.password_hash)
+    assert super_admin.role == AdminRole.SUPER_ADMIN.value
+    assert super_admin.is_active is True
+
+
+def test_reset_admin_password_rejects_unknown_identifier(db: Session) -> None:
+    with pytest.raises(UnknownAdminError):
+        reset_password(db, identifier="missing@example.com", password="ResetPassw0rd!42")
+
+
+def test_reset_admin_password_rejects_mismatched_confirmation() -> None:
+    with pytest.raises(PasswordMismatchError):
+        ensure_password_confirmation("ResetPassw0rd!42", "different-password")
 
 
 def test_login_succeeds_and_records_the_login_time(
