@@ -16,7 +16,7 @@ live only inside the disposable database and are useless anywhere else.
   revision to head. Copying rather than starting empty means the fixture sits next to
   realistic pre-existing data and the legacy upgrade path is exercised for real.
 - `*.db` is already ignored by Git, so no validation database is ever committed.
-- Re-seeding in place is refused. Migration `0008_order_activity_immutable_triggers`
+- Re-seeding in place is refused. Migration `0008_order_activity_triggers`
   makes `order_activities` append-only, so a fixture that deleted its own orders would
   be fighting the invariant the run is supposed to prove. A second run starts from a new
   copy, which is what makes the dataset deterministic.

@@ -605,8 +605,8 @@ def test_downgrade_with_replacement_history_refuses_to_stamp_invalid_0004(
     ("starting_revision", "ddl_method"),
     (
         ("0009_invoice_issuer_snapshot", "batch_alter_table"),
-        ("0008_order_activity_immutable_triggers", "execute"),
-        ("0007_active_invoice_marker_null_safe", "batch_alter_table"),
+        ("0008_order_activity_triggers", "execute"),
+        ("0007_active_marker_null_safe", "batch_alter_table"),
         ("0006_active_invoice_marker", "batch_alter_table"),
     ),
 )
@@ -652,10 +652,10 @@ def test_mysql_legacy_downgrade_refuses_replacement_history_before_ddl(
     (
         (
             "0009_invoice_issuer_snapshot",
-            "0008_order_activity_immutable_triggers",
+            "0008_order_activity_triggers",
             "batch_alter_table",
         ),
-        ("0008_order_activity_immutable_triggers", "0005_order_invoice_workflow", "execute"),
+        ("0008_order_activity_triggers", "0005_order_invoice_workflow", "execute"),
         ("0006_active_invoice_marker", "0005_order_invoice_workflow", "batch_alter_table"),
     ),
 )

@@ -1,7 +1,11 @@
 """make active-invoice marker validation NULL-safe
 
-Revision ID: 0007_active_invoice_marker_null_safe
+Revision ID: 0007_active_marker_null_safe
 Revises: 0006_active_invoice_marker
+
+The identifier is kept under 32 characters because Alembic stores it in
+alembic_version.version_num, which is VARCHAR(32); a longer one is accepted by
+SQLite and rejected by MySQL with error 1406 after the DDL has already run.
 """
 
 from __future__ import annotations
@@ -11,7 +15,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import context, op
 
-revision: str = "0007_active_invoice_marker_null_safe"
+revision: str = "0007_active_marker_null_safe"
 down_revision: Union[str, None] = "0006_active_invoice_marker"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

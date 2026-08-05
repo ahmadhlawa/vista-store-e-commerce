@@ -1,7 +1,10 @@
 """enforce append-only order activity at the database layer
 
-Revision ID: 0008_order_activity_immutable_triggers
-Revises: 0007_active_invoice_marker_null_safe
+Revision ID: 0008_order_activity_triggers
+Revises: 0007_active_marker_null_safe
+
+The identifier is kept under 32 characters to fit alembic_version.version_num;
+see 0007 for what happens on MySQL when it does not.
 """
 
 from __future__ import annotations
@@ -11,8 +14,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import context, op
 
-revision: str = "0008_order_activity_immutable_triggers"
-down_revision: Union[str, None] = "0007_active_invoice_marker_null_safe"
+revision: str = "0008_order_activity_triggers"
+down_revision: Union[str, None] = "0007_active_marker_null_safe"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

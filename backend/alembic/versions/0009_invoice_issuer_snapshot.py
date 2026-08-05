@@ -1,7 +1,7 @@
 """snapshot immutable invoice issuer identity
 
 Revision ID: 0009_invoice_issuer_snapshot
-Revises: 0008_order_activity_immutable_triggers
+Revises: 0008_order_activity_triggers
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import context, op
 
 revision: str = "0009_invoice_issuer_snapshot"
-down_revision: Union[str, None] = "0008_order_activity_immutable_triggers"
+down_revision: Union[str, None] = "0008_order_activity_triggers"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
