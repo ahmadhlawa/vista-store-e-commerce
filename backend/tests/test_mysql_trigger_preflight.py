@@ -69,6 +69,21 @@ def test_preflight_blocks_when_binary_logging_would_reject_trigger(migration) ->
         migration._assert_mysql_trigger_preflight(bind)
 
 
+def test_preflight_allows_readable_combined_global_and_schema_grants(migration) -> None:
+    bind = Bind(
+        {
+            "SELECT DATABASE()": "vista_migr_audit",
+            "@@GLOBAL.log_bin": (1, 0),
+            "SHOW GRANTS": [
+                "GRANT SUPER, PROCESS ON *.* TO `app`@`%`",
+                "GRANT SELECT, TRIGGER ON `vista_migr_audit`.* TO `app`@`%`",
+            ],
+        }
+    )
+
+    migration._assert_mysql_trigger_preflight(bind)
+
+
 def test_preflight_allows_triggers_when_binary_logging_is_disabled(migration) -> None:
     bind = Bind({"SELECT DATABASE()": "vista_migr_audit", "@@GLOBAL.log_bin": (0, 0)})
 

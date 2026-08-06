@@ -46,14 +46,14 @@ def _trigger_deployment_error(detail: str) -> RuntimeError:
 def _has_privilege(grants: list[str], privilege: str) -> bool:
     for grant in grants:
         normalized = grant.upper().replace("`", "")
-        if f"GRANT ALL PRIVILEGES ON *.*" in normalized:
+        privileges, _, scope = normalized.partition(" ON ")
+        if privileges == "GRANT ALL PRIVILEGES" and scope.startswith("*.*"):
             return True
-        if privilege == "SUPER" and "GRANT SUPER ON *.*" in normalized:
+        if privilege == "SUPER" and "SUPER" in privileges and scope.startswith("*.*"):
             return True
         if privilege == "TRIGGER" and (
-            "GRANT TRIGGER ON *.*" in normalized
-            or f"GRANT TRIGGER ON {_AUDIT_SCHEMA.upper()}.*" in normalized
-            or f"GRANT ALL PRIVILEGES ON {_AUDIT_SCHEMA.upper()}.*" in normalized
+            "TRIGGER" in privileges
+            and (scope.startswith("*.*") or scope.startswith(f"{_AUDIT_SCHEMA.upper()}.*"))
         ):
             return True
     return False
