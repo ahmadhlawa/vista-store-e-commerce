@@ -31,6 +31,67 @@ def _blocks_legacy_downgrade() -> bool:
 
 _UPDATE_TRIGGER = "trg_order_activities_no_update"
 _DELETE_TRIGGER = "trg_order_activities_no_delete"
+_AUDIT_SCHEMA = "vista_migr_audit"
+
+
+def _trigger_deployment_error(detail: str) -> RuntimeError:
+    return RuntimeError(
+        "MySQL trigger deployment preflight failed: "
+        f"{detail}. Run migrations through a sufficiently privileged deployment/DBA "
+        "account, or have the host temporarily enable "
+        "log_bin_trust_function_creators=1; do not apply revision 0008 until then."
+    )
+
+
+def _has_privilege(grants: list[str], privilege: str) -> bool:
+    for grant in grants:
+        normalized = grant.upper().replace("`", "")
+        if f"GRANT ALL PRIVILEGES ON *.*" in normalized:
+            return True
+        if privilege == "SUPER" and "GRANT SUPER ON *.*" in normalized:
+            return True
+        if privilege == "TRIGGER" and (
+            "GRANT TRIGGER ON *.*" in normalized
+            or f"GRANT TRIGGER ON {_AUDIT_SCHEMA.upper()}.*" in normalized
+            or f"GRANT ALL PRIVILEGES ON {_AUDIT_SCHEMA.upper()}.*" in normalized
+        ):
+            return True
+    return False
+
+
+def _assert_mysql_trigger_preflight(bind: sa.Connection) -> None:
+    """Fail before either trigger DDL if this server/account cannot create them."""
+    if bind.dialect.name != "mysql":
+        return
+
+    schema = bind.execute(sa.text("SELECT DATABASE()")).scalar_one()
+    if schema != _AUDIT_SCHEMA:
+        raise RuntimeError(
+            f"MySQL trigger migration is restricted to {_AUDIT_SCHEMA!r}; selected schema is {schema!r}."
+        )
+    try:
+        log_bin, trust_creators = bind.execute(
+            sa.text("SELECT @@GLOBAL.log_bin, @@GLOBAL.log_bin_trust_function_creators")
+        ).one()
+    except Exception as exc:
+        raise _trigger_deployment_error(
+            "could not read binary-log prerequisites to establish trigger viability safely"
+        ) from exc
+
+    if not log_bin or trust_creators:
+        return
+
+    try:
+        grants = [str(grant) for grant in bind.execute(sa.text("SHOW GRANTS")).scalars().all()]
+    except Exception as exc:
+        raise _trigger_deployment_error("could not establish trigger viability because effective grants are unreadable") from exc
+
+    if not _has_privilege(grants, "TRIGGER"):
+        raise _trigger_deployment_error("the migration account lacks TRIGGER privilege on the audit schema")
+    if not _has_privilege(grants, "SUPER"):
+        raise _trigger_deployment_error(
+            "binary logging is enabled, trust is disabled, and the migration account lacks SUPER"
+        )
 
 
 def _create_trigger(name: str, operation: str) -> None:
@@ -54,6 +115,7 @@ def _drop_trigger(name: str) -> None:
 
 
 def upgrade() -> None:
+    _assert_mysql_trigger_preflight(op.get_bind())
     _create_trigger(_UPDATE_TRIGGER, "UPDATE")
     _create_trigger(_DELETE_TRIGGER, "DELETE")
 

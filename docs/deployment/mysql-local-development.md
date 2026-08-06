@@ -111,12 +111,11 @@ environment only.
 | 21 | Preview purge, `--confirm` | ✅ `delete=66` (53 rows + 12 objects + the batch); status reports the batch is gone |
 | 22 | Re-seed after purge | ✅ `create=54`, `seed_count` back to 1, 53 owned records, 0 owner-edited |
 
-### Migration 0008 needs a privilege that a schema-scoped grant cannot give
+### Migration 0008 trigger deployment preflight
 
 This is a **deployment prerequisite, not only a test detail.** Migration
 `0008_order_activity_triggers` creates the two triggers that make `order_activities`
-append-only. MySQL 8 turns binary logging on by default and then refuses `CREATE TRIGGER`
-from an account holding neither `SUPER` nor `SET_USER_ID`:
+append-only. MySQL can refuse `CREATE TRIGGER` while binary logging is enabled:
 
 ```
 (1419, 'You do not have the SUPER privilege and binary logging is enabled
@@ -124,28 +123,20 @@ from an account holding neither `SUPER` nor `SET_USER_ID`:
 ```
 
 Confirmed on MySQL 8.0.46 with `log_bin = 1` and `log_bin_trust_function_creators = 0`,
-using an account granted `SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, INDEX,
-REFERENCES, TRIGGER` on its own schema. **The `TRIGGER` privilege alone is not enough.**
+using an account granted `SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, INDEX`,
+`REFERENCES, TRIGGER` on its own schema. **The `TRIGGER` privilege alone is not enough.**
 
-There are three ways to satisfy it. Any one is sufficient:
+The MySQL-only preflight runs before either trigger DDL. It requires the audit schema,
+allows `log_bin = 0` or `log_bin_trust_function_creators = 1`, otherwise inspects
+readable effective grants, and fails closed when trigger viability cannot be established.
 
-| Option | Command | Notes |
-| --- | --- | --- |
-| Grant the dynamic privilege | `GRANT SET_USER_ID ON *.* TO '<user>'@'<host>';` | Narrowest, and revocable once the migration has run. Still global — `SET_USER_ID` has no schema-scoped form. |
-| Trust the creator | `SET GLOBAL log_bin_trust_function_creators = 1;` | Server-wide, and reverts on restart unless written to the config file. |
-| Turn binary logging off | server configuration | Only sensible where no replication or point-in-time recovery is wanted. |
+Run migrations through a sufficiently privileged deployment/DBA account, or ask the host
+to enable `log_bin_trust_function_creators = 1` temporarily. Do not change grants or
+global variables from the application; restore any temporary trust setting promptly.
 
-CI takes the second option: `.github/workflows/mysql-compatibility.yml` sets it as root
-during setup so the unprivileged CI account can still run the chain. Granting the CI
-account `SUPER` was rejected as it would make the gate less like the deployment it stands
-in for.
-
-**Check this before a cPanel handover.** Shared hosting frequently grants neither `SUPER`
-nor `SET_USER_ID` and leaves `log_bin_trust_function_creators` at `0`. On such a host
-migration 0008 cannot be applied at all, and because MySQL has no transactional DDL the
-failure lands mid-chain rather than rolling back. If the host permits none of the three,
-the append-only guarantee has to move into the application layer before deployment — it
-must not simply be skipped, because the triggers are what make order history tamper-proof.
+**Check this before a cPanel handover.** Shared hosting may not provide either
+accommodation. In that case 0008 cannot be safely applied; because MySQL DDL is
+non-transactional, the preflight deliberately stops before either trigger is created.
 
 ### What is still blocked
 
