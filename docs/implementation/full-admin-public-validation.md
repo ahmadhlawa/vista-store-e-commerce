@@ -171,4 +171,75 @@ Stated plainly rather than implied:
   and WhatsApp is not opened).
 - **MySQL downgrade ordering** was not exercised; only SQLite was available locally.
 
-These are gaps in this run, not known failures.
+## Practical release gate (2026-08-07)
+
+This is a critical-workflow gate, not an exhaustive button, field, modal, or filter
+inventory. The accepted frontend baseline is 149/149 unit tests and a Vite 6.4.3
+production build (121 modules), both exit 0. Backend evidence is 384 passed, four
+approved xfailed, and zero failures/errors. MySQL upgrade/downgrade/re-upgrade and
+SQLite 0004-to-0009 migration evidence are recorded in their respective validation
+notes.
+
+| Spec | Result | Evidence actually asserted |
+| --- | --- | --- |
+| `promotions-delivery.spec.js` | 1 passed | Real cart coupon, delivery selection, and browser checkout total sourced from the pricing API; no order is created. |
+| `admin-catalog-lifecycle.spec.js` | 2 passed | Unique create/edit/public visibility/deactivate/reactivate/delete lifecycle plus `422 validation_error` for invalid numeric input. |
+
+The checks below establish critical lifecycle evidence; they do not claim exhaustive
+control-by-control QA.
+
+## Final focused regression (2026-08-07)
+
+One complete suite was run against `http://localhost:5175` and
+`http://127.0.0.1:8001`, with durable output in
+`%TEMP%/vista-final-playwright-20260807.log`.
+
+| Total | Passed | Failed | Skipped | Flaky/retries | Duration |
+| --- | --- | --- | --- | --- | --- |
+| 128 | 102 | 26 | 0 | 0 | 10m 30s |
+
+It used Playwright 1.62.1 and the installed Edge Chromium channel: desktop 93, tablet
+18, mobile 17. Exit was 1. The 26 failures are media 404s, not distinct workflow
+assertion failures: the 8001 process served its default `vista-uploads` directory rather
+than the disposable fixture's `vista_full_validation_20260806-041041_uploads` directory.
+The final suite must be rerun only after that isolated runtime configuration is corrected.
+
+The canonical runtime remains `http://localhost:5173` → `http://127.0.0.1:8000`, using
+`backend/data/vista_preview.db` at `0009_invoice_issuer_snapshot`; it was not modified.
+
+Environment inspection found no existing preview-admin credential supplied through the
+local environment or configuration. Authenticated canonical preview-admin smoke could
+not be performed because no usable existing preview credential was available;
+authenticated admin behavior is covered against the isolated disposable validation DB.
+
+### Critical release checklist
+
+| Workflow | Status | Evidence |
+| --- | --- | --- |
+| Authentication/login/logout | PASS | `smoke.spec.js`; `test_auth.py` |
+| Inactive admin denial | PASS | `smoke.spec.js`; `test_auth.py` |
+| API role authorization | PASS | `journeys.spec.js`; `test_auth.py` |
+| Product CRUD/public reflection | PASS | `admin-catalog-lifecycle.spec.js`; `test_catalog.py` |
+| Category CRUD/public reflection | PASS | category lifecycle; `test_catalog.py` |
+| Coupon arithmetic | PASS | `promotions-delivery.spec.js` |
+| Delivery arithmetic | PASS | `promotions-delivery.spec.js` |
+| Public checkout to admin order | PASS | `journeys.spec.js` |
+| Website order lifecycle | PASS | `journeys.spec.js`; `test_admin_order_edit.py` |
+| Manual/mixed order lifecycle | PASS | `journeys.spec.js`; `test_admin_order_edit.py` |
+| Duplicate-write prevention | PASS | `test_invoices.py`; `test_order_invoice_remediation.py` |
+| Invoice on completion | PASS | `journeys.spec.js`; `test_invoices.py` |
+| One active invoice/replacement | PASS | `test_invoices.py`; `test_order_invoice_persistence.py` |
+| Invoice payment state | PASS | `test_invoices.py`; `test_order_invoice_domain.py` |
+| Server-side validation | PASS | `admin-catalog-lifecycle.spec.js`; backend tests |
+| Public/admin publication | PASS | ResourceScreen lifecycle; `test_content_and_media.py` |
+| Desktop/tablet/mobile usability | BLOCKER | final media 404s prevent a clean current browser run |
+| Missing public/tracking route | PASS | `smoke.spec.js`; `routes.spec.js` |
+| Anonymous protected API denial | PASS | `smoke.spec.js`; `test_auth.py` |
+
+Category defect: a blank optional `parent_id` was sent as `""` and received 422. The
+category field now opts into existing `emptyAsNull` serialization; the dedicated browser
+regression proves a null POST, 201, refresh persistence, and deletion. Commit:
+`b69568b fix(admin): normalize empty category parent selection`.
+
+The authenticated canonical preview-admin smoke remains unavailable because no usable
+existing preview credential was supplied. No credential or preview database was changed.

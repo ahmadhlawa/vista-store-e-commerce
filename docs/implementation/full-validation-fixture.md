@@ -106,6 +106,15 @@ screen still offers `cancelled` as a filter for rows written before completion l
 orders, so the fixture provides one for that filter to match. Nothing in this repository
 should be read as evidence that cancelling from the invoice screen works; it does not.
 
+## Expanded validation use (2026-08-07)
+
+`vista_full_validation_20260806-041041.db` was used for focused Playwright work only.
+Catalog records use timestamped slugs and are deleted in `finally`; checkout orders
+remain in this disposable file. No preview database is part of those checks.
+The corresponding isolated server must set `LOCAL_MEDIA_ROOT` to
+`./data/vista_full_validation_20260806-041041_uploads`; the default `vista-uploads`
+directory causes public media 404s.
+
 ## Boundary data included
 
 Arabic and English text, mixed Arabic/English product names, long-but-valid names, zero

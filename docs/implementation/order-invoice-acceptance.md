@@ -73,6 +73,15 @@ Verification: focused checkout tests (16), complete `npm.cmd test`, `npm.cmd run
 
 Original-database note: two earlier exploratory 201 responses were routed through the stale port-8000 proxy rather than the disposable database. They did not affect the disposable DB, so this document cannot attest that the non-isolated target was untouched. No further writes were made to it after this was identified.
 
+## Coupon and delivery expanded browser assertion (2026-08-07)
+
+`frontend/e2e/promotions-delivery.spec.js` verifies fixture coupon `VFXVALID20`
+on the 120.00 resin product with the 20.00 Ramallah zone: discount 24.00 and total
+116.00 match the checkout browser summary sourced from the pricing API. It creates no
+additional order; checkout persistence remains the accepted baseline journey evidence.
+The final isolated browser run is currently blocked by validation media-root 404s, not
+by the coupon/delivery arithmetic assertion; see `full-admin-public-validation.md`.
+
 ## Commits and changed files
 
 Commits: `a8dbdfc fix(invoices): preserve payment and issuer snapshots`; `ebf0b75 feat(orders): support typed manager edits for manual orders`; `e6bf762 fix(migrations): harden invoice workflow downgrade safety`.

@@ -105,6 +105,11 @@ Remove-Item Env:\DATABASE_URL
 
 `DATABASE_URL` in the environment overrides the `.env` value.
 
+For browser validation, point Vite and uvicorn at the same timestamped disposable file
+and check `/api/v1/openapi.json` through port 5173 before mutating scenarios.
+For a fixture with uploaded media, point `LOCAL_MEDIA_ROOT` at its matching timestamped
+`*_uploads` directory as well.
+
 ## Inspecting the database
 
 ```powershell
