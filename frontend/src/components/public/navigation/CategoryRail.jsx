@@ -46,38 +46,47 @@ export default function CategoryRail() {
         <MenuIcon size={18} />
       </button>
 
-      <span className="vs-catbar__rule" aria-hidden="true" />
+      {/* The icon column is the collapsed face of the drawer, not a companion to
+          it: while the panel is open it is the panel that lists the categories,
+          so the rail drops its copy rather than standing beside it as a second
+          column of the same thumbnails. The trigger stays — it is what reports
+          and toggles the state. */}
+      {!open && (
+        <>
+          <span className="vs-catbar__rule" aria-hidden="true" />
 
-      <ul className="vs-catbar__list">
-        {categories.map((category) => (
-          <li key={category.slug}>
-            <NavLink
-              to={category.href}
-              className="vs-catbar__item"
-              data-active={category.active}
-              aria-current={category.active ? "page" : undefined}
-              aria-label={category.name}
-              title={category.name}
-            >
-              {/* The category's own picture where the store has uploaded one,
-                  and a neutral icon where it has not — never a tinted square
-                  standing in for a photograph that does not exist. */}
-              {category.imageUrl ? (
-                <img className="vs-catbar__thumb" src={category.imageUrl} alt="" loading="lazy" />
-              ) : (
-                <span className="vs-catbar__ico" aria-hidden="true">
-                  <TagIcon size={18} />
-                </span>
-              )}
-              {/* Presentational: the accessible name already comes from
-                  aria-label, so a screen reader must not hear it twice. */}
-              <span className="vs-catbar__tip" aria-hidden="true">
-                {category.name}
-              </span>
-            </NavLink>
-          </li>
-        ))}
-      </ul>
+          <ul className="vs-catbar__list">
+            {categories.map((category) => (
+              <li key={category.slug}>
+                <NavLink
+                  to={category.href}
+                  className="vs-catbar__item"
+                  data-active={category.active}
+                  aria-current={category.active ? "page" : undefined}
+                  aria-label={category.name}
+                  title={category.name}
+                >
+                  {/* The category's own picture where the store has uploaded one,
+                      and a neutral icon where it has not — never a tinted square
+                      standing in for a photograph that does not exist. */}
+                  {category.imageUrl ? (
+                    <img className="vs-catbar__thumb" src={category.imageUrl} alt="" loading="lazy" />
+                  ) : (
+                    <span className="vs-catbar__ico" aria-hidden="true">
+                      <TagIcon size={18} />
+                    </span>
+                  )}
+                  {/* Presentational: the accessible name already comes from
+                      aria-label, so a screen reader must not hear it twice. */}
+                  <span className="vs-catbar__tip" aria-hidden="true">
+                    {category.name}
+                  </span>
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </nav>
   );
 }

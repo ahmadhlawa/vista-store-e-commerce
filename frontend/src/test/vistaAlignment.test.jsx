@@ -101,6 +101,34 @@ describe("category rail", () => {
     await waitFor(() => expect(drawer()).toBeNull());
   });
 
+  it("hands the categories over to the drawer instead of showing them twice", async () => {
+    stubApi({ ...storefrontRoutes, "/api/v1/categories": [categoryFixture, parentCategory] });
+    renderApp("/");
+
+    // Collapsed: the rail is the only place the categories are drawn.
+    await waitFor(() => expect(rail().querySelectorAll(".vs-catbar__item")).toHaveLength(2));
+    expect(drawer()).toBeNull();
+
+    await userEvent.click(within(rail()).getByRole("button", { name: "تصنيفات المنتجات" }));
+    const panel = drawer();
+
+    // Expanded: one row per category in the panel, and the icon column is gone
+    // rather than left standing beside it as a second copy of the same list.
+    expect(panel.querySelectorAll(".vs-catdrawer__item")).toHaveLength(2);
+    expect(rail().querySelectorAll(".vs-catbar__item")).toHaveLength(0);
+    expect(rail().querySelectorAll(".vs-catbar__thumb, .vs-catbar__ico")).toHaveLength(0);
+    // The names the rail only whispered as tooltips are now real, visible rows.
+    expect(within(panel).getByRole("link", { name: /مطبوعات المناسبات/ })).toBeInTheDocument();
+    expect(within(panel).getAllByText("منتج واحد")).toHaveLength(2);
+    // The trigger stays put — it is still what reports and toggles the state.
+    expect(rail().querySelector(".vs-catbar__trigger")).toHaveAttribute("aria-expanded", "true");
+
+    // Closing hands them back.
+    await userEvent.click(within(rail()).getByRole("button", { name: "تصنيفات المنتجات" }));
+    await waitFor(() => expect(drawer()).toBeNull());
+    expect(rail().querySelectorAll(".vs-catbar__item")).toHaveLength(2);
+  });
+
   it("expands a category's children inside the drawer", async () => {
     stubApi({ ...storefrontRoutes, "/api/v1/categories": [parentCategory] });
     renderApp("/");

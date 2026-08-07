@@ -116,18 +116,21 @@ describe("category rail hover intent", () => {
   it("moving between rail items neither reopens nor resets anything", async () => {
     await mountStorefront();
 
+    // Travelling down the icons while the open is still pending: React fires
+    // neither enter nor leave on the rail itself, so the timer it started is
+    // neither cancelled nor restarted and the drawer opens on the original
+    // schedule. (Once open there are no rail items left to move between — the
+    // panel has taken the list over.)
     enter(rail());
-    tick(OPEN_DELAY);
-    await waitFor(() => expect(drawer()).not.toBeNull());
+    tick(OPEN_DELAY - 60);
 
     const [first, second] = rail().querySelectorAll(".vs-catbar__item");
-    // A move inside the rail: React fires neither enter nor leave on the rail
-    // itself, so nothing is scheduled and the drawer simply stays put.
     leave(first, second);
     enter(second, first);
-    tick(CLOSE_DELAY + 100);
+    expect(drawer()).toBeNull();
 
-    expect(drawer()).not.toBeNull();
+    tick(60);
+    await waitFor(() => expect(drawer()).not.toBeNull());
   });
 
   it("keeps the click toggle and Escape working", async () => {
