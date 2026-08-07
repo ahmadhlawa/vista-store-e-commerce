@@ -77,6 +77,6 @@ for (const resource of RESOURCES) {
     const confirm = page.getByRole("dialog");
     await expect(confirm).toBeVisible();
     await confirm.locator("button").last().click();
-    await expect(page.locator("tr", { hasText: renamed })).toHaveCount(0);
+    await expect(page.locator("tr", { hasText: rowAfterEdit })).toHaveCount(0);
   });
 }
