@@ -79,8 +79,8 @@ Original-database note: two earlier exploratory 201 responses were routed throug
 on the 120.00 resin product with the 20.00 Ramallah zone: discount 24.00 and total
 116.00 match the checkout browser summary sourced from the pricing API. It creates no
 additional order; checkout persistence remains the accepted baseline journey evidence.
-The final isolated browser run is currently blocked by validation media-root 404s, not
-by the coupon/delivery arithmetic assertion; see `full-admin-public-validation.md`.
+The isolated browser media-root 404 is a disposable-fixture configuration issue, not a
+production-readiness result; see `full-admin-public-validation.md`.
 
 ## Commits and changed files
 

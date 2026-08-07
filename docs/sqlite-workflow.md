@@ -109,6 +109,8 @@ For browser validation, point Vite and uvicorn at the same timestamped disposabl
 and check `/api/v1/openapi.json` through port 5173 before mutating scenarios.
 For a fixture with uploaded media, point `LOCAL_MEDIA_ROOT` at its matching timestamped
 `*_uploads` directory as well.
+This is local development fixture guidance; production/staging storage validation is
+deferred until its infrastructure and real data are available.
 
 ## Inspecting the database
 

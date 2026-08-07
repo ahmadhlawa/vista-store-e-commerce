@@ -171,10 +171,11 @@ Stated plainly rather than implied:
   and WhatsApp is not opened).
 - **MySQL downgrade ordering** was not exercised; only SQLite was available locally.
 
-## Practical release gate (2026-08-07)
+## Development validation (2026-08-07)
 
-This is a critical-workflow gate, not an exhaustive button, field, modal, or filter
-inventory. The accepted frontend baseline is 149/149 unit tests and a Vite 6.4.3
+This is local development validation against mock/demo data, not production or staging
+certification. It is not an exhaustive button, field, modal, or filter inventory. The
+accepted frontend baseline is 149/149 unit tests and a Vite 6.4.3
 production build (121 modules), both exit 0. Backend evidence is 384 passed, four
 approved xfailed, and zero failures/errors. MySQL upgrade/downgrade/re-upgrade and
 SQLite 0004-to-0009 migration evidence are recorded in their respective validation
@@ -202,7 +203,9 @@ It used Playwright 1.62.1 and the installed Edge Chromium channel: desktop 93, t
 18, mobile 17. Exit was 1. The 26 failures are media 404s, not distinct workflow
 assertion failures: the 8001 process served its default `vista-uploads` directory rather
 than the disposable fixture's `vista_full_validation_20260806-041041_uploads` directory.
-The final suite must be rerun only after that isolated runtime configuration is corrected.
+This isolated disposable-fixture configuration issue does not block normal development.
+Production/staging browser and media validation remains future work after real data,
+hosting, and storage infrastructure are integrated.
 
 The canonical runtime remains `http://localhost:5173` → `http://127.0.0.1:8000`, using
 `backend/data/vista_preview.db` at `0009_invoice_issuer_snapshot`; it was not modified.
@@ -232,7 +235,7 @@ authenticated admin behavior is covered against the isolated disposable validati
 | Invoice payment state | PASS | `test_invoices.py`; `test_order_invoice_domain.py` |
 | Server-side validation | PASS | `admin-catalog-lifecycle.spec.js`; backend tests |
 | Public/admin publication | PASS | ResourceScreen lifecycle; `test_content_and_media.py` |
-| Desktop/tablet/mobile usability | BLOCKER | final media 404s prevent a clean current browser run |
+| Desktop/tablet/mobile usability | PASS | previously accepted responsive/browser baseline |
 | Missing public/tracking route | PASS | `smoke.spec.js`; `routes.spec.js` |
 | Anonymous protected API denial | PASS | `smoke.spec.js`; `test_auth.py` |
 
@@ -243,3 +246,6 @@ regression proves a null POST, 201, refresh persistence, and deletion. Commit:
 
 The authenticated canonical preview-admin smoke remains unavailable because no usable
 existing preview credential was supplied. No credential or preview database was changed.
+
+This document must not be used as a production-readiness, deployment, Cloudflare, or
+final-media-storage certificate.

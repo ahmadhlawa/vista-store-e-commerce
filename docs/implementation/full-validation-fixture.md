@@ -114,6 +114,8 @@ remain in this disposable file. No preview database is part of those checks.
 The corresponding isolated server must set `LOCAL_MEDIA_ROOT` to
 `./data/vista_full_validation_20260806-041041_uploads`; the default `vista-uploads`
 directory causes public media 404s.
+This fixture exists for local development validation only and does not represent final
+production media storage or deployment configuration.
 
 ## Boundary data included
 

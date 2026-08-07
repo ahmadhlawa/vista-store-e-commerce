@@ -16,9 +16,9 @@ Counts at the time of the acceptance run (merge commit `f34ac40`):
 
 The browser suite walks all of them; see `full-admin-public-validation.md` for results.
 
-Focused delta, 2026-08-07: coverage is assessed as a practical critical-workflow gate,
-not per-control certification. The final attempted isolated run found media-root 404s;
-see `full-admin-public-validation.md` for the current result and blocker.
+Focused delta, 2026-08-07: coverage is local development validation with mock/demo data,
+not per-control or production certification. The isolated media-root 404 is a fixture
+configuration issue; see `full-admin-public-validation.md` for the current result.
 
 ## Public routes
 
