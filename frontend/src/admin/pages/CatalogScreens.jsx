@@ -47,6 +47,7 @@ export function CategoriesPage() {
           name: "parent_id",
           title: "القسم الأب",
           type: "select",
+          emptyAsNull: true,
           options: parents.map((row) => ({ value: row.id, label: row.name })),
         },
         { name: "sort_order", title: "الترتيب", type: "number", defaultValue: 0 },
