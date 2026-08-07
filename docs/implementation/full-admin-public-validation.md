@@ -221,8 +221,8 @@ authenticated admin behavior is covered against the isolated disposable validati
 | API role authorization | PASS | `journeys.spec.js`; `test_auth.py` |
 | Product CRUD/public reflection | PASS | `admin-catalog-lifecycle.spec.js`; `test_catalog.py` |
 | Category CRUD/public reflection | PASS | category lifecycle; `test_catalog.py` |
-| Coupon arithmetic | PASS | `promotions-delivery.spec.js` |
-| Delivery arithmetic | PASS | `promotions-delivery.spec.js` |
+| Coupon arithmetic | PASS | `promotions-delivery.spec.js`; `test_checkout.py` |
+| Delivery arithmetic | PASS | `promotions-delivery.spec.js`; `test_checkout.py` |
 | Public checkout to admin order | PASS | `journeys.spec.js` |
 | Website order lifecycle | PASS | `journeys.spec.js`; `test_admin_order_edit.py` |
 | Manual/mixed order lifecycle | PASS | `journeys.spec.js`; `test_admin_order_edit.py` |
