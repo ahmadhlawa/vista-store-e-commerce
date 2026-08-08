@@ -197,10 +197,14 @@
     --vs-grid-gap: 12px;
     --vs-fs-h1: 23px;
     --vs-fs-h2: 18.5px;
-    /* An intentional phone crop rather than a squeezed desktop banner, so the
-       cap is lifted clear of it — it exists for wide monitors, not for this. */
-    --vs-ar-hero: 5 / 6;
-    --vs-hero-max-h: 560px;
+    /* A phone shows the whole advertisement, not a slice of it. Banner artwork
+       is landscape (the shipped hero is 1672×941), so a portrait phone box plus
+       `cover` threw away more than half the image width — the Arabic promo text
+       and the branding were cropped straight out of the viewport. The box keeps
+       the artwork's own landscape ratio and the media contains rather than
+       covers below 600 (see home.css), so nothing is cut sideways. */
+    --vs-ar-hero: 16 / 9;
+    --vs-hero-max-h: 360px;
   }
 }
 

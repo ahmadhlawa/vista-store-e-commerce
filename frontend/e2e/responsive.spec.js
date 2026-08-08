@@ -51,6 +51,34 @@ test.describe("public storefront layout", () => {
     });
   }
 
+  test("the hero shows the whole advertisement, not a cropped slice", async ({ page }, testInfo) => {
+    // A wide screen crops the banner top and bottom on purpose; this is about
+    // the phone and tablet forms, where the crop was sideways.
+    test.skip(
+      (testInfo.project.use.viewport?.width ?? 1440) > 900,
+      "desktop keeps its deliberate letterbox crop",
+    );
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    // How much of the artwork's own width survives the box it is drawn into.
+    // A phone is narrower than any banner, so covering a portrait box threw the
+    // promotional text off both sides; whatever technique is used, the visible
+    // fraction is what the reader actually gets.
+    const visible = await page.evaluate(() => {
+      const img = document.querySelector('.vs-hero__slide[data-active="true"] img');
+      if (!img || !img.naturalWidth) return null;
+      const box = img.getBoundingClientRect();
+      const fit = getComputedStyle(img).objectFit;
+      if (fit === "contain" || fit === "scale-down") return 1;
+      const drawn = (box.height * img.naturalWidth) / img.naturalHeight;
+      return Math.min(1, drawn / box.width);
+    });
+
+    test.skip(visible === null, "no hero artwork in this environment");
+    expect(visible).toBeGreaterThan(0.98);
+  });
+
   test("the header stays reachable and the cart control is labelled", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("link", { name: "عربة التسوّق" })).toBeVisible();

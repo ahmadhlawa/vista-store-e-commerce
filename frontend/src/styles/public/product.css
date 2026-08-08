@@ -527,6 +527,12 @@
     flex: 0 0 auto;
     height: 44px;
   }
+  /* The shell only reserves the tab bar. A product page stacks the buy bar on
+     top of it, so the page owes that height too — otherwise the last band of
+     the footer sits underneath the bar and cannot be reached. */
+  .vs-public:has(.vs-buybar) {
+    padding-block-end: calc(var(--vs-tabbar-h) + 66px + env(safe-area-inset-bottom));
+  }
 }
 
 /* quick view ------------------------------------------------------------ */

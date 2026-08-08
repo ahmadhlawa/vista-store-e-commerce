@@ -161,8 +161,18 @@
 }
 
 @media (max-width: 599px) {
+  /* A phone is narrower than any advertising banner, so covering would crop the
+     artwork sideways and take the promotional text with it. The box already
+     carries the artwork's landscape ratio (tokens.css), so containing costs no
+     letterbox on a normal banner and guarantees a differently proportioned one
+     is shown whole rather than sliced. */
+  .vs-hero__media img {
+    object-fit: contain;
+  }
   .vs-hero__body {
-    padding: 24px calc(var(--vs-gutter) + 4px) 56px;
+    padding: 18px calc(var(--vs-gutter) + 4px) 46px;
+    gap: 8px;
+    max-width: 100%;
   }
   .vs-hero__dots {
     inset-inline-start: calc(var(--vs-gutter) + 4px);

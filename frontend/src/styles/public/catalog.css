@@ -542,6 +542,11 @@
 
 .vs-select {
   height: 40px;
+  /* A select is sized by its widest option, so on a narrow toolbar it grew past
+     its row and printed over the label beside it. Letting it shrink is the fix;
+     the native control ellipsises its own text. */
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--vs-border-strong);
   border-radius: var(--vs-r-sm);
   background: var(--vs-page);
@@ -556,8 +561,15 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  /* Shrink-only: desktop keeps the control at its natural width. */
+  flex: 0 1 auto;
   font-size: var(--vs-fs-sm);
   color: var(--vs-ink-3);
+}
+
+.vs-sortlabel .vs-select {
+  flex: 0 1 auto;
 }
 
 /* catalogue body -------------------------------------------------------- */
