@@ -84,7 +84,7 @@ export default function MediaPage() {
     <>
       <PageHeader
         title="الوسائط"
-        description="ارفع صور المنتجات والبانرات، ثم انسخ رابط الصورة والصقه في الحقل المطلوب."
+        description="مكتبة صور المتجر. تُختار هذه الصور مباشرة من حقول الصور في لوحة الإدارة، ويبقى نسخ الرابط متاحاً عند الحاجة."
         actions={
           <>
             <input ref={fileRef} type="file" accept="image/*" onChange={upload} style={sx`display:none`} />

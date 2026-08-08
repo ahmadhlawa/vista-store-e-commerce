@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import sx from "../../sx.js";
 import { adminApi } from "../../api/adminApi.js";
+import { MediaField } from "../MediaPicker.jsx";
 import { Button, Field, PageHeader, Spinner, card, input, textarea, useFeedback } from "../ui.jsx";
 
 const GROUPS = [
@@ -10,8 +11,8 @@ const GROUPS = [
       ["store_name", "اسم المتجر"],
       ["store_name_ar", "الاسم بالعربية (يُعرض في المتجر والفاتورة)"],
       ["store_tagline", "الوصف المختصر"],
-      ["logo_url", "رابط الشعار"],
-      ["favicon_url", "رابط أيقونة المتصفح"],
+      ["logo_url", "شعار المتجر", "media"],
+      ["favicon_url", "أيقونة المتصفح", "media"],
       ["announcement", "شريط الإعلان أعلى الموقع"],
     ],
   },
@@ -167,16 +168,20 @@ export default function SettingsPage() {
             <p style={sx`margin:0 0 14px;font-size:12.5px;color:#7C766D;line-height:1.9`}>{group.note}</p>
           )}
           <div style={sx`display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px`}>
-            {(group.fields || []).map(([key, title]) => (
-              <Field key={key} title={title}>
-                <input
-                  type={group.colors ? "color" : "text"}
-                  value={form[key] ?? ""}
-                  onChange={(event) => update(key, event.target.value)}
-                  style={input}
-                />
-              </Field>
-            ))}
+            {(group.fields || []).map(([key, title, kind]) =>
+              kind === "media" ? (
+                <MediaField key={key} title={title} value={form[key] ?? ""} onChange={(value) => update(key, value)} />
+              ) : (
+                <Field key={key} title={title}>
+                  <input
+                    type={group.colors ? "color" : "text"}
+                    value={form[key] ?? ""}
+                    onChange={(event) => update(key, event.target.value)}
+                    style={input}
+                  />
+                </Field>
+              ),
+            )}
             {(group.numbers || []).map(([key, title]) => (
               <Field key={key} title={title}>
                 <input

@@ -42,7 +42,7 @@ export function CategoriesPage() {
         { name: "name", title: "اسم القسم", required: true },
         { name: "slug", title: "الرابط (اختياري)", hint: "يُولَّد من الاسم إذا تُرك فارغاً", omitWhenEmpty: true },
         { name: "description", title: "الوصف", type: "textarea", rows: 3 },
-        { name: "image_url", title: "رابط الصورة", hint: "ارفع صورة من صفحة الوسائط وانسخ رابطها", emptyAsNull: true },
+        { name: "image_url", title: "صورة القسم", type: "media", emptyAsNull: true },
         {
           name: "parent_id",
           title: "القسم الأب",

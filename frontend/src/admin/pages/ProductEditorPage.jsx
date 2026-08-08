@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import sx from "../../sx.js";
 import { adminApi } from "../../api/adminApi.js";
+import { MediaPickerDialog } from "../MediaPicker.jsx";
 import {
   Badge,
   Button,
@@ -67,6 +68,7 @@ export default function ProductEditorPage() {
   const [confirming, setConfirming] = useState(null);
 
   const [imageUrl, setImageUrl] = useState("");
+  const [pickingImage, setPickingImage] = useState(false);
   const [specs, setSpecs] = useState([]);
   const [options, setOptions] = useState([]);
   const [variant, setVariant] = useState({ title: "", price_override: "", stock_quantity: 0, option_value_ids: [] });
@@ -242,7 +244,8 @@ export default function ProductEditorPage() {
         <>
           <Section title="الصور">
             <div style={sx`display:flex;gap:10px;flex-wrap:wrap`}>
-              <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="رابط الصورة من صفحة الوسائط" style={{ ...input, ...sx`flex:1;min-width:220px` }} />
+              <Button variant="secondary" onClick={() => setPickingImage(true)}>إضافة صورة من مكتبة الوسائط</Button>
+              <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="أو الصق رابط صورة" style={{ ...input, ...sx`flex:1;min-width:220px` }} />
               <Button
                 disabled={!imageUrl.trim()}
                 onClick={() => run(async () => {
@@ -253,6 +256,15 @@ export default function ProductEditorPage() {
                 إضافة صورة
               </Button>
             </div>
+            {pickingImage && (
+              <MediaPickerDialog
+                onClose={() => setPickingImage(false)}
+                onSelect={(url) => {
+                  setPickingImage(false);
+                  run(() => adminApi.addProductImage(productId, { url, alt_text: form.name }), "تمت إضافة الصورة.");
+                }}
+              />
+            )}
             <div style={sx`display:flex;gap:12px;flex-wrap:wrap`}>
               {(product?.images || []).map((image) => (
                 <div key={image.id} style={sx`width:120px;display:flex;flex-direction:column;gap:6px`}>
