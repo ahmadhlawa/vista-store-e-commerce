@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import sx from "../sx.js";
+import { MediaField } from "./MediaPicker.jsx";
 import {
   Button,
   ConfirmDialog,
@@ -63,6 +64,9 @@ function FieldControl({ field, value, onChange }) {
         {field.title}
       </label>
     );
+  }
+  if (field.type === "media") {
+    return <MediaField title={field.title} hint={field.hint} value={value} onChange={onChange} />;
   }
   if (field.type === "textarea") {
     return (
