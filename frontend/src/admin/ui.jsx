@@ -86,8 +86,12 @@ export function Table({ columns, rows, empty = "لا توجد بيانات بع�
     return <div style={sx`padding:40px 20px;text-align:center;color:#7C766D;font-size:14px`}>{empty}</div>;
   }
   return (
+    // The table sizes itself to its content and the wrapper scrolls: a fixed
+    // 560px floor was still narrower than a seven-column table needs, so on a
+    // phone every column was crushed to a word per line. `min-width:100%` keeps
+    // a short table filling the card exactly as before on a wide screen.
     <div style={sx`overflow-x:auto`}>
-      <table style={sx`width:100%;border-collapse:collapse;font-size:13.5px;min-width:560px`}>
+      <table style={sx`width:max-content;min-width:100%;border-collapse:collapse;font-size:13.5px`}>
         <thead>
           <tr>
             {columns.map((column) => (
@@ -101,7 +105,7 @@ export function Table({ columns, rows, empty = "لا توجد بيانات بع�
           {rows.map((row) => (
             <tr key={rowKey(row)}>
               {columns.map((column) => (
-                <td key={column.key} style={sx`padding:12px;border-bottom:1px solid #F2EFE9;vertical-align:middle`}>
+                <td key={column.key} style={sx`padding:12px;border-bottom:1px solid #F2EFE9;vertical-align:middle;max-width:280px`}>
                   {column.render ? column.render(row) : row[column.key]}
                 </td>
               ))}
