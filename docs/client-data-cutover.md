@@ -105,6 +105,29 @@ python -m scripts.client_cutover_cli preserve \
     --confirm
 ```
 
+### If the record has been renamed
+
+`--target` finds a record by its natural key — the title or slug the batch recorded when
+it created the row. Prefer it while it still matches. But the owner may have renamed the
+record in Admin since, in which case the key in the plan is no longer the name you see,
+and the row id printed beside it is the stable handle. Select by id instead:
+
+```bash
+python -m scripts.client_cutover_cli preserve \
+    --dataset ../instance/preview/vista-social-preview.yaml \
+    --entity-type hero_slide \
+    --entity-id 12 \
+    --confirm
+```
+
+Both forms do exactly the same thing to exactly the same record. The id is read from the
+`#12` that `plan` prints after each entry. `--entity-type` and `--entity-id` go together,
+and cannot be combined with `--target` in one command — the tool refuses rather than
+guesses. An id is always looked up within its own entity type, so a number belonging to
+another table can never promote the wrong row.
+
+### Notes on both forms
+
 * The pictures a preserved record **displays** are promoted with it, so the slide does not
   survive pointing at a file the purge is about to remove. Use `--without-media` only if
   you have decided the picture should go.

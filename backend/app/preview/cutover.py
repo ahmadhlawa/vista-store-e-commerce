@@ -196,20 +196,57 @@ class PreserveResult:
         return f"[{self.outcome:18}] {self.target}{media}{suffix}"
 
 
-def _parse_target(target: str) -> tuple[str, str]:
-    entity_type, _, natural_key = target.partition(":")
-    if not entity_type or not natural_key:
+@dataclass(frozen=True)
+class Selector:
+    """One record an operator has chosen, named either way the plan prints it.
+
+    A natural key is the readable choice and stays the default. But the key is the
+    record's *title* — the owner can rename a slide in Admin, and then the only stable
+    handle left is the row id, which the plan prints beside it. Both are just two ways
+    of finding the same `ImportBatchRecord`; everything after resolution is identical.
+    """
+
+    entity_type: str
+    natural_key: str | None = None
+    entity_id: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.entity_type not in MODEL_FOR_TYPE:
+            raise CutoverError(
+                f"{self.entity_type!r} is not a preservable entity type. "
+                f"Known types: {', '.join(sorted(MODEL_FOR_TYPE))}."
+            )
+        if (self.natural_key is None) == (self.entity_id is None):
+            raise CutoverError(
+                "Name a record by its natural key or by its entity id, not both and "
+                "not neither."
+            )
+
+    def render(self) -> str:
+        if self.entity_id is not None:
+            return f"{self.entity_type}#{self.entity_id}"
+        return f"{self.entity_type}:{self.natural_key}"
+
+
+def parse_selector(target: str) -> Selector:
+    """`entity_type:natural_key`, exactly as the plan prints it."""
+    entity_type, separator, natural_key = target.partition(":")
+    if not separator or not natural_key:
         raise CutoverError(
             f"{target!r} is not a valid target. Use 'entity_type:natural_key', "
             "exactly as the plan prints it — for example 'hero_slide:عنوان'."
         )
-    return entity_type, natural_key
+    return Selector(entity_type, natural_key=natural_key)
+
+
+def _as_selector(target: str | Selector) -> Selector:
+    return target if isinstance(target, Selector) else parse_selector(target)
 
 
 def preserve(
     db: Session,
     batch_key: str,
-    targets: list[str],
+    targets: list[str | Selector],
     *,
     apply: bool = False,
     include_media: bool = True,
@@ -223,7 +260,9 @@ def preserve(
     finds no claim and reports `already-unmanaged`.
 
     Selection is always explicit. Nothing is promoted because of what it is called or
-    what it looks like; the operator names each target from the plan.
+    what it looks like; the operator names each target from the plan, either by natural
+    key or by row id. A target may be given as a `Selector` or as the
+    `entity_type:natural_key` string the plan prints.
     """
     batch = find_batch(db, batch_key)
     if batch is None:
@@ -236,24 +275,35 @@ def preserve(
     results: list[PreserveResult] = []
 
     for target in targets:
-        entity_type, natural_key = _parse_target(target)
-        record = index.get((entity_type, natural_key))
+        selector = _as_selector(target)
+        entity_type = selector.entity_type
+        label = selector.render()
+
+        # The two selectors differ only here, in which index finds the claim. An id is
+        # looked up under its own entity type, so a numeric id belonging to some other
+        # table can never promote the wrong row.
+        if selector.entity_id is not None:
+            record = by_entity.get((entity_type, selector.entity_id))
+            still_there = _load(db, entity_type, selector.entity_id) is not None
+        else:
+            record = index.get((entity_type, selector.natural_key))
+            still_there = _row_exists_outside_batch(db, entity_type, selector.natural_key)
+
         if record is None:
             results.append(
                 PreserveResult(
-                    target,
-                    "already-unmanaged"
-                    if _row_exists_outside_batch(db, entity_type, natural_key)
-                    else "unknown",
-                    "this batch holds no claim on that key",
+                    label,
+                    "already-unmanaged" if still_there else "unknown",
+                    "this batch holds no claim on that record",
                 )
             )
             continue
 
+        natural_key = record.natural_key
         row = _load(db, entity_type, record.entity_id)
         if row is None:
             results.append(
-                PreserveResult(target, "missing-row", "the row is already gone; nothing to keep")
+                PreserveResult(label, "missing-row", "the row is already gone; nothing to keep")
             )
             continue
 
@@ -262,7 +312,7 @@ def preserve(
         )
         results.append(
             PreserveResult(
-                target,
+                label,
                 "promote",
                 f"{label_for(entity_type, row)} — released from batch {batch_key!r}",
                 [r.natural_key for r in promoted_media],

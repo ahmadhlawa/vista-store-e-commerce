@@ -7,6 +7,7 @@ Each one asserts that something the client cares about survives that moment.
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import pytest
@@ -30,6 +31,7 @@ from app.models import (
 )
 from app.preview.cutover import (
     CutoverError,
+    Selector,
     build_cutover_plan,
     preserve,
     verify_state,
@@ -37,6 +39,7 @@ from app.preview.cutover import (
 from app.preview.dataset import parse_dataset
 from app.preview.importer import PreviewImporter
 from app.storage.local import LocalStorageProvider
+from scripts.client_cutover_cli import _preserve_selectors
 
 DOCUMENT = {
     "preview_schema_version": 1,
@@ -290,6 +293,159 @@ def test_preserve_is_idempotent(importer: PreviewImporter, db: Session) -> None:
 
     assert [r.outcome for r in results] == ["already-unmanaged"]
     assert db.query(HeroSlide).filter_by(title="شريحة العميل").count() == 1
+
+
+# ── preserve by row id, for a record the owner has renamed ───────────────────
+def test_preserve_by_entity_id_releases_the_record(
+    importer: PreviewImporter, db: Session
+) -> None:
+    importer.seed()
+    slide = db.query(HeroSlide).filter_by(title="شريحة العميل").one()
+    # The case this selector exists for: the batch's claim still says "شريحة العميل",
+    # but the owner has renamed the slide, so the natural key no longer finds it in Admin.
+    slide.title = "اسم جديد اختاره المالك"
+    db.commit()
+
+    results = preserve(
+        db, "cutover-preview", [Selector("hero_slide", entity_id=slide.id)], apply=True
+    )
+
+    assert [r.outcome for r in results] == ["promote"]
+    assert results[0].target == f"hero_slide#{slide.id}"
+    assert (
+        db.query(ImportBatchRecord)
+        .filter_by(entity_type="hero_slide", natural_key="شريحة العميل")
+        .count()
+        == 0
+    )
+    # Untouched: same row, same id, same title, same picture.
+    kept = db.query(HeroSlide).filter_by(id=slide.id).one()
+    assert kept.title == "اسم جديد اختاره المالك"
+    assert kept.image_url is not None
+
+
+def test_a_record_preserved_by_id_survives_the_purge(
+    importer: PreviewImporter, db: Session, storage: LocalStorageProvider
+) -> None:
+    importer.seed()
+    slide = db.query(HeroSlide).filter_by(title="شريحة العميل").one()
+    asset = db.query(MediaAsset).filter_by(original_filename="hero-art-v1.png").one()
+    preserve(db, "cutover-preview", [Selector("hero_slide", entity_id=slide.id)], apply=True)
+
+    importer.purge(apply=True)
+
+    assert db.query(HeroSlide).filter_by(id=slide.id).count() == 1
+    assert db.query(MediaAsset).filter_by(id=asset.id).count() == 1
+    assert db.query(HeroSlide).filter_by(id=slide.id).one().image_url == asset.url
+    assert storage.exists(asset.stored_key)
+    assert db.query(HeroSlide).filter_by(title="شريحة تجريبية").count() == 0
+
+
+def test_preserve_by_entity_id_carries_the_same_media(
+    importer: PreviewImporter, db: Session
+) -> None:
+    importer.seed()
+    slide = db.query(HeroSlide).filter_by(title="شريحة العميل").one()
+
+    results = preserve(
+        db, "cutover-preview", [Selector("hero_slide", entity_id=slide.id)], apply=True
+    )
+
+    assert results[0].promoted_media == ["hero-art"]
+    assert (
+        db.query(ImportBatchRecord)
+        .filter_by(entity_type="media_asset", natural_key="hero-art")
+        .count()
+        == 0
+    )
+
+
+def test_an_id_never_promotes_a_row_of_another_type(
+    importer: PreviewImporter, db: Session
+) -> None:
+    """A numeric id is meaningless without its table; it must not cross tables.
+
+    Row ids restart per table, so a hero slide and a banner routinely share one. The
+    id is therefore only ever looked up under the entity type it was given with.
+    """
+    importer.seed()
+    banner_ids = {row.id for row in db.query(Banner).all()}
+    slide = next(row for row in db.query(HeroSlide).all() if row.id not in banner_ids)
+
+    results = preserve(db, "cutover-preview", [Selector("banner", entity_id=slide.id)], apply=True)
+
+    assert [r.outcome for r in results] == ["unknown"]
+    assert db.query(HeroSlide).filter_by(id=slide.id).count() == 1
+    assert (
+        db.query(ImportBatchRecord)
+        .filter_by(entity_type="hero_slide", entity_id=slide.id)
+        .count()
+        == 1
+    )
+
+
+def test_preserve_by_an_id_that_does_not_exist(importer: PreviewImporter, db: Session) -> None:
+    importer.seed()
+
+    results = preserve(db, "cutover-preview", [Selector("hero_slide", entity_id=9999)], apply=True)
+
+    assert [r.outcome for r in results] == ["unknown"]
+
+
+def test_preserve_by_entity_id_is_idempotent(importer: PreviewImporter, db: Session) -> None:
+    importer.seed()
+    slide = db.query(HeroSlide).filter_by(title="شريحة العميل").one()
+    target = Selector("hero_slide", entity_id=slide.id)
+    preserve(db, "cutover-preview", [target], apply=True)
+
+    results = preserve(db, "cutover-preview", [target], apply=True)
+
+    assert [r.outcome for r in results] == ["already-unmanaged"]
+    assert db.query(HeroSlide).filter_by(id=slide.id).count() == 1
+
+
+def test_a_selector_refuses_both_a_key_and_an_id() -> None:
+    with pytest.raises(CutoverError):
+        Selector("hero_slide", natural_key="شريحة العميل", entity_id=1)
+
+
+def test_a_selector_refuses_neither_a_key_nor_an_id() -> None:
+    with pytest.raises(CutoverError):
+        Selector("hero_slide")
+
+
+def test_a_selector_refuses_an_unknown_entity_type() -> None:
+    with pytest.raises(CutoverError):
+        Selector("invoice", entity_id=1)
+
+
+def test_the_cli_refuses_mixing_the_two_selectors(importer: PreviewImporter) -> None:
+    args = argparse.Namespace(
+        target=["hero_slide:شريحة العميل"], entity_type="hero_slide", entity_id=1
+    )
+
+    with pytest.raises(CutoverError):
+        _preserve_selectors(args)
+
+
+def test_the_cli_refuses_an_id_without_its_entity_type() -> None:
+    args = argparse.Namespace(target=[], entity_type=None, entity_id=7)
+
+    with pytest.raises(CutoverError):
+        _preserve_selectors(args)
+
+
+def test_the_cli_refuses_no_selector_at_all() -> None:
+    args = argparse.Namespace(target=[], entity_type=None, entity_id=None)
+
+    with pytest.raises(CutoverError):
+        _preserve_selectors(args)
+
+
+def test_the_cli_builds_an_id_selector(importer: PreviewImporter) -> None:
+    args = argparse.Namespace(target=[], entity_type="hero_slide", entity_id=12)
+
+    assert _preserve_selectors(args) == [Selector("hero_slide", entity_id=12)]
 
 
 def test_preserve_reports_a_target_that_matches_nothing(

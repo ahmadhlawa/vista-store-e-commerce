@@ -4,6 +4,7 @@ Argparse, matching `scripts.preview_cli`. Run from `backend/`:
 
     python -m scripts.client_cutover_cli plan     --dataset ../instance/preview/vista-social-preview.yaml
     python -m scripts.client_cutover_cli preserve --dataset ... --target hero_slide:"عنوان" --confirm
+    python -m scripts.client_cutover_cli preserve --dataset ... --entity-type hero_slide --entity-id 12 --confirm
     python -m scripts.client_cutover_cli verify
 
 `plan` and `verify` write nothing. `preserve` writes only with `--confirm`, and only to
@@ -28,6 +29,7 @@ from pathlib import Path
 
 from app.preview.cutover import (
     CutoverError,
+    Selector,
     build_cutover_plan,
     preserve,
     verify_state,
@@ -110,18 +112,47 @@ def cmd_plan(args: argparse.Namespace) -> int:
         "\nReview the delete list. Anything on it that is genuinely the client's must be "
         "promoted first:\n"
         "  python -m scripts.client_cutover_cli preserve --target <entity_type:natural_key> "
-        "--confirm"
+        "--confirm\n"
+        "If the owner has renamed a record, use the id printed after it instead:\n"
+        "  python -m scripts.client_cutover_cli preserve --entity-type <entity_type> "
+        "--entity-id <id> --confirm"
     )
     return EXIT_ATTENTION if report["media_at_risk"] or report["blocked"] else EXIT_OK
 
 
+def _preserve_selectors(args: argparse.Namespace) -> list:
+    """The records this invocation names, from exactly one selector style.
+
+    `--target` carries the natural key and stays the readable default. `--entity-type`
+    with `--entity-id` is the fallback for a record the owner has since renamed, where
+    the row id printed by `plan` is the only stable handle left. Mixing the two in one
+    command is refused rather than guessed at.
+    """
+    by_id = args.entity_type is not None or args.entity_id is not None
+    if args.target and by_id:
+        raise CutoverError(
+            "Use --target, or --entity-type with --entity-id, but not both in one command."
+        )
+    if by_id and (args.entity_type is None or args.entity_id is None):
+        raise CutoverError("--entity-type and --entity-id must be given together.")
+    if not args.target and not by_id:
+        raise CutoverError(
+            "Nothing to preserve. Name a record with --target ENTITY_TYPE:NATURAL_KEY, "
+            "or with --entity-type ENTITY_TYPE --entity-id N, as `plan` prints them."
+        )
+    if by_id:
+        return [Selector(args.entity_type, entity_id=args.entity_id)]
+    return list(args.target)
+
+
 def cmd_preserve(args: argparse.Namespace) -> int:
     dataset = load_dataset(args.dataset)
+    selectors = _preserve_selectors(args)
     with _session() as db:
         results = preserve(
             db,
             dataset.batch_key,
-            args.target,
+            selectors,
             apply=args.confirm,
             include_media=not args.without_media,
         )
@@ -202,6 +233,21 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         metavar="ENTITY_TYPE:NATURAL_KEY",
         help="A record to preserve, exactly as `plan` prints it. Repeatable.",
+    )
+    preserve_parser.add_argument(
+        "--entity-type",
+        metavar="ENTITY_TYPE",
+        help=(
+            "Select one record by row id instead of by natural key — use this when the "
+            "owner has renamed it. Requires --entity-id, and cannot be combined with "
+            "--target."
+        ),
+    )
+    preserve_parser.add_argument(
+        "--entity-id",
+        type=int,
+        metavar="N",
+        help="The row id `plan` prints beside the record. Requires --entity-type.",
     )
     preserve_parser.add_argument(
         "--confirm", action="store_true", help="Actually apply. Without this it is a dry run."
