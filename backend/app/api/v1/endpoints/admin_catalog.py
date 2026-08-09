@@ -534,6 +534,15 @@ def _attach_option_values(
         raise DomainError(
             "بعض قيم الخيارات لا تنتمي لهذا المنتج.", code="option_value_mismatch"
         )
+    # A variant is one combination: at most one value from each option axis, or
+    # the storefront could never resolve a choice back to a single row.
+    axis_of = {value.id: option.id for option in product.options for value in option.values}
+    axes = [axis_of[value_id] for value_id in value_ids]
+    if len(set(axes)) != len(axes):
+        raise DomainError(
+            "لا يمكن اختيار أكثر من قيمة من نفس الخيار للنسخة الواحدة.",
+            code="option_axis_conflict",
+        )
     variant.option_values = [db.get(ProductOptionValue, value_id) for value_id in value_ids]
 
 

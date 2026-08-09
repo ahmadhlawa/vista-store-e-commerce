@@ -184,6 +184,39 @@ def test_variants_belong_to_their_product_and_carry_their_own_stock(
     assert detail["variants"][0]["price_override"] == 150
 
 
+def test_a_variant_cannot_take_two_values_from_the_same_axis(
+    client: TestClient, db: Session, admin_token: str
+) -> None:
+    product = make_product(db, slug="two-axis", name="منتج بمحورين")
+    options = client.put(
+        f"/api/v1/admin/products/{product.id}/options",
+        headers=auth(admin_token),
+        json=[
+            {"name": "اللون", "values": [{"value": "أحمر"}, {"value": "أزرق"}]},
+            {"name": "الحجم", "values": [{"value": "صغير"}, {"value": "كبير"}]},
+        ],
+    ).json()
+    colours = [value["id"] for value in options[0]["values"]]
+    sizes = [value["id"] for value in options[1]["values"]]
+
+    both_colours = client.post(
+        f"/api/v1/admin/products/{product.id}/variants",
+        headers=auth(admin_token),
+        json={"title": "أحمر وأزرق", "option_value_ids": colours},
+    )
+    assert both_colours.status_code == 400
+    assert both_colours.json()["error"]["code"] == "option_axis_conflict"
+
+    # One value per axis is the combination the storefront resolves.
+    created = client.post(
+        f"/api/v1/admin/products/{product.id}/variants",
+        headers=auth(admin_token),
+        json={"title": "أحمر / كبير", "option_value_ids": [colours[0], sizes[1]]},
+    )
+    assert created.status_code == 201, created.text
+    assert sorted(created.json()["option_value_ids"]) == sorted([colours[0], sizes[1]])
+
+
 def test_listing_flags_products_that_need_an_option_chosen(
     client: TestClient, db: Session, admin_token: str
 ) -> None:

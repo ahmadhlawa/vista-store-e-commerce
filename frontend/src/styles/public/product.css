@@ -243,6 +243,12 @@
   margin-inline-start: 3px;
 }
 
+.vs-options__axis {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
 .vs-options__row {
   display: flex;
   gap: 8px;
@@ -273,6 +279,11 @@
 .vs-option[data-out="true"] {
   color: var(--vs-ink-4);
   text-decoration: line-through;
+}
+
+.vs-option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .vs-options__error {

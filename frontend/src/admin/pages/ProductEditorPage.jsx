@@ -4,6 +4,7 @@ import sx from "../../sx.js";
 import { adminApi } from "../../api/adminApi.js";
 import { MediaPickerDialog } from "../MediaPicker.jsx";
 import ProductImageGallery from "../ProductImageGallery.jsx";
+import ProductVariantsEditor from "../ProductVariantsEditor.jsx";
 import {
   Button,
   ConfirmDialog,
@@ -71,7 +72,6 @@ export default function ProductEditorPage() {
   const [pickingImage, setPickingImage] = useState(false);
   const [specs, setSpecs] = useState([]);
   const [options, setOptions] = useState([]);
-  const [variant, setVariant] = useState({ title: "", price_override: "", stock_quantity: 0, option_value_ids: [] });
   const [packageChoice, setPackageChoice] = useState({ included_product_id: "", quantity: 1, display_note: "" });
 
   const update = (patch) => setForm((current) => ({ ...current, ...patch }));
@@ -155,15 +155,20 @@ export default function ProductEditorPage() {
     }
   };
 
-  const run = async (action, successMessage) => {
+  // Rethrows so a caller that owns unsaved form state can keep it on screen
+  // instead of falling back to a row that was never saved.
+  const runOrThrow = async (action, successMessage) => {
     try {
       await action();
       feedback.success(successMessage);
       await loadProduct();
     } catch (error) {
       feedback.error(error.message || "تعذّرت العملية.");
+      throw error;
     }
   };
+
+  const run = (action, successMessage) => runOrThrow(action, successMessage).catch(() => {});
 
   if (loading) return <Spinner />;
 
@@ -340,50 +345,22 @@ export default function ProductEditorPage() {
           </Section>
 
           <Section title="النسخ (المقاسات والألوان)">
-            <div style={sx`display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end`}>
-              <Field title="اسم النسخة"><input value={variant.title} onChange={(e) => setVariant({ ...variant, title: e.target.value })} style={input} /></Field>
-              <Field title="سعر خاص (اختياري)"><input type="number" step="0.01" value={variant.price_override} onChange={(e) => setVariant({ ...variant, price_override: e.target.value })} style={input} /></Field>
-              <Field title="المخزون"><input type="number" value={variant.stock_quantity} onChange={(e) => setVariant({ ...variant, stock_quantity: e.target.value })} style={input} /></Field>
-              <Field title="قيمة الخيار">
-                <select
-                  value={variant.option_value_ids[0] ?? ""}
-                  onChange={(e) => setVariant({ ...variant, option_value_ids: e.target.value ? [Number(e.target.value)] : [] })}
-                  style={input}
-                >
-                  <option value="">بدون</option>
-                  {(product?.options || []).flatMap((option) =>
-                    option.values.map((value) => (
-                      <option key={value.id} value={value.id}>{option.name}: {value.value}</option>
-                    )),
-                  )}
-                </select>
-              </Field>
-              <Button
-                disabled={!variant.title.trim()}
-                onClick={() => run(async () => {
-                  await adminApi.createVariant(productId, {
-                    title: variant.title.trim(),
-                    price_override: num(variant.price_override),
-                    stock_quantity: Number(variant.stock_quantity) || 0,
-                    option_value_ids: variant.option_value_ids,
-                  });
-                  setVariant({ title: "", price_override: "", stock_quantity: 0, option_value_ids: [] });
-                }, "تمت إضافة النسخة.")}
-              >
-                إضافة نسخة
-              </Button>
-            </div>
-            <div style={sx`display:flex;flex-direction:column;gap:8px`}>
-              {(product?.variants || []).map((row) => (
-                <div key={row.id} style={sx`display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid #EFEBE4;border-radius:10px;padding:10px 12px`}>
-                  <strong style={sx`font-size:14px`}>{row.title}</strong>
-                  <span style={sx`font-size:13px;color:#7C766D`}>السعر: {row.price_override ?? "سعر المنتج"}</span>
-                  <span style={sx`font-size:13px;color:#7C766D`}>المخزون: {row.stock_quantity}</span>
-                  <Button variant="danger" style={sx`margin-inline-start:auto;min-height:34px;font-size:12.5px`} onClick={() => run(() => adminApi.deleteVariant(productId, row.id), "تم حذف النسخة.")}>حذف</Button>
-                </div>
-              ))}
-              {!product?.variants?.length && <span style={sx`font-size:13px;color:#9C958A`}>لا توجد نسخ — سيُباع المنتج بسعر ومخزون واحد.</span>}
-            </div>
+            <ProductVariantsEditor
+              options={product?.options || []}
+              variants={product?.variants || []}
+              onCreate={(rows) => runOrThrow(async () => {
+                for (const payload of rows) await adminApi.createVariant(productId, payload);
+              }, rows.length === 1 ? "تمت إضافة النسخة." : `تمت إضافة ${rows.length} نسخة.`)}
+              onUpdate={(variantId, payload) => runOrThrow(
+                () => adminApi.updateVariant(productId, variantId, payload),
+                "تم حفظ النسخة.",
+              )}
+              onDelete={(variantId) => runOrThrow(
+                () => adminApi.deleteVariant(productId, variantId),
+                "تم حذف النسخة.",
+              )}
+              onReport={(message) => feedback.success(message)}
+            />
           </Section>
 
           {isPackage && (
