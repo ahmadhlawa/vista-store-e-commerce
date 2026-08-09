@@ -48,6 +48,7 @@ commerce-instance = "scripts.instance_cli:main"
 commerce-mysql-check = "scripts.mysql_compat:main"
 vista-preview = "scripts.preview_cli:main"
 vista-catalog-prep = "scripts.catalog_prep_cli:main"
+vista-cutover = "scripts.client_cutover_cli:main"
 
 [tool.setuptools]
 packages = ["app", "scripts"]

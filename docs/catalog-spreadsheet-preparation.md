@@ -161,6 +161,11 @@ python -m scripts.preview_cli purge    --dataset ../instance/generated/client-ca
 `plan` shows what a seed would do without writing. Seeding is idempotent, an owner's later
 edit in Admin is never overwritten, and a purge removes only what the batch created.
 
+If the instance currently holds preview/demo content, the demo has to come out **before**
+this import goes in — and some of it may be the client's by now. The full ordering, with
+the step that promotes real content out of the demo batch first, is in
+[client-data-cutover.md](client-data-cutover.md).
+
 ## Requirements
 
 Reading `.xlsx` needs openpyxl, which is not part of a default install:

@@ -52,44 +52,24 @@ from app.models import (
 )
 from app.preview.dataset import PreviewDataset
 from app.preview.media_library import resolve_one
+from app.preview.references import (  # noqa: F401  (re-exported: the entity vocabulary)
+    BANNER,
+    CATEGORY,
+    COUPON,
+    CREATION_ORDER,
+    DELIVERY_AREA,
+    HERO_SLIDE,
+    HOME_SECTION,
+    MEDIA,
+    MODEL_FOR_TYPE,
+    PRODUCT,
+    media_reference_holders,
+)
 from app.services import catalog as catalog_service
 from app.services.placeholder_image import hex_to_rgb, vista_preview_png
 from app.storage.base import StorageProvider, validate_image_upload
 
 Outcome = Literal["create", "update", "repair", "skip", "delete", "blocked", "gone"]
-
-# Entity types, in creation order. Purge walks this list backwards, so a row is never
-# deleted before the rows that point at it.
-MEDIA = "media_asset"
-CATEGORY = "category"
-PRODUCT = "product"
-DELIVERY_AREA = "delivery_area"
-HERO_SLIDE = "hero_slide"
-BANNER = "banner"
-HOME_SECTION = "home_section"
-COUPON = "coupon"
-
-CREATION_ORDER = (
-    MEDIA,
-    CATEGORY,
-    PRODUCT,
-    DELIVERY_AREA,
-    HERO_SLIDE,
-    BANNER,
-    HOME_SECTION,
-    COUPON,
-)
-
-MODEL_FOR_TYPE: dict[str, Any] = {
-    MEDIA: MediaAsset,
-    CATEGORY: Category,
-    PRODUCT: Product,
-    DELIVERY_AREA: DeliveryArea,
-    HERO_SLIDE: HeroSlide,
-    BANNER: Banner,
-    HOME_SECTION: HomeSection,
-    COUPON: Coupon,
-}
 
 IMAGE_SHAPES = {"tile": (640, 800), "wide": (1280, 640), "square": (800, 800)}
 
@@ -1145,6 +1125,10 @@ class PreviewImporter:
             by_type.setdefault(record.entity_type, []).append(record)
 
         deletable: list[tuple[ImportBatchRecord, Any]] = []
+        # What this purge has already decided to remove, by entity type. Media is judged
+        # last (it is first in `CREATION_ORDER`), so by the time an asset is considered,
+        # every row that could still be displaying it is known.
+        deleting: dict[str, set[int]] = {}
 
         # Reverse creation order: dependents die before the rows they point at.
         for entity_type in reversed(CREATION_ORDER):
@@ -1160,7 +1144,7 @@ class PreviewImporter:
 
                 # Checked first, and before `--force` gets a say. These refusals protect
                 # orders and invoices, which no flag on a preview tool may override.
-                blocked = self._deletion_block(batch, entity_type, row)
+                blocked = self._deletion_block(batch, entity_type, row, deleting)
                 if blocked is not None:
                     plan.add("blocked", target, blocked)
                     continue
@@ -1174,6 +1158,7 @@ class PreviewImporter:
                     plan.add("delete", target, record.natural_key)
 
                 deletable.append((record, row))
+                deleting.setdefault(entity_type, set()).add(row.id)
 
         if not apply:
             return plan
@@ -1213,12 +1198,26 @@ class PreviewImporter:
             ).scalars()
         ] or [0]
 
-    def _deletion_block(self, batch: ImportBatch, entity_type: str, row: Any) -> str | None:
+    def _deletion_block(
+        self,
+        batch: ImportBatch,
+        entity_type: str,
+        row: Any,
+        deleting: dict[str, set[int]] | None = None,
+    ) -> str | None:
         """A reason this row must never be deleted, or None.
 
         These are not overridable by `--force`: an order and its invoice are the
-        permanent commercial record, and a preview import does not get to damage them.
+        permanent commercial record, and a preview import does not get to damage them —
+        and neither does a picture that surviving content is still showing, because
+        deleting it would replace a working page with a broken image.
         """
+        if entity_type == MEDIA:
+            holders = media_reference_holders(self.db, row.url, deleting)
+            if holders:
+                shown = ", ".join(holders[:3])
+                more = f" (+{len(holders) - 3} more)" if len(holders) > 3 else ""
+                return f"still displayed by surviving content: {shown}{more}"
         if entity_type == PRODUCT:
             used = self.db.execute(
                 select(func.count()).select_from(OrderItem).where(OrderItem.product_id == row.id)
