@@ -42,6 +42,11 @@ uploaded file exactly where it was.
 
 ## The workbook
 
+The blank template to send the client lives at
+`docs/client-templates/vista-store-catalog-template.xlsx` — Arabic instructions, dropdowns
+and example sheets included. Regenerate it with
+`python ../docs/client-templates/generate_catalog_template.py`.
+
 One `.xlsx` file with a `products` sheet and a `categories` sheet. (A directory holding
 `products.csv` and `categories.csv` works too — pass the directory.) Column headers are
 matched case-insensitively, and spaces become underscores: `Compare At Price` is

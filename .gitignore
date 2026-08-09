@@ -75,6 +75,8 @@ release/
 instance/generated/
 *.xlsx
 *.xlsm
+# …except the empty template we hand to the client. It holds no client data.
+!docs/client-templates/vista-store-catalog-template.xlsx
 
 
 
