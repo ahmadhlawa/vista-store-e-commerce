@@ -15,6 +15,7 @@ export function MediaPickerDialog({ onSelect, onClose, initialUrl = null }) {
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
+  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState(null);
   const [uploadError, setUploadError] = useState(null);
@@ -25,7 +26,7 @@ export function MediaPickerDialog({ onSelect, onClose, initialUrl = null }) {
     setLoading(true);
     setListError(null);
     try {
-      const result = await adminApi.listMedia({ page, page_size: PAGE_SIZE });
+      const result = await adminApi.listMedia({ page, page_size: PAGE_SIZE, q: query || undefined });
       setItems(result.items || []);
       setPages(result.pages || 1);
     } catch (error) {
@@ -34,7 +35,7 @@ export function MediaPickerDialog({ onSelect, onClose, initialUrl = null }) {
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [page, query]);
 
   useEffect(() => {
     load();
@@ -78,6 +79,18 @@ export function MediaPickerDialog({ onSelect, onClose, initialUrl = null }) {
         <span style={sx`font-size:12px;color:#9C958A`}>JPEG، PNG، WebP، GIF، ICO — بحد أقصى ٥ ميغابايت.</span>
       </div>
 
+      <input
+        aria-label="بحث باسم الملف"
+        type="search"
+        value={query}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setPage(1);
+        }}
+        placeholder="بحث باسم الملف"
+        style={sx`width:100%;margin-top:12px;padding:10px 12px;border:1px solid #D8D2C8;border-radius:9px;font:inherit`}
+      />
+
       {uploadError && <Notice kind="error">{uploadError}</Notice>}
 
       {loading ? (
@@ -88,7 +101,9 @@ export function MediaPickerDialog({ onSelect, onClose, initialUrl = null }) {
           <Button variant="secondary" onClick={load}>إعادة المحاولة</Button>
         </div>
       ) : items.length === 0 ? (
-        <p style={sx`padding:28px;text-align:center;color:#7C766D;font-size:14px`}>لا توجد صور في المكتبة بعد — ارفع صورة جديدة.</p>
+        <p style={sx`padding:28px;text-align:center;color:#7C766D;font-size:14px`}>
+          {query ? "لا توجد وسائط مطابقة." : "لا توجد صور في المكتبة بعد — ارفع صورة جديدة."}
+        </p>
       ) : (
         <div style={sx`max-height:min(52vh,420px);overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;padding:2px`}>
           {items.map((asset) => {

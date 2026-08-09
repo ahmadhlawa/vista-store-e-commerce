@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, File, UploadFile, status
+from typing import Annotated
+
+from fastapi import APIRouter, File, Query, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
@@ -11,7 +13,7 @@ from app.api.deps import CurrentAdmin, DbSession, PageParams
 from app.core.config import settings
 from app.models import MediaAsset
 from app.schemas.common import MessageResponse, Page
-from app.schemas.media import MediaAssetOut
+from app.schemas.media import MAX_MEDIA_FILENAME_LENGTH, MediaAssetOut, MediaAssetRenameIn
 from app.services import audit as audit_service
 from app.services import catalog as catalog_service
 from app.services.errors import ConflictError
@@ -33,9 +35,25 @@ def filename_is_taken(db, filename: str) -> bool:
     return _asset_id_named(db, filename) is not None
 
 
+def filename_is_taken_by_other(db, filename: str, asset_id: int) -> bool:
+    return db.scalar(
+        select(MediaAsset.id).where(
+            MediaAsset.original_filename == filename, MediaAsset.id != asset_id
+        )
+    ) is not None
+
+
 @router.get("/media", response_model=Page[MediaAssetOut])
-def list_media(db: DbSession, admin: CurrentAdmin, pagination: PageParams) -> Page[MediaAssetOut]:
-    stmt = select(MediaAsset).order_by(MediaAsset.id.desc())
+def list_media(
+    db: DbSession,
+    admin: CurrentAdmin,
+    pagination: PageParams,
+    q: Annotated[str | None, Query(max_length=120)] = None,
+) -> Page[MediaAssetOut]:
+    stmt = select(MediaAsset)
+    if q:
+        stmt = stmt.where(MediaAsset.original_filename.like(f"%{q}%"))
+    stmt = stmt.order_by(MediaAsset.id.desc())
     rows, total = catalog_service.paginate(
         db, stmt, offset=pagination.offset, limit=pagination.page_size
     )
@@ -63,7 +81,7 @@ async def upload_media(
     # create the ambiguity — and never overwrite the first one. Checked before the bytes
     # are written so the ordinary rejection leaves nothing behind in storage; the unique
     # index on the column is what makes it true under concurrency (see below).
-    original_filename = (file.filename or "upload")[:MAX_FILENAME_LENGTH]
+    original_filename = (file.filename or "upload")[:MAX_MEDIA_FILENAME_LENGTH]
     if filename_is_taken(db, original_filename):
         raise ConflictError(DUPLICATE_FILENAME_MESSAGE, code="duplicate_filename")
 
@@ -99,6 +117,37 @@ async def upload_media(
         storage.delete(stored.key)
         if _asset_id_named(db, original_filename) is None:
             # Some other constraint failed; it is a server fault, not a duplicate name.
+            raise
+        raise ConflictError(DUPLICATE_FILENAME_MESSAGE, code="duplicate_filename") from None
+    db.refresh(asset)
+    return asset
+
+
+@router.patch("/media/{asset_id}", response_model=MediaAssetOut)
+def rename_media(
+    asset_id: int, payload: MediaAssetRenameIn, db: DbSession, admin: CurrentAdmin
+) -> MediaAsset:
+    asset = get_or_404(db, MediaAsset, asset_id)
+    original_filename = payload.original_filename
+    if filename_is_taken_by_other(db, original_filename, asset_id):
+        raise ConflictError(DUPLICATE_FILENAME_MESSAGE, code="duplicate_filename")
+
+    previous_filename = asset.original_filename
+    asset.original_filename = original_filename
+    try:
+        db.flush()
+        audit_service.record(
+            db,
+            admin=admin,
+            action="media.renamed",
+            entity_type="media_asset",
+            entity_id=asset.id,
+            meta={"original_filename": original_filename, "previous_filename": previous_filename},
+        )
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        if not filename_is_taken_by_other(db, original_filename, asset_id):
             raise
         raise ConflictError(DUPLICATE_FILENAME_MESSAGE, code="duplicate_filename") from None
     db.refresh(asset)

@@ -229,6 +229,71 @@ def test_local_upload_returns_a_usable_url_and_writes_the_file(
     assert db.query(MediaAsset).count() == 0
 
 
+def test_media_list_searches_filenames_and_paginates(
+    client: TestClient, admin_token: str
+) -> None:
+    for filename in ("VST-1001-01.jpg", "VST-1001-02.jpg", "other.jpg"):
+        response = client.post(
+            "/api/v1/admin/media",
+            headers=auth(admin_token),
+            files={"file": (filename, _png_bytes(), "image/png")},
+        )
+        assert response.status_code == 201
+
+    blank = client.get("/api/v1/admin/media?q=", headers=auth(admin_token)).json()
+    assert blank["total"] == 3
+
+    first = client.get(
+        "/api/v1/admin/media?q=VST-1001&page=1&page_size=1", headers=auth(admin_token)
+    ).json()
+    second = client.get(
+        "/api/v1/admin/media?q=VST-1001&page=2&page_size=1", headers=auth(admin_token)
+    ).json()
+    assert first["total"] == 2
+    assert first["items"][0]["original_filename"] == "VST-1001-02.jpg"
+    assert second["items"][0]["original_filename"] == "VST-1001-01.jpg"
+
+
+def test_media_rename_is_logical_and_validated(
+    client: TestClient, db: Session, admin_token: str
+) -> None:
+    first = client.post(
+        "/api/v1/admin/media",
+        headers=auth(admin_token),
+        files={"file": ("OLD.jpg", _png_bytes(), "image/png")},
+    ).json()
+    client.post(
+        "/api/v1/admin/media",
+        headers=auth(admin_token),
+        files={"file": ("taken.jpg", _png_bytes(), "image/png")},
+    )
+    renamed = client.patch(
+        f"/api/v1/admin/media/{first['id']}",
+        headers=auth(admin_token),
+        json={"original_filename": "NEW.jpg"},
+    )
+    assert renamed.status_code == 200
+    assert renamed.json()["original_filename"] == "NEW.jpg"
+    assert renamed.json()["stored_key"] == first["stored_key"]
+    assert renamed.json()["url"] == first["url"]
+    assert client.patch(
+        f"/api/v1/admin/media/{first['id']}",
+        headers=auth(admin_token),
+        json={"original_filename": "taken.jpg"},
+    ).json()["error"]["code"] == "duplicate_filename"
+    assert client.patch(
+        f"/api/v1/admin/media/{first['id']}",
+        headers=auth(admin_token),
+        json={"original_filename": "../unsafe.jpg"},
+    ).status_code == 422
+    assert client.patch(
+        "/api/v1/admin/media/99999",
+        headers=auth(admin_token),
+        json={"original_filename": "missing.jpg"},
+    ).status_code == 404
+    assert db.query(MediaAsset).filter_by(original_filename="NEW.jpg").count() == 1
+
+
 def test_upload_rejects_disallowed_content_regardless_of_the_declared_type(
     client: TestClient, admin_token: str, media_root: Path
 ) -> None:

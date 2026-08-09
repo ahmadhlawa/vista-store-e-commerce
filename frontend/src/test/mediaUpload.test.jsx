@@ -67,6 +67,54 @@ const drop = (files) =>
   fireEvent.drop(screen.getByTestId("media-dropzone"), { dataTransfer: { files } });
 
 describe("admin bulk media upload", () => {
+  it("searches the library and clearing restores the full list", async () => {
+    const calls = stubApi({
+      "/api/v1/admin/media": ({ path }) =>
+        path.includes("q=VST") ? page([asset(1, "VST-1001-01.jpg")]) : page([asset(2, "other.jpg")]),
+    });
+    await renderPage();
+
+    const search = screen.getByLabelText("بحث باسم الملف");
+    await userEvent.type(search, "VST");
+    expect(await screen.findByText("VST-1001-01.jpg")).toBeInTheDocument();
+    await userEvent.clear(search);
+    expect(await screen.findByText("other.jpg")).toBeInTheDocument();
+    expect(calls.some((call) => call.path.includes("q=VST"))).toBe(true);
+  });
+
+  it("renames an asset and keeps the editor open on failure or cancel", async () => {
+    let renamed = false;
+    stubApi({
+      "/api/v1/admin/media": () => page([asset(1, renamed ? "NEW.jpg" : "OLD.jpg")]),
+      "PATCH /api/v1/admin/media/1": ({ init }) => {
+        const { original_filename } = JSON.parse(init.body);
+        if (original_filename === "taken.jpg") {
+          return respond(409, { error: { code: "duplicate_filename", message: "الاسم مستخدم بالفعل." } });
+        }
+        renamed = true;
+        return asset(1, original_filename);
+      },
+    });
+    await renderPage();
+
+    await userEvent.click(await screen.findByRole("button", { name: "تعديل الاسم" }));
+    const editor = screen.getByLabelText("اسم الملف");
+    await userEvent.clear(editor);
+    await userEvent.type(editor, "taken.jpg");
+    await userEvent.click(screen.getByRole("button", { name: "حفظ" }));
+    expect(await screen.findByText("الاسم مستخدم بالفعل.")).toBeInTheDocument();
+    expect(screen.getByLabelText("اسم الملف")).toHaveValue("taken.jpg");
+
+    await userEvent.clear(editor);
+    await userEvent.type(editor, "NEW.jpg");
+    await userEvent.click(screen.getByRole("button", { name: "حفظ" }));
+    expect(await screen.findByText("NEW.jpg")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "تعديل الاسم" }));
+    await userEvent.click(screen.getByRole("button", { name: "إلغاء" }));
+    expect(screen.queryByLabelText("اسم الملف")).not.toBeInTheDocument();
+  });
+
   it("queues every file chosen from the picker and uploads them all", async () => {
     const { library } = setupApi();
     await renderPage();

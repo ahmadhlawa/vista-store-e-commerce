@@ -101,6 +101,7 @@ export const adminApi = {
     form.append("file", file);
     return request("/admin/media", { method: "POST", body: form, auth: true });
   },
+  renameMedia: (id, payload) => api.patch(`/admin/media/${id}`, payload, authed),
   deleteMedia: (id) => api.delete(`/admin/media/${id}`, authed),
 
   getSettings: () => api.get("/admin/settings", authed),

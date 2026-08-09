@@ -43,6 +43,19 @@ const openPicker = async () => {
 };
 
 describe("media picker", () => {
+  it("searches media by filename", async () => {
+    stubApi({
+      "/api/v1/admin/media": ({ path }) =>
+        path.includes("q=banner") ? page([asset(2, "banner.png")]) : LIBRARY,
+    });
+    render(<Harness />);
+
+    const dialog = await openPicker();
+    await userEvent.type(within(dialog).getByLabelText("بحث باسم الملف"), "banner");
+    expect(await within(dialog).findByText("banner.png")).toBeInTheDocument();
+    expect(within(dialog).queryByText("hero.png")).not.toBeInTheDocument();
+  });
+
   it("opens from the image field and lists the existing library", async () => {
     stubApi({ "/api/v1/admin/media": LIBRARY });
     render(<Harness />);

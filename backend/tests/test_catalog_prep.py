@@ -215,6 +215,30 @@ def test_a_filename_resolves_to_that_exact_media_asset(tmp_path: Path, db: Sessi
     assert "stored_key" not in document
 
 
+def test_renamed_media_resolves_only_by_its_new_filename(tmp_path: Path, db: Session) -> None:
+    media(db, "OLD.jpg")
+    asset = db.query(MediaAsset).filter_by(original_filename="OLD.jpg").one()
+    asset.original_filename = "NEW.jpg"
+    db.commit()
+
+    old = write_workbook(
+        tmp_path / "old.xlsx",
+        categories=[{"name": "Gifts", "slug": "gifts"}],
+        products=[{"name": "Mug", "category_slug": "gifts", "price": 10, "image_1": "OLD.jpg"}],
+    )
+    with pytest.raises(PreparationError):
+        prepare(db, old)
+
+    new = write_workbook(
+        tmp_path / "new.xlsx",
+        categories=[{"name": "Gifts", "slug": "gifts"}],
+        products=[{"name": "Mug", "category_slug": "gifts", "price": 10, "image_1": "NEW.jpg"}],
+    )
+    prepared = prepare(db, new)
+    assert len(prepared.dataset.media) == 1
+    assert prepared.dataset.media[0].library_filename == "NEW.jpg"
+
+
 def test_values_are_normalised(tmp_path: Path, db: Session) -> None:
     """Booleans, prices and whole numbers, in the spellings a client actually types."""
     workbook = write_workbook(
