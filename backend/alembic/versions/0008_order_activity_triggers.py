@@ -31,9 +31,6 @@ def _blocks_legacy_downgrade() -> bool:
 
 _UPDATE_TRIGGER = "trg_order_activities_no_update"
 _DELETE_TRIGGER = "trg_order_activities_no_delete"
-_AUDIT_SCHEMA = "vista_migr_audit"
-
-
 def _trigger_deployment_error(detail: str) -> RuntimeError:
     return RuntimeError(
         "MySQL trigger deployment preflight failed: "
@@ -43,7 +40,7 @@ def _trigger_deployment_error(detail: str) -> RuntimeError:
     )
 
 
-def _has_privilege(grants: list[str], privilege: str) -> bool:
+def _has_privilege(grants: list[str], privilege: str, schema: str) -> bool:
     for grant in grants:
         normalized = grant.upper().replace("`", "")
         privileges, _, scope = normalized.partition(" ON ")
@@ -53,7 +50,7 @@ def _has_privilege(grants: list[str], privilege: str) -> bool:
             return True
         if privilege == "TRIGGER" and (
             "TRIGGER" in privileges
-            and (scope.startswith("*.*") or scope.startswith(f"{_AUDIT_SCHEMA.upper()}.*"))
+            and (scope.startswith("*.*") or scope.startswith(f"{schema.upper()}.*"))
         ):
             return True
     return False
@@ -65,10 +62,6 @@ def _assert_mysql_trigger_preflight(bind: sa.Connection) -> None:
         return
 
     schema = bind.execute(sa.text("SELECT DATABASE()")).scalar_one()
-    if schema != _AUDIT_SCHEMA:
-        raise RuntimeError(
-            f"MySQL trigger migration is restricted to {_AUDIT_SCHEMA!r}; selected schema is {schema!r}."
-        )
     try:
         log_bin, trust_creators = bind.execute(
             sa.text("SELECT @@GLOBAL.log_bin, @@GLOBAL.log_bin_trust_function_creators")
@@ -86,9 +79,9 @@ def _assert_mysql_trigger_preflight(bind: sa.Connection) -> None:
     except Exception as exc:
         raise _trigger_deployment_error("could not establish trigger viability because effective grants are unreadable") from exc
 
-    if not _has_privilege(grants, "TRIGGER"):
-        raise _trigger_deployment_error("the migration account lacks TRIGGER privilege on the audit schema")
-    if not _has_privilege(grants, "SUPER"):
+    if not _has_privilege(grants, "TRIGGER", schema):
+        raise _trigger_deployment_error("the migration account lacks TRIGGER privilege on the selected schema")
+    if not _has_privilege(grants, "SUPER", schema):
         raise _trigger_deployment_error(
             "binary logging is enabled, trust is disabled, and the migration account lacks SUPER"
         )

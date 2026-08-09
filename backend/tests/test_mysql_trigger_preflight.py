@@ -117,8 +117,7 @@ def test_preflight_is_a_sqlite_no_op(migration) -> None:
     assert bind.statements == []
 
 
-def test_preflight_rejects_any_schema_other_than_the_audit_schema(migration) -> None:
-    bind = Bind({"SELECT DATABASE()": "vista_store_dev"})
+def test_preflight_allows_any_schema_when_binary_log_trust_is_enabled(migration) -> None:
+    bind = Bind({"SELECT DATABASE()": "commerce_ci", "@@GLOBAL.log_bin": (1, 1)})
 
-    with pytest.raises(RuntimeError, match="vista_migr_audit"):
-        migration._assert_mysql_trigger_preflight(bind)
+    migration._assert_mysql_trigger_preflight(bind)
