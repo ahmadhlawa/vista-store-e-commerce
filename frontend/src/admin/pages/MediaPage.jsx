@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import sx from "../../sx.js";
 import { adminApi } from "../../api/adminApi.js";
+import { MediaUploader } from "../mediaUpload.jsx";
 import {
   Button,
   ConfirmDialog,
-  Notice,
   PageHeader,
   Pagination,
   Spinner,
@@ -14,12 +14,10 @@ import {
 
 export default function MediaPage() {
   const feedback = useFeedback();
-  const fileRef = useRef(null);
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
   const [confirming, setConfirming] = useState(null);
   const [copied, setCopied] = useState(null);
 
@@ -41,21 +39,12 @@ export default function MediaPage() {
     load();
   }, [load]);
 
-  const upload = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      await adminApi.uploadMedia(file);
-      feedback.success("تم رفع الملف.");
-      setPage(1);
-      await load();
-    } catch (error) {
-      feedback.error(error.message || "تعذّر رفع الملف.");
-    } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
+  // Uploads are done by the time this runs; the library just has to catch up. Newly
+  // uploaded assets are the newest rows, so page one is where they show.
+  const uploaded = async (assets) => {
+    feedback.success(`تم رفع ${assets.length} ملفاً.`);
+    if (page !== 1) setPage(1);
+    else await load();
   };
 
   const remove = async () => {
@@ -85,17 +74,12 @@ export default function MediaPage() {
       <PageHeader
         title="الوسائط"
         description="مكتبة صور المتجر. تُختار هذه الصور مباشرة من حقول الصور في لوحة الإدارة، ويبقى نسخ الرابط متاحاً عند الحاجة."
-        actions={
-          <>
-            <input ref={fileRef} type="file" accept="image/*" onChange={upload} style={sx`display:none`} />
-            <Button disabled={uploading} onClick={() => fileRef.current?.click()}>
-              {uploading ? "جارٍ الرفع…" : "رفع صورة"}
-            </Button>
-          </>
-        }
       />
       {feedback.node}
-      <Notice>الأنواع المسموحة: JPEG و PNG و WebP و GIF و ICO، بحد أقصى ٥ ميغابايت.</Notice>
+
+      <div style={{ ...card, marginBottom: "14px" }}>
+        <MediaUploader onUploaded={uploaded} />
+      </div>
 
       <div style={card}>
         {loading ? (

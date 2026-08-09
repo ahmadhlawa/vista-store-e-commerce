@@ -238,6 +238,40 @@ def test_upload_rejects_disallowed_content_regardless_of_the_declared_type(
     assert list(media_root.iterdir()) == []
 
 
+def test_upload_rejects_a_filename_already_in_the_library(
+    client: TestClient, db: Session, admin_token: str, media_root: Path
+) -> None:
+    """The catalog importer resolves by original_filename, so it must stay unique."""
+    first = client.post(
+        "/api/v1/admin/media",
+        headers=auth(admin_token),
+        files={"file": ("photo.png", _png_bytes(), "image/png")},
+    )
+    assert first.status_code == 201
+
+    duplicate = client.post(
+        "/api/v1/admin/media",
+        headers=auth(admin_token),
+        files={"file": ("photo.png", gradient_png(4, 4, (0, 255, 0), (0, 0, 0)), "image/png")},
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json()["error"]["code"] == "duplicate_filename"
+
+    # Neither a second ambiguous row nor a second stored object, and the first is intact.
+    assert db.query(MediaAsset).count() == 1
+    assert len(list(media_root.rglob("*.png"))) == 1
+    stored = db.query(MediaAsset).one()
+    assert stored.stored_key == first.json()["stored_key"]
+
+    # A different name still uploads fine.
+    other = client.post(
+        "/api/v1/admin/media",
+        headers=auth(admin_token),
+        files={"file": ("photo-2.png", _png_bytes(), "image/png")},
+    )
+    assert other.status_code == 201
+
+
 def test_upload_rejects_an_svg(client: TestClient, admin_token: str) -> None:
     svg = b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>"
     response = client.post(

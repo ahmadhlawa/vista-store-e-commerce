@@ -13,6 +13,7 @@ from app.schemas.common import MessageResponse, Page
 from app.schemas.media import MediaAssetOut
 from app.services import audit as audit_service
 from app.services import catalog as catalog_service
+from app.services.errors import ConflictError
 from app.storage import get_storage, validate_image_upload
 
 router = APIRouter(prefix="/admin", tags=["admin-media"])
@@ -45,9 +46,20 @@ async def upload_media(
     # the real type comes from the bytes.
     content_type, extension = validate_image_upload(data, settings.MAX_UPLOAD_SIZE_BYTES)
 
+    # The catalog importer resolves a product image by `original_filename`, so two rows
+    # sharing one name make that lookup ambiguous. Refuse the second upload rather than
+    # create the ambiguity — and never overwrite the first one. Checked before the bytes
+    # are written so a rejected upload leaves nothing behind in storage.
+    original_filename = (file.filename or "upload")[:MAX_FILENAME_LENGTH]
+    taken = db.scalar(
+        select(MediaAsset.id).where(MediaAsset.original_filename == original_filename)
+    )
+    if taken is not None:
+        raise ConflictError("يوجد ملف بهذا الاسم بالفعل.", code="duplicate_filename")
+
     stored = get_storage().save(data, content_type=content_type, extension=extension)
     asset = MediaAsset(
-        original_filename=(file.filename or "upload")[:MAX_FILENAME_LENGTH],
+        original_filename=original_filename,
         stored_key=stored.key,
         content_type=stored.content_type,
         size_bytes=stored.size_bytes,
