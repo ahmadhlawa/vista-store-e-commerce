@@ -235,6 +235,7 @@ def test_every_revision_applies_one_at_a_time_up_to_head(migration_url: str) -> 
         "0007_active_marker_null_safe",
         "0008_order_activity_triggers",
         "0009_invoice_issuer_snapshot",
+        "0010_unique_media_filename",
     ):
         result = alembic(migration_url, "upgrade", target)
         assert result.returncode == 0, (
@@ -264,9 +265,10 @@ def test_every_revision_applies_one_at_a_time_up_to_head(migration_url: str) -> 
 def test_the_new_chain_downgrades_and_re_upgrades_on_mysql(migration_url: str) -> None:
     """Dropping the columns has the same index/constraint ordering hazard in reverse."""
     reset(migration_url)
-    run_ok(migration_url, "upgrade", "0009_invoice_issuer_snapshot")
+    run_ok(migration_url, "upgrade", "0010_unique_media_filename")
 
     for target in (
+        "0009_invoice_issuer_snapshot",
         "0008_order_activity_triggers",
         "0007_active_marker_null_safe",
         "0006_active_invoice_marker",
@@ -286,4 +288,79 @@ def test_the_new_chain_downgrades_and_re_upgrades_on_mysql(migration_url: str) -
     assert foreign_keys_on(migration_url, "invoices", "order_id")
 
     run_ok(migration_url, "upgrade", "head")
+    assert revision(migration_url) == "0010_unique_media_filename"
+
+
+# ── 0010: unique media_assets.original_filename ──────────────────────────────
+UNIQUE_FILENAME_INDEX = "ix_media_assets_original_filename"
+
+_INSERT_MEDIA = (
+    "INSERT INTO media_assets "
+    "(original_filename, stored_key, content_type, size_bytes, url, storage_provider,"
+    " created_at) "
+    "VALUES (:name, :key, 'image/png', 1, :url, 'local', '2026-01-01 00:00:00')"
+)
+
+
+def insert_media(url: str, rows: list[tuple[str, str]]) -> None:
+    engine = build_engine(url)
+    try:
+        with engine.begin() as connection:
+            for name, key in rows:
+                connection.execute(
+                    text(_INSERT_MEDIA), {"name": name, "key": key, "url": f"/media/{key}"}
+                )
+    finally:
+        engine.dispose()
+
+
+def media_filenames(url: str) -> list[str]:
+    engine = build_engine(url)
+    try:
+        with engine.connect() as connection:
+            return connection.execute(
+                text("SELECT original_filename FROM media_assets ORDER BY id")
+            ).scalars().all()
+    finally:
+        engine.dispose()
+
+
+def test_0010_refuses_duplicates_the_way_mysql_will_compare_them(migration_url: str) -> None:
+    """MySQL's default collation is case-insensitive, so the preflight must be too.
+
+    A preflight comparing filenames in Python would let `Photo.png` and `photo.png`
+    through, and CREATE UNIQUE INDEX would then fail on a schema MySQL cannot roll
+    back. Grouping in the database uses the column's own collation, so the check and
+    the index agree.
+    """
+    reset(migration_url)
+    run_ok(migration_url, "upgrade", "0009_invoice_issuer_snapshot")
+    insert_media(migration_url, [("Photo.png", "a.png"), ("photo.png", "b.png")])
+
+    result = alembic(migration_url, "upgrade", "0010_unique_media_filename")
+    assert result.returncode != 0, result.stdout
+    assert "photo.png" in (result.stdout + result.stderr).lower()
+
+    # Nothing removed or renamed, and the schema is untouched.
+    assert media_filenames(migration_url) == ["Photo.png", "photo.png"]
+    assert UNIQUE_FILENAME_INDEX not in indexes_on(
+        migration_url, "media_assets", "original_filename"
+    )
     assert revision(migration_url) == "0009_invoice_issuer_snapshot"
+
+    # Once the owner resolves the collision by hand, the migration applies.
+    engine = build_engine(migration_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("DELETE FROM media_assets WHERE stored_key = 'b.png'"))
+    finally:
+        engine.dispose()
+
+    run_ok(migration_url, "upgrade", "0010_unique_media_filename")
+    assert UNIQUE_FILENAME_INDEX in indexes_on(migration_url, "media_assets", "original_filename")
+
+    run_ok(migration_url, "downgrade", "0009_invoice_issuer_snapshot")
+    assert UNIQUE_FILENAME_INDEX not in indexes_on(
+        migration_url, "media_assets", "original_filename"
+    )
+    assert media_filenames(migration_url) == ["Photo.png"]

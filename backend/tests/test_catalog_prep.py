@@ -16,6 +16,7 @@ from typing import Any
 
 import pytest
 from openpyxl import Workbook
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.catalog_prep import PreparationError, prepare_catalog, read_sheets, render_yaml
@@ -62,7 +63,14 @@ def write_workbook(path: Path, *, products: list[dict], categories: list[dict]) 
 
 
 def media(db: Session, *filenames: str, duplicate: str | None = None) -> None:
-    """Put files in the Media Library the way an upload would have."""
+    """Put files in the Media Library the way an upload would have.
+
+    `duplicate` is only reachable on a library that predates the uniqueness rule, so
+    the index is dropped first: current databases cannot hold two rows under one name,
+    but preparation still has to refuse an old or hand-edited one rather than guess.
+    """
+    if duplicate:
+        db.execute(text("DROP INDEX ix_media_assets_original_filename"))
     for position, filename in enumerate(filenames + ((duplicate,) if duplicate else ()), start=1):
         db.add(
             MediaAsset(

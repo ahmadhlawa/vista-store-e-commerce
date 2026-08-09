@@ -15,7 +15,12 @@ class MediaAsset(Base):
     __tablename__ = "media_assets"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    original_filename: Mapped[str] = mapped_column(String(300), nullable=False)
+    # Unique because the catalog importer resolves a product image by this name: two rows
+    # sharing it would make that lookup ambiguous. The database is the authority — the
+    # upload pre-check only turns the collision into a friendly answer.
+    original_filename: Mapped[str] = mapped_column(
+        String(300), unique=True, index=True, nullable=False
+    )
     stored_key: Mapped[str] = mapped_column(String(300), unique=True, nullable=False)
     content_type: Mapped[str] = mapped_column(String(100), nullable=False)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)

@@ -4,11 +4,15 @@ import struct
 import zlib
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+import app.api.v1.endpoints.admin_media as admin_media
 from app.models import Article, AuditLog, MediaAsset, StaticPage, StoreSettings
 from app.services.placeholder_image import gradient_png, vista_preview_png
+from app.storage.base import StoredFile
 from tests.conftest import auth
 
 
@@ -270,6 +274,67 @@ def test_upload_rejects_a_filename_already_in_the_library(
         files={"file": ("photo-2.png", _png_bytes(), "image/png")},
     )
     assert other.status_code == 201
+
+
+def test_upload_that_loses_the_uniqueness_race_still_answers_409(
+    client: TestClient, db: Session, admin_token: str, media_root: Path, monkeypatch
+) -> None:
+    """Two simultaneous uploads both pass the pre-check; the database decides."""
+    first = client.post(
+        "/api/v1/admin/media",
+        headers=auth(admin_token),
+        files={"file": ("photo.png", _png_bytes(), "image/png")},
+    )
+    assert first.status_code == 201
+    written_before = sorted(path.name for path in media_root.rglob("*.png"))
+
+    # Stand in for the other request having committed between the pre-check and the insert.
+    monkeypatch.setattr(admin_media, "filename_is_taken", lambda db, filename: False)
+
+    raced = client.post(
+        "/api/v1/admin/media",
+        headers=auth(admin_token),
+        files={"file": ("photo.png", gradient_png(4, 4, (0, 255, 0), (0, 0, 0)), "image/png")},
+    )
+    assert raced.status_code == 409, raced.text
+    assert raced.json()["error"]["code"] == "duplicate_filename"
+
+    # One row, and the bytes written by the losing request are gone again.
+    assert db.query(MediaAsset).count() == 1
+    assert sorted(path.name for path in media_root.rglob("*.png")) == written_before
+
+    # The session recovered, so the library keeps working.
+    other = client.post(
+        "/api/v1/admin/media",
+        headers=auth(admin_token),
+        files={"file": ("photo-2.png", _png_bytes(), "image/png")},
+    )
+    assert other.status_code == 201
+
+
+def test_an_unrelated_integrity_error_is_not_reported_as_a_duplicate_filename(
+    client: TestClient, db: Session, admin_token: str, media_root: Path, monkeypatch
+) -> None:
+    first = client.post(
+        "/api/v1/admin/media",
+        headers=auth(admin_token),
+        files={"file": ("photo.png", _png_bytes(), "image/png")},
+    )
+    assert first.status_code == 201
+
+    # A colliding stored_key is a different unique constraint and a real server fault.
+    storage = admin_media.get_storage()
+    taken_key = first.json()["stored_key"]
+    monkeypatch.setattr(storage, "save", lambda *a, **k: StoredFile(
+        key=taken_key, url=f"/media/{taken_key}", content_type="image/png", size_bytes=1
+    ))
+
+    with pytest.raises(IntegrityError):
+        client.post(
+            "/api/v1/admin/media",
+            headers=auth(admin_token),
+            files={"file": ("photo-2.png", _png_bytes(), "image/png")},
+        )
 
 
 def test_upload_rejects_an_svg(client: TestClient, admin_token: str) -> None:

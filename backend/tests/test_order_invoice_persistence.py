@@ -613,7 +613,7 @@ def test_downgrade_with_replacement_history_refuses_to_stamp_invalid_0004(
         command.downgrade(config, "0004_import_batches")
     command.upgrade(config, "head")
     with engine.connect() as connection:
-        assert connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0009_invoice_issuer_snapshot"
+        assert connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0010_unique_media_filename"
     engine.dispose()
 
 
