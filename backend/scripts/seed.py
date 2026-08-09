@@ -518,7 +518,6 @@ def ensure_products(
                     url=image_url,
                     alt_text=name,
                     sort_order=0,
-                    is_primary=True,
                 )
             )
 

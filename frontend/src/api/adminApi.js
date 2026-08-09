@@ -19,6 +19,9 @@ export const adminApi = {
   addProductImage: (id, payload) => api.post(`/admin/products/${id}/images`, payload, authed),
   deleteProductImage: (id, imageId) =>
     api.delete(`/admin/products/${id}/images/${imageId}`, authed),
+  // The whole image set, in the order it should be stored: position decides the cover.
+  reorderProductImages: (id, imageIds) =>
+    api.put(`/admin/products/${id}/images/reorder`, { image_ids: imageIds }, authed),
   replaceSpecifications: (id, payload) =>
     api.put(`/admin/products/${id}/specifications`, payload, authed),
   replaceOptions: (id, payload) => api.put(`/admin/products/${id}/options`, payload, authed),

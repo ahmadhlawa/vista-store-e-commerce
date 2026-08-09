@@ -256,32 +256,80 @@ def test_package_cannot_contain_itself_or_another_package(
     assert non_package.json()["error"]["code"] == "not_a_package"
 
 
-def test_product_images_pick_a_primary(client: TestClient, db: Session, admin_token: str) -> None:
-    product = make_product(db, slug="imaged", name="منتج بصورة")
-    first = client.post(
-        f"/api/v1/admin/products/{product.id}/images",
+def _add_image(client, admin_token, product_id, url):
+    response = client.post(
+        f"/api/v1/admin/products/{product_id}/images",
         headers=auth(admin_token),
-        json={"url": "/media/a.png", "alt_text": "أ"},
+        json={"url": url},
     )
-    assert first.status_code == 201
-    assert first.json()["is_primary"] is True
+    assert response.status_code == 201
+    return response.json()
 
-    second = client.post(
-        f"/api/v1/admin/products/{product.id}/images",
+
+def test_product_image_order_decides_the_cover(
+    client: TestClient, db: Session, admin_token: str
+) -> None:
+    """Order is the only source of truth: the first image is the cover."""
+    product = make_product(db, slug="imaged", name="منتج بصورة")
+    a = _add_image(client, admin_token, product.id, "/media/a.png")
+    b = _add_image(client, admin_token, product.id, "/media/b.png")
+    c = _add_image(client, admin_token, product.id, "/media/c.png")
+
+    # An added image appends; it never takes the cover from an existing one.
+    assert [image["sort_order"] for image in (a, b, c)] == [0, 1, 2]
+    detail = client.get(f"/api/v1/products/{product.slug}").json()
+    assert detail["primary_image_url"] == "/media/a.png"
+    assert [image["url"] for image in detail["images"]] == ["/media/a.png", "/media/b.png", "/media/c.png"]
+
+    reordered = client.put(
+        f"/api/v1/admin/products/{product.id}/images/reorder",
         headers=auth(admin_token),
-        json={"url": "/media/b.png", "is_primary": True},
+        json={"image_ids": [c["id"], a["id"], b["id"]]},
     )
-    assert second.status_code == 201
+    assert reordered.status_code == 200
+    assert [image["url"] for image in reordered.json()] == ["/media/c.png", "/media/a.png", "/media/b.png"]
+    assert [image["sort_order"] for image in reordered.json()] == [0, 1, 2]
 
     detail = client.get(f"/api/v1/products/{product.slug}").json()
-    assert detail["primary_image_url"] == "/media/b.png"
-    assert len(detail["images"]) == 2
+    assert detail["primary_image_url"] == "/media/c.png"
+    assert [image["url"] for image in detail["images"]] == ["/media/c.png", "/media/a.png", "/media/b.png"]
 
+    # Removing the cover promotes whatever is now first, with no second call.
     removed = client.delete(
-        f"/api/v1/admin/products/{product.id}/images/{first.json()['id']}",
+        f"/api/v1/admin/products/{product.id}/images/{c['id']}",
         headers=auth(admin_token),
     )
     assert removed.status_code == 200
+    detail = client.get(f"/api/v1/products/{product.slug}").json()
+    assert detail["primary_image_url"] == "/media/a.png"
+    assert [image["sort_order"] for image in detail["images"]] == [0, 1]
+
+
+def test_image_reorder_rejects_anything_but_a_full_permutation(
+    client: TestClient, db: Session, admin_token: str
+) -> None:
+    product = make_product(db, slug="imaged-2", name="منتج آخر")
+    other = make_product(db, slug="imaged-3", name="منتج ثالث")
+    a = _add_image(client, admin_token, product.id, "/media/a.png")
+    b = _add_image(client, admin_token, product.id, "/media/b.png")
+    foreign = _add_image(client, admin_token, other.id, "/media/x.png")
+
+    def reorder(image_ids):
+        return client.put(
+            f"/api/v1/admin/products/{product.id}/images/reorder",
+            headers=auth(admin_token),
+            json={"image_ids": image_ids},
+        )
+
+    assert reorder([a["id"], foreign["id"]]).status_code == 400
+    assert reorder([a["id"], foreign["id"]]).json()["error"]["code"] == "image_mismatch"
+    assert reorder([a["id"], a["id"]]).json()["error"]["code"] == "image_mismatch"
+    assert reorder([a["id"]]).json()["error"]["code"] == "image_mismatch"
+    assert reorder([]).status_code == 422
+
+    # A rejected reorder leaves the stored order untouched.
+    detail = client.get(f"/api/v1/products/{product.slug}").json()
+    assert [image["id"] for image in detail["images"]] == [a["id"], b["id"]]
 
 
 def test_list_projection_carries_a_secondary_image(

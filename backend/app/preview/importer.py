@@ -805,8 +805,8 @@ class PreviewImporter:
                 self.db.delete(image)
             return
 
-        wanted = [(url, True)] + ([(secondary_url, False)] if secondary_url else [])
-        for order, (image_url, is_primary) in enumerate(wanted):
+        wanted = [url] + ([secondary_url] if secondary_url else [])
+        for order, image_url in enumerate(wanted):
             if order < len(existing):
                 row = existing[order]
                 row.url = image_url
@@ -814,7 +814,6 @@ class PreviewImporter:
                 row = ProductImage(product_id=product.id, url=image_url)
                 self.db.add(row)
             row.alt_text = item.name
-            row.is_primary = is_primary
             row.sort_order = order
 
         # Anything the dataset no longer names goes, so dropping a secondary image

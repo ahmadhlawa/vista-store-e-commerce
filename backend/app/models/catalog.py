@@ -82,7 +82,7 @@ class Product(TimestampMixin, Base):
     images: Mapped[list["ProductImage"]] = relationship(
         back_populates="product",
         cascade="all, delete-orphan",
-        order_by="ProductImage.sort_order",
+        order_by="ProductImage.sort_order, ProductImage.id",
     )
     specifications: Mapped[list["ProductSpecification"]] = relationship(
         back_populates="product",
@@ -113,10 +113,9 @@ class Product(TimestampMixin, Base):
 
     @property
     def primary_image_url(self) -> str | None:
-        if not self.images:
-            return None
-        primary = next((i for i in self.images if i.is_primary), None)
-        return (primary or self.images[0]).url
+        # Image order is the single source of truth: the first ordered image is
+        # the cover. There is no separate primary flag to fall out of sync.
+        return self.images[0].url if self.images else None
 
     @property
     def secondary_image_url(self) -> str | None:
@@ -143,6 +142,8 @@ class ProductImage(Base):
     url: Mapped[str] = mapped_column(String(500), nullable=False)
     alt_text: Mapped[str | None] = mapped_column(String(250), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Legacy column kept so the ORM still matches the existing table. Nothing
+    # reads it any more — `sort_order` alone decides which image is the cover.
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     product: Mapped[Product] = relationship(back_populates="images")

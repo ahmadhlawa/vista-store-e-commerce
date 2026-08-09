@@ -150,8 +150,8 @@ def test_seed_gives_a_product_its_declared_second_image(
 
     with_second = db.query(Product).filter_by(slug="prod-a").one()
     assert len(with_second.images) == 2
-    assert with_second.images[0].is_primary is True
-    assert with_second.images[1].is_primary is False
+    assert [image.sort_order for image in with_second.images] == [0, 1]
+    assert with_second.primary_image_url == with_second.images[0].url
     assert with_second.secondary_image_url == with_second.images[1].url
     assert with_second.secondary_image_url != with_second.primary_image_url
 

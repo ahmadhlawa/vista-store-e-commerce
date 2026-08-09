@@ -55,11 +55,16 @@ class ProductImageIn(APIModel):
     url: str = Field(min_length=1, max_length=500)
     alt_text: str | None = Field(default=None, max_length=250)
     sort_order: int = 0
-    is_primary: bool = False
 
 
 class ProductImageOut(ProductImageIn):
     id: int
+
+
+class ProductImageReorderIn(APIModel):
+    """The product's whole image set, in the order it should be stored."""
+
+    image_ids: list[int] = Field(min_length=1)
 
 
 class ProductSpecificationIn(APIModel):

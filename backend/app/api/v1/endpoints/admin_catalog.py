@@ -31,6 +31,7 @@ from app.schemas.catalog import (
     ProductCreate,
     ProductImageIn,
     ProductImageOut,
+    ProductImageReorderIn,
     ProductOptionIn,
     ProductOptionOut,
     ProductSpecificationIn,
@@ -213,8 +214,6 @@ def create_product(payload: ProductCreate, db: DbSession, admin: CurrentAdmin):
     for index, spec in enumerate(payload.specifications):
         product.specifications.append(ProductSpecification(**spec.model_dump()))
         product.specifications[-1].sort_order = spec.sort_order or index
-    if product.images and not any(i.is_primary for i in product.images):
-        product.images[0].is_primary = True
     catalog_service.refresh_search_text(product)
     db.add(product)
     db.flush()
@@ -281,6 +280,21 @@ def delete_product(product_id: int, db: DbSession, admin: CurrentAdmin):
 
 
 # ── Product images ────────────────────────────────────────────────────────────
+def _normalize_image_order(product_id: int, db: DbSession) -> list[ProductImage]:
+    """Rewrite the stored positions as 0, 1, 2 … so ordering never goes ambiguous."""
+    images = list(
+        db.scalars(
+            select(ProductImage)
+            .where(ProductImage.product_id == product_id)
+            .order_by(ProductImage.sort_order, ProductImage.id)
+        )
+    )
+    for position, image in enumerate(images):
+        image.sort_order = position
+    return images
+
+
+
 @router.get("/products/{product_id}/images", response_model=list[ProductImageOut])
 def list_images(product_id: int, db: DbSession, admin: CurrentAdmin):
     return _load_product(db, product_id).images
@@ -293,12 +307,13 @@ def list_images(product_id: int, db: DbSession, admin: CurrentAdmin):
 )
 def add_image(product_id: int, payload: ProductImageIn, db: DbSession, admin: CurrentAdmin):
     product = _load_product(db, product_id)
-    image = ProductImage(product_id=product.id, **payload.model_dump())
-    if payload.is_primary:
-        for existing in product.images:
-            existing.is_primary = False
-    elif not product.images:
-        image.is_primary = True
+    # A new image always appends. Order decides the cover, so an upload never
+    # silently takes it over from the image the admin put first.
+    image = ProductImage(
+        product_id=product.id,
+        **payload.model_dump(exclude={"sort_order"}),
+        sort_order=len(product.images),
+    )
     db.add(image)
     audit_service.record(
         db,
@@ -313,12 +328,41 @@ def add_image(product_id: int, payload: ProductImageIn, db: DbSession, admin: Cu
     return image
 
 
+@router.put("/products/{product_id}/images/reorder", response_model=list[ProductImageOut])
+def reorder_images(
+    product_id: int, payload: ProductImageReorderIn, db: DbSession, admin: CurrentAdmin
+):
+    """Store a new image order. The submitted list must be the product's whole set."""
+    product = _load_product(db, product_id)
+    by_id = {image.id: image for image in product.images}
+    submitted = payload.image_ids
+    if len(set(submitted)) != len(submitted) or set(submitted) != set(by_id):
+        raise DomainError(
+            "قائمة الترتيب يجب أن تضم صور هذا المنتج كاملة دون تكرار.", code="image_mismatch"
+        )
+
+    for position, image_id in enumerate(submitted):
+        by_id[image_id].sort_order = position
+    audit_service.record(
+        db,
+        admin=admin,
+        action="product.images_reordered",
+        entity_type="product",
+        entity_id=product.id,
+        meta={"image_ids": submitted},
+    )
+    db.commit()
+    return [by_id[image_id] for image_id in submitted]
+
+
 @router.delete("/products/{product_id}/images/{image_id}", response_model=MessageResponse)
 def delete_image(product_id: int, image_id: int, db: DbSession, admin: CurrentAdmin):
     image = get_or_404(db, ProductImage, image_id, "الصورة غير موجودة.")
     if image.product_id != product_id:
         raise DomainError("الصورة لا تنتمي لهذا المنتج.", code="image_mismatch")
     db.delete(image)
+    db.flush()
+    _normalize_image_order(product_id, db)
     audit_service.record(
         db,
         admin=admin,

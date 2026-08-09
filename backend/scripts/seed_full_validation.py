@@ -182,7 +182,6 @@ def seed_catalog(db: Session) -> dict[str, int]:
                     url=url,
                     alt_text=row.name,
                     sort_order=index,
-                    is_primary=index == 0,
                 )
             )
         for index, (name, value) in enumerate(specs):

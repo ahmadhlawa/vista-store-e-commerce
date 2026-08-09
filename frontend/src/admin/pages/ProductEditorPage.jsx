@@ -3,8 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import sx from "../../sx.js";
 import { adminApi } from "../../api/adminApi.js";
 import { MediaPickerDialog } from "../MediaPicker.jsx";
+import ProductImageGallery from "../ProductImageGallery.jsx";
 import {
-  Badge,
   Button,
   ConfirmDialog,
   Field,
@@ -265,16 +265,20 @@ export default function ProductEditorPage() {
                 }}
               />
             )}
-            <div style={sx`display:flex;gap:12px;flex-wrap:wrap`}>
-              {(product?.images || []).map((image) => (
-                <div key={image.id} style={sx`width:120px;display:flex;flex-direction:column;gap:6px`}>
-                  <span style={sx`width:120px;height:120px;border-radius:10px;background:url("${image.url}") center/cover no-repeat;border:1px solid #E4E0D9`}></span>
-                  {image.is_primary && <Badge tone="good">الصورة الرئيسية</Badge>}
-                  <Button variant="danger" style={sx`min-height:34px;font-size:12.5px`} onClick={() => run(() => adminApi.deleteProductImage(productId, image.id), "تم حذف الصورة.")}>حذف</Button>
-                </div>
-              ))}
-              {!product?.images?.length && <span style={sx`font-size:13px;color:#9C958A`}>لا توجد صور بعد — سيظهر المنتج بخلفية متدرجة.</span>}
-            </div>
+            <ProductImageGallery
+              images={product?.images || []}
+              onReorder={async (imageIds) => {
+                try {
+                  await adminApi.reorderProductImages(productId, imageIds);
+                } catch (error) {
+                  feedback.error(error.message || "تعذّر حفظ ترتيب الصور.");
+                  await loadProduct();
+                  throw error;
+                }
+                await loadProduct();
+              }}
+              onDelete={(imageId) => run(() => adminApi.deleteProductImage(productId, imageId), "تم حذف الصورة.")}
+            />
           </Section>
 
           <Section
