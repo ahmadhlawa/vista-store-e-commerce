@@ -70,6 +70,12 @@ backups/
 # Release packages built by scripts/make_release_package.py
 release/
 
+# Catalog datasets generated from a client's workbook, and the workbooks themselves.
+# Both are client data: a real price list and a real product range, never source.
+instance/generated/
+*.xlsx
+*.xlsm
+
 
 
 .env.mysql.local

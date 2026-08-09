@@ -51,13 +51,28 @@ def _slug(value: str) -> str:
 
 
 class PreviewMedia(_Strict):
-    """One generated placeholder image, uploaded through the storage provider."""
+    """One image the dataset can point at.
+
+    Two kinds, and a media entry is exactly one of them:
+
+    * **generated** — a placeholder built from `start_color`/`end_color` and uploaded
+      through the storage provider. The batch owns the resulting `MediaAsset` and a
+      purge deletes both the row and the stored object.
+    * **library** — `library_filename` names a file the owner has *already* uploaded
+      to the Media Library. The importer only looks it up; it never uploads, never
+      creates a `MediaAsset`, and never takes ownership, so a purge cannot delete the
+      owner's own picture. This is what a real client catalog uses.
+    """
 
     key: str
-    alt_text: str = Field(max_length=250)
+    alt_text: str = Field(default="", max_length=250)
     shape: Literal["tile", "wide", "square"] = "tile"
-    start_color: str
-    end_color: str
+    start_color: str | None = None
+    end_color: str | None = None
+    # The `original_filename` of an existing MediaAsset. Never a URL, never a storage
+    # key: the spreadsheet contract stays provider-agnostic, and resolution happens
+    # against the Media Library at import time.
+    library_filename: str | None = Field(default=None, max_length=300)
     artwork_version: str = Field(default="v1", pattern=r"^v[1-9][0-9]*$")
     origin: Origin = "placeholder"
     source_url: str | None = Field(default=None, max_length=500)
@@ -69,10 +84,30 @@ class PreviewMedia(_Strict):
 
     @field_validator("start_color", "end_color")
     @classmethod
-    def _check_color(cls, value: str) -> str:
+    def _check_color(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         if not TONE_RE.match(value):
             raise ValueError(f"{value!r} is not a #RRGGBB colour")
         return value.upper()
+
+    @property
+    def is_library(self) -> bool:
+        return self.library_filename is not None
+
+    def model_post_init(self, _context: Any) -> None:
+        if self.library_filename is not None:
+            if self.start_color or self.end_color:
+                raise ValueError(
+                    f"media {self.key!r}: a library_filename names an already uploaded file, "
+                    "so it cannot also carry placeholder colours"
+                )
+            return
+        if not (self.start_color and self.end_color):
+            raise ValueError(
+                f"media {self.key!r}: needs either start_color and end_color (a generated "
+                "placeholder) or library_filename (an existing Media Library file)"
+            )
 
 
 class PreviewCategory(_Strict):
@@ -80,6 +115,8 @@ class PreviewCategory(_Strict):
     name: str = Field(min_length=1, max_length=150)
     description: str | None = None
     image: str | None = None
+    parent: str | None = Field(default=None, max_length=160)
+    is_active: bool = True
     is_featured: bool = False
     sort_order: int = 0
     origin: Origin
@@ -90,10 +127,39 @@ class PreviewCategory(_Strict):
     def _check_slug(cls, value: str) -> str:
         return _slug(value)
 
+    @field_validator("parent")
+    @classmethod
+    def _check_parent(cls, value: str | None) -> str | None:
+        return None if value is None else _slug(value)
+
 
 class PreviewSpecification(_Strict):
     name: str = Field(max_length=150)
     value: str = Field(max_length=500)
+
+
+class PreviewOption(_Strict):
+    """A choice axis (colour, size…) and the values offered for it.
+
+    Values only. A priced variant matrix is deliberately not expressible here — see
+    `docs/catalog-spreadsheet-preparation.md`.
+    """
+
+    name: str = Field(min_length=1, max_length=100)
+    values: list[str] = Field(min_length=1)
+
+    @field_validator("values")
+    @classmethod
+    def _check_values(cls, value: list[str]) -> list[str]:
+        cleaned = [entry.strip() for entry in value]
+        if any(not entry for entry in cleaned):
+            raise ValueError("option values must not be blank")
+        if any(len(entry) > 150 for entry in cleaned):
+            raise ValueError("an option value is longer than 150 characters")
+        duplicates = sorted({v for v in cleaned if cleaned.count(v) > 1})
+        if duplicates:
+            raise ValueError(f"duplicate option value(s): {duplicates}")
+        return cleaned
 
 
 class PreviewPackageItem(_Strict):
@@ -106,12 +172,23 @@ class PreviewProduct(_Strict):
     slug: str = Field(max_length=260)
     name: str = Field(min_length=1, max_length=250)
     category: str
+    sku: str | None = Field(default=None, max_length=64)
     product_type: str = ProductType.STANDARD.value
     price: Decimal
     compare_at_price: Decimal | None = None
+    cost_price: Decimal | None = None
     stock_quantity: int = Field(default=0, ge=0)
+    track_inventory: bool = True
+    low_stock_threshold: int = Field(default=3, ge=0)
+    is_active: bool = True
+    seo_title: str | None = Field(default=None, max_length=200)
+    seo_description: str | None = None
     short_description: str | None = None
     description: str | None = None
+    # The ordered gallery. When present it is the whole truth about this product's
+    # pictures: `images[0]` is the cover, and the order here becomes `sort_order`.
+    # `image`/`secondary_image` remain for datasets written before galleries existed.
+    images: list[str] = Field(default_factory=list)
     image: str | None = None
     # The picture a catalogue card cross-fades to on hover. Optional by design: a
     # product without one keeps its cover and simply reveals its action panel,
@@ -124,7 +201,30 @@ class PreviewProduct(_Strict):
     origin: Origin
     source_note: str | None = Field(default=None, max_length=300)
     specifications: list[PreviewSpecification] = Field(default_factory=list)
+    options: list[PreviewOption] = Field(default_factory=list)
     package_items: list[PreviewPackageItem] = Field(default_factory=list)
+
+    @property
+    def gallery(self) -> list[str]:
+        """Every media key this product shows, cover first, without repeats."""
+        if self.images:
+            ordered = self.images
+        else:
+            ordered = [key for key in (self.image, self.secondary_image) if key]
+        seen: list[str] = []
+        for key in ordered:
+            if key not in seen:
+                seen.append(key)
+        return seen
+
+    @field_validator("options")
+    @classmethod
+    def _check_options(cls, value: list[PreviewOption]) -> list[PreviewOption]:
+        names = [option.name for option in value]
+        duplicates = sorted({name for name in names if names.count(name) > 1})
+        if duplicates:
+            raise ValueError(f"duplicate option name(s): {duplicates}")
+        return value
 
     @field_validator("slug")
     @classmethod
@@ -309,6 +409,18 @@ class PreviewDataset(_Strict):
             if duplicates:
                 raise ValueError(f"duplicate {label}(s): {duplicates}")
 
+        # `products.sku` is unique in the database, so a dataset carrying the same SKU
+        # twice would fail on insert halfway through a seed.
+        skus = [item.sku for item in self.products if item.sku]
+        repeated = sorted({sku for sku in skus if skus.count(sku) > 1})
+        if repeated:
+            raise ValueError(f"duplicate product sku(s): {repeated}")
+
+        library = [item.library_filename for item in self.media if item.library_filename]
+        shared = sorted({name for name in library if library.count(name) > 1})
+        if shared:
+            raise ValueError(f"duplicate media library_filename(s): {shared}")
+
     def _check_references(self) -> None:
         media_keys = {item.key for item in self.media}
         category_slugs = {item.slug for item in self.categories}
@@ -320,14 +432,33 @@ class PreviewDataset(_Strict):
 
         for category in self.categories:
             check_image(f"category {category.slug!r}", category.image)
+            if category.parent is not None:
+                if category.parent == category.slug:
+                    raise ValueError(f"category {category.slug!r} cannot be its own parent")
+                if category.parent not in category_slugs:
+                    raise ValueError(
+                        f"category {category.slug!r} references unknown parent "
+                        f"{category.parent!r}"
+                    )
         for slide in self.hero_slides:
             check_image(f"hero slide {slide.key!r}", slide.image)
         for banner in self.banners:
             check_image(f"banner {banner.key!r}", banner.image)
 
+        self._check_category_cycles()
+
         for product in self.products:
             check_image(f"product {product.slug!r}", product.image)
             check_image(f"product {product.slug!r} (secondary)", product.secondary_image)
+            for position, key in enumerate(product.images, start=1):
+                check_image(f"product {product.slug!r} image {position}", key)
+            if product.images and (product.image or product.secondary_image):
+                raise ValueError(
+                    f"product {product.slug!r} sets both `images` and `image`/`secondary_image`; "
+                    "a product has one gallery, so use `images` alone"
+                )
+            if len(set(product.images)) != len(product.images):
+                raise ValueError(f"product {product.slug!r} lists the same image twice")
             if product.secondary_image is not None and product.image is None:
                 raise ValueError(
                     f"product {product.slug!r} has a secondary_image but no image; "
@@ -355,6 +486,18 @@ class PreviewDataset(_Strict):
                     )
                 if item.product == product.slug:
                     raise ValueError(f"package {product.slug!r} cannot include itself")
+
+    def _check_category_cycles(self) -> None:
+        """No category may be its own ancestor: the seed walks parents to write them."""
+        parent_of = {item.slug: item.parent for item in self.categories}
+        for slug in parent_of:
+            seen = {slug}
+            current = parent_of[slug]
+            while current is not None:
+                if current in seen:
+                    raise ValueError(f"category parent cycle involving {slug!r}")
+                seen.add(current)
+                current = parent_of.get(current)
 
     def canonical_document(self) -> str:
         return json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))

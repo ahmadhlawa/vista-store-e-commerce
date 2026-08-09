@@ -46,9 +46,12 @@ from app.models import (
     PackageItem,
     Product,
     ProductImage,
+    ProductOption,
+    ProductOptionValue,
     ProductSpecification,
 )
 from app.preview.dataset import PreviewDataset
+from app.preview.media_library import resolve_one
 from app.services import catalog as catalog_service
 from app.services.placeholder_image import hex_to_rgb, vista_preview_png
 from app.storage.base import StorageProvider, validate_image_upload
@@ -144,6 +147,15 @@ def _fingerprint(values: dict[str, Any]) -> str:
     ).hexdigest()
 
 
+def seo_title_for(item: Any) -> str:
+    """A product's SEO title: the dataset's, or its name."""
+    return (getattr(item, "seo_title", None) or item.name)[:200]
+
+
+def seo_description_for(item: Any) -> str:
+    return (getattr(item, "seo_description", None) or item.short_description or item.name)[:150]
+
+
 # ── the managed field set, per entity type ───────────────────────────────────
 def managed_values(entity_type: str, row: Any) -> dict[str, Any]:
     """Exactly the fields this importer writes. Anything else is the owner's."""
@@ -160,6 +172,9 @@ def managed_values(entity_type: str, row: Any) -> dict[str, Any]:
             "name": row.name,
             "description": row.description,
             "image_url": row.image_url,
+            # The parent is hashed by *slug*, never by id: a fingerprint has to mean the
+            # same thing in every database the dataset is seeded into.
+            "parent": row.parent.slug if row.parent is not None else None,
             "is_active": row.is_active,
             "is_featured": row.is_featured,
             "sort_order": row.sort_order,
@@ -167,9 +182,15 @@ def managed_values(entity_type: str, row: Any) -> dict[str, Any]:
     if entity_type == PRODUCT:
         return {
             "name": row.name,
+            "sku": row.sku,
             "product_type": row.product_type,
             "price": row.price,
             "compare_at_price": row.compare_at_price,
+            "cost_price": row.cost_price,
+            "track_inventory": row.track_inventory,
+            "low_stock_threshold": row.low_stock_threshold,
+            "seo_title": row.seo_title,
+            "seo_description": row.seo_description,
             # `stock_quantity` is deliberately absent. It moves on its own every time
             # somebody orders something, and a sale is not an owner edit — including it
             # would make a purchased preview product look edited and stop the purge from
@@ -255,20 +276,27 @@ def desired_values(
             "name": item.name,
             "description": item.description,
             "image_url": image_url,
-            "is_active": True,
+            "parent": item.parent,
+            "is_active": item.is_active,
             "is_featured": item.is_featured,
             "sort_order": item.sort_order,
         }
     if entity_type == PRODUCT:
         return {
             "name": item.name,
+            "sku": item.sku,
             "product_type": item.product_type,
             "price": item.price,
             "compare_at_price": item.compare_at_price,
+            "cost_price": item.cost_price,
+            "track_inventory": item.track_inventory,
+            "low_stock_threshold": item.low_stock_threshold,
+            "seo_title": seo_title_for(item),
+            "seo_description": seo_description_for(item),
             # Mirrors `managed_values`: stock is not part of the identity of an import.
             "short_description": item.short_description,
             "description": item.description,
-            "is_active": True,
+            "is_active": item.is_active,
             "is_featured": item.is_featured,
             "is_new": item.is_new,
             "is_bestseller": item.is_bestseller,
@@ -532,6 +560,16 @@ class PreviewImporter:
         urls: dict[str, str] = {}
         for item in self.dataset.media:
             target = f"media:{item.key}"
+
+            # A library file belongs to the owner, not to this batch. It is looked up and
+            # used; it is never uploaded, never recorded as owned, and therefore never
+            # deleted by a purge.
+            if item.is_library:
+                asset = resolve_one(self.db, item.library_filename)
+                urls[item.key] = asset.url
+                plan.add("skip", target, f"existing Media Library file {item.library_filename!r}")
+                continue
+
             row, record = self._owned_row(MEDIA, item.key, index)
 
             # An owned object is never re-uploaded blindly: the bytes are deterministic
@@ -661,6 +699,7 @@ class PreviewImporter:
         force: bool,
     ) -> dict[str, Category]:
         result: dict[str, Category] = {}
+        written: list[Any] = []
         for item in self.dataset.categories:
             target = f"category:{item.slug}"
             image_url = media_urls.get(item.image) if item.image else None
@@ -700,12 +739,23 @@ class PreviewImporter:
             row.name = item.name
             row.description = item.description
             row.image_url = image_url
-            row.is_active = True
+            row.is_active = item.is_active
             row.is_featured = item.is_featured
             row.sort_order = item.sort_order
             self.db.flush()
             result[item.slug] = row
+            written.append(item)
             self._remember(batch, record, CATEGORY, item.slug, row, fingerprint=fingerprint)
+
+        if apply:
+            # A second pass, because a child may appear above its parent in the file.
+            # Only rows this run actually wrote are re-pointed, so an owner-edited or
+            # foreign category keeps whatever parent the owner gave it.
+            for item in written:
+                row = result[item.slug]
+                parent = result.get(item.parent) if item.parent else None
+                row.parent_id = parent.id if parent is not None else None
+            self.db.flush()
         return result
 
     # ── products ─────────────────────────────────────────────────────────────
@@ -724,11 +774,12 @@ class PreviewImporter:
 
         for item in self.dataset.products:
             target = f"product:{item.slug}"
-            image_url = media_urls.get(item.image) if item.image else None
-            secondary_url = media_urls.get(item.secondary_image) if item.secondary_image else None
-            # A second key pointing at the same artwork is not a second image.
-            if secondary_url == image_url:
-                secondary_url = None
+            # The gallery is what the product actually shows, in order. The cover and the
+            # hover image are read back off it exactly the way `Product` computes them,
+            # so the fingerprint matches what the row will report.
+            gallery = [media_urls[key] for key in item.gallery if key in media_urls]
+            image_url = gallery[0] if gallery else None
+            secondary_url = next((url for url in gallery if url != image_url), None)
             fingerprint = item_fingerprint(
                 PRODUCT, item, image_url=image_url, secondary_image_url=secondary_url
             )
@@ -762,26 +813,29 @@ class PreviewImporter:
             category = categories.get(item.category)
             row.name = item.name
             row.category_id = category.id if category is not None else None
+            row.sku = item.sku
             row.product_type = item.product_type
             row.short_description = item.short_description
             row.description = item.description
             row.price = item.price
             row.compare_at_price = item.compare_at_price
+            row.cost_price = item.cost_price
             row.stock_quantity = item.stock_quantity
-            row.track_inventory = True
-            row.low_stock_threshold = 3
-            row.is_active = True
+            row.track_inventory = item.track_inventory
+            row.low_stock_threshold = item.low_stock_threshold
+            row.is_active = item.is_active
             row.is_featured = item.is_featured
             row.is_new = item.is_new
             row.is_bestseller = item.is_bestseller
             row.sort_order = item.sort_order
-            row.seo_title = item.name
-            row.seo_description = (item.short_description or item.name)[:150]
+            row.seo_title = seo_title_for(item)
+            row.seo_description = seo_description_for(item)
             catalog_service.refresh_search_text(row)
             self.db.flush()
 
-            self._sync_product_image(row, image_url, secondary_url, item)
+            self._sync_product_images(row, gallery, item)
             self._sync_specifications(row, item)
+            self._sync_options(row, item)
             self.db.flush()
             written[item.slug] = row
             self._remember(batch, record, PRODUCT, item.slug, row, fingerprint=fingerprint)
@@ -790,22 +844,21 @@ class PreviewImporter:
             # Re-read the index: products created moments ago now have batch records.
             self._sync_packages(written, _record_index(self.db, batch))
 
-    def _sync_product_image(
-        self, product: Product, url: str | None, secondary_url: str | None, item: Any
-    ) -> None:
-        """Make the product's images exactly the one or two the dataset names.
+    def _sync_product_images(self, product: Product, wanted: list[str], item: Any) -> None:
+        """Make the product's gallery exactly the images the dataset names, in order.
 
-        Rewritten in place rather than deleted and recreated, so re-seeding does not
-        churn image rows. Every row here belongs to the preview batch: the product
-        itself is batch-owned, so a purge still removes exactly this and nothing else.
+        Position is meaning: `sort_order` 0 is the cover, and there is no primary flag to
+        contradict it. Rows are rewritten in place rather than deleted and recreated, so
+        re-seeding does not churn image rows. Every row here belongs to the preview batch:
+        the product itself is batch-owned, so a purge still removes exactly this and
+        nothing else.
         """
         existing = list(product.images)
-        if url is None:
+        if not wanted:
             for image in existing:
                 self.db.delete(image)
             return
 
-        wanted = [url] + ([secondary_url] if secondary_url else [])
         for order, image_url in enumerate(wanted):
             if order < len(existing):
                 row = existing[order]
@@ -815,9 +868,10 @@ class PreviewImporter:
                 self.db.add(row)
             row.alt_text = item.name
             row.sort_order = order
+            row.is_primary = False
 
-        # Anything the dataset no longer names goes, so dropping a secondary image
-        # from the YAML actually removes it.
+        # Anything the dataset no longer names goes, so dropping an image from the
+        # YAML actually removes it.
         for image in existing[len(wanted) :]:
             self.db.delete(image)
 
@@ -831,6 +885,25 @@ class PreviewImporter:
                     product_id=product.id, name=spec.name, value=spec.value, sort_order=order
                 )
             )
+
+    def _sync_options(self, product: Product, item: Any) -> None:
+        """Rebuild the product's choice axes.
+
+        Options only — no variants. A variant carries its own SKU, price override and
+        stock, none of which a flat option column can express, so the dataset stops at
+        the axes and leaves priced combinations to Admin.
+        """
+        for option in list(product.options):
+            self.db.delete(option)
+        self.db.flush()
+        for order, option in enumerate(getattr(item, "options", [])):
+            row = ProductOption(product_id=product.id, name=option.name, sort_order=order)
+            self.db.add(row)
+            self.db.flush()
+            for value_order, value in enumerate(option.values):
+                self.db.add(
+                    ProductOptionValue(option_id=row.id, value=value, sort_order=value_order)
+                )
 
     def _sync_packages(self, written: dict[str, Product], index: dict) -> None:
         """Rebuild the contents of any package this run touched.
