@@ -8,6 +8,16 @@ const manager = { id: 1, email: "owner@example.com", full_name: "مالك الم
 const admin = { ...manager, role: "admin" };
 const product = { id: 7, name: "راتنج شفاف", sku: "RES-1000", price: "12.50" };
 const dashboard = { products_total: 0, products_active: 0, categories_total: 0, coupons_active: 0, orders_total: 0, orders_pending: 0, revenue_total: 0, low_stock_products: 0, recent_orders: [] };
+const mixedOfflineOrder = {
+  id: 18, order_number: "ORD-18", source: "whatsapp", status: "preparing", is_locked: false,
+  customer_name: "سارة أحمد", customer_phone: "0591234567", customer_email: null, address: "رام الله، شارع الإرسال 10",
+  payment_method: "cash_on_delivery", payment_status: "unpaid", customer_notes: null, admin_notes: null,
+  discount: "0.00", delivery_fee: "0.00", created_at: "2026-08-04T10:00:00Z", activities: [],
+  items: [
+    { id: 71, item_kind: "catalog", product_id: 7, variant_id: null, product_name: "راتنج شفاف", sku: "RES-1000", quantity: 1, unit_price: "12.50", line_total: "12.50" },
+    { id: 72, item_kind: "manual", product_id: null, variant_id: null, product_name: "Custom Wedding Card", manual_description: "Gold foil", quantity: 10, unit_price: "5.00", line_total: "50.00" },
+  ],
+};
 
 describe("manual order workspace", () => {
   it("keeps the manager-only manual-order navigation and route unavailable to a normal admin", async () => {
@@ -71,6 +81,42 @@ describe("manual order workspace", () => {
       completion: { paid_amount: "5.00", payment_details: "تحويل بنكي" },
     });
   }, 15000);
+
+  it("lets only a manager structurally edit an eligible offline order while preserving its mixed item payload", async () => {
+    authStorage.save("manager-token", manager);
+    const calls = stubApi({
+      "/api/v1/auth/me": manager,
+      "/api/v1/admin/orders/18": mixedOfflineOrder,
+      "/api/v1/admin/products": page([product]),
+      "PATCH /api/v1/admin/orders/18": mixedOfflineOrder,
+    });
+    renderApp("/admin/orders/18");
+
+    expect(await screen.findByRole("heading", { name: "تعديل الطلب" })).toBeInTheDocument();
+    await userEvent.clear(screen.getByLabelText("كمية راتنج شفاف"));
+    await userEvent.type(screen.getByLabelText("كمية راتنج شفاف"), "2");
+    await userEvent.clear(screen.getByLabelText("كمية Custom Wedding Card"));
+    await userEvent.type(screen.getByLabelText("كمية Custom Wedding Card"), "15");
+    await userEvent.clear(screen.getByLabelText("سعر Custom Wedding Card"));
+    await userEvent.type(screen.getByLabelText("سعر Custom Wedding Card"), "6.00");
+    await userEvent.type(screen.getByLabelText("سبب التعديل *"), "تصحيح الطلب");
+    await userEvent.click(screen.getByRole("button", { name: "حفظ التعديلات" }));
+
+    const request = calls.find((call) => call.method === "PATCH" && call.path === "/api/v1/admin/orders/18");
+    expect(JSON.parse(request.body).items).toEqual([
+      { kind: "catalog", product_id: 7, variant_id: null, quantity: 2, unit_price: "12.50" },
+      { kind: "manual", order_item_id: 72, name: "Custom Wedding Card", description: "Gold foil", quantity: 15, unit_price: "6.00" },
+    ]);
+  }, 15000);
+
+  it("does not show structural editing for a normal admin on the same offline order", async () => {
+    authStorage.save("admin-token", admin);
+    stubApi({ "/api/v1/auth/me": admin, "/api/v1/admin/orders/18": mixedOfflineOrder });
+    renderApp("/admin/orders/18");
+
+    await screen.findByLabelText("واتساب مع سارة أحمد");
+    expect(screen.queryByRole("heading", { name: "تعديل الطلب" })).not.toBeInTheDocument();
+  });
 
   it("requires a manager reason before reopening a completed order and shows the replaced-invoice warning", async () => {
     authStorage.save("manager-token", manager);

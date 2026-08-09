@@ -50,6 +50,9 @@ describe("order and invoice domain", () => {
     expect(canCompleteOrder({ role: "admin" }, { is_locked: false, status: "pending" })).toBe(true);
     expect(canEditIncompleteOrder({ role: "admin" }, { source: "website", is_locked: false, status: "pending" })).toBe(false);
     expect(canEditIncompleteOrder({ role: "admin" }, { source: "website", is_locked: false, status: "preparing" })).toBe(true);
+    expect(canEditIncompleteOrder({ role: "super_admin" }, { source: "whatsapp", is_locked: false, status: "preparing" })).toBe(true);
+    expect(canEditIncompleteOrder({ role: "admin" }, { source: "whatsapp", is_locked: false, status: "preparing" })).toBe(false);
+    expect(canEditIncompleteOrder({ role: "super_admin" }, { source: "whatsapp", is_locked: false, status: "cancelled" })).toBe(false);
     expect(canReopenOrder({ role: "admin" }, { status: "completed" })).toBe(false);
     expect(canReopenOrder({ role: "super_admin" }, { status: "completed", is_locked: false })).toBe(false);
     expect(canReopenOrder({ role: "super_admin" }, { status: "completed", is_locked: true })).toBe(true);

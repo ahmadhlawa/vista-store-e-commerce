@@ -88,7 +88,7 @@ export const isAdmin = (admin) => admin?.role === "admin" || isManager(admin);
 export const canCreateManualOrder = (admin) => isManager(admin);
 const canManageReopenedOrder = (admin, order) => !order?.completed_at || isManager(admin);
 const editableOrderStatuses = new Set(["new", "reviewing", "preparing", "out_for_delivery"]);
-export const canEditIncompleteOrder = (admin, order) => isAdmin(admin) && canManageReopenedOrder(admin, order) && !order?.is_locked && order?.source === "website" && editableOrderStatuses.has(order?.status);
+export const canEditIncompleteOrder = (admin, order) => isAdmin(admin) && canManageReopenedOrder(admin, order) && !order?.is_locked && editableOrderStatuses.has(order?.status) && (isManager(admin) || (order?.source === "website" && !(order?.items || []).some((item) => item.item_kind === "manual")));
 export const canCompleteOrder = (admin, order) => isAdmin(admin) && canManageReopenedOrder(admin, order) && !order?.is_locked && order?.status !== "cancelled";
 export const canReopenOrder = (admin, order) => isManager(admin) && order?.is_locked && order?.status === "completed";
 export const canUpdateInvoicePayment = (admin, invoice) => isAdmin(admin) && invoice?.status === "active";
