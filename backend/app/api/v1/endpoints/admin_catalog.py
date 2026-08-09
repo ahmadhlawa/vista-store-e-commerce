@@ -416,28 +416,96 @@ def list_options(product_id: int, db: DbSession, admin: CurrentAdmin):
 def replace_options(
     product_id: int, payload: list[ProductOptionIn], db: DbSession, admin: CurrentAdmin
 ):
-    """Replacing options removes variants built on the old values."""
+    """Rewrite the option axes, keeping every variant that is still a valid combination.
+
+    Options and values carry their row id through the payload, so a rename is an
+    update — not a delete plus insert — and the variants built on those ids stay.
+    Only variants whose `option_value_ids` no longer describe one value per axis
+    are dropped; nothing is merged, and no combination is created here.
+    """
     product = _load_product(db, product_id)
-    product.variants.clear()
-    product.options.clear()
-    db.flush()
-    for index, option in enumerate(payload):
-        row = ProductOption(name=option.name, sort_order=option.sort_order or index)
-        for value_index, value in enumerate(option.values):
-            row.values.append(
-                ProductOptionValue(value=value.value, sort_order=value.sort_order or value_index)
-            )
-        product.options.append(row)
-    audit_service.record(
-        db,
-        admin=admin,
-        action="product.options_replaced",
-        entity_type="product",
-        entity_id=product.id,
-        meta={"count": len(payload)},
-    )
-    db.commit()
+    # Snapshot before touching the axes: once a value row is deleted the
+    # association rows go with it, and the variant would look empty.
+    variant_value_ids = {
+        variant.id: [value.id for value in variant.option_values]
+        for variant in product.variants
+    }
+    existing_options = {option.id: option for option in product.options}
+    existing_values = {
+        value.id: value for option in product.options for value in option.values
+    }
+
+    try:
+        # Decide which variants survive from the incoming shape, before any row is
+        # deleted — the join rows would be gone by then.
+        axis_of: dict[int, object] = {}
+        axis_keys: set[object] = set()
+        for index, option in enumerate(payload):
+            axis_key = option.id or f"new:{index}"
+            axis_keys.add(axis_key)
+            for value in option.values:
+                if value.id:
+                    axis_of[value.id] = axis_key
+        removed = [
+            variant
+            for variant in list(product.variants)
+            if _variant_is_incompatible(variant_value_ids.get(variant.id, []), axis_of, axis_keys)
+        ]
+        for variant in removed:
+            product.variants.remove(variant)
+
+        option_rows: list[ProductOption] = []
+        for index, option in enumerate(payload):
+            row = existing_options.get(option.id) if option.id else None
+            if option.id and row is None:
+                raise DomainError("خيار غير موجود لهذا المنتج.", code="option_not_found")
+            if row is None:
+                row = ProductOption(product_id=product.id)
+            row.name = option.name
+            row.sort_order = option.sort_order or index
+            value_rows: list[ProductOptionValue] = []
+            for value_index, value in enumerate(option.values):
+                value_row = existing_values.get(value.id) if value.id else None
+                if value.id and value_row is None:
+                    raise DomainError(
+                        "قيمة خيار غير موجودة لهذا المنتج.", code="option_value_not_found"
+                    )
+                if value_row is None:
+                    value_row = ProductOptionValue()
+                value_row.value = value.value
+                value_row.sort_order = value.sort_order or value_index
+                value_rows.append(value_row)
+            row.values = value_rows
+            option_rows.append(row)
+        product.options = option_rows
+
+        audit_service.record(
+            db,
+            admin=admin,
+            action="product.options_replaced",
+            entity_type="product",
+            entity_id=product.id,
+            meta={"count": len(payload), "variants_removed": len(removed)},
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return _load_product(db, product_id).options
+
+
+def _variant_is_incompatible(
+    value_ids: list[int], axis_of: dict[int, object], axis_keys: set[object]
+) -> bool:
+    """A variant survives only when it still holds exactly one value per axis."""
+    if not value_ids:
+        # Free-form variant, never built on the options — leave it alone.
+        return False
+    if any(value_id not in axis_of for value_id in value_ids):
+        return True
+    # Dropping a whole axis would collapse variants onto the same remaining
+    # combination; treat them as incompatible rather than silently merging.
+    return {axis_of[value_id] for value_id in value_ids} != axis_keys
 
 
 @router.get("/products/{product_id}/variants", response_model=list[ProductVariantOut])

@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import ProductVariantsEditor from "../admin/ProductVariantsEditor.jsx";
+import ProductVariantsEditor, {
+  buildOptionsPayload,
+  variantsRemovedByOptions,
+} from "../admin/ProductVariantsEditor.jsx";
 import ProductEditorPage from "../admin/pages/ProductEditorPage.jsx";
 import { cartStorage } from "../storage/cartStorage.js";
 import { page, productFixture, renderApp, storefrontRoutes, stubApi } from "./utils.jsx";
@@ -423,5 +426,121 @@ describe("storefront multi-axis selection", () => {
     await userEvent.click(screen.getByRole("button", { name: /أضف إلى العربة/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent("اختر أحد الخيارات");
     expect(cartStorage.load()).toHaveLength(0);
+  });
+});
+
+describe("option payload identity", () => {
+  const edited = [
+    {
+      id: 1,
+      name: "اللون",
+      values: "قرمزي، أزرق",
+      rows: [
+        { id: 11, value: "أحمر" },
+        { id: 12, value: "أزرق" },
+      ],
+    },
+  ];
+
+  it("carries the row ids so a rename is an update, not a delete", () => {
+    expect(buildOptionsPayload(edited)).toEqual([
+      {
+        id: 1,
+        name: "اللون",
+        sort_order: 0,
+        values: [
+          { id: 11, value: "قرمزي", sort_order: 0 },
+          { id: 12, value: "أزرق", sort_order: 1 },
+        ],
+      },
+    ]);
+  });
+
+  it("marks an added value as new and keeps every existing variant", () => {
+    const payload = buildOptionsPayload([
+      { ...edited[0], values: "أحمر، أزرق، أخضر" },
+      { id: 2, name: "الحجم", values: "صغير، كبير", rows: [{ id: 21, value: "صغير" }, { id: 22, value: "كبير" }] },
+    ]);
+    expect(payload[0].values[2]).toEqual({ value: "أخضر", sort_order: 2 });
+    expect(variantsRemovedByOptions([RED_SMALL], payload)).toEqual([]);
+  });
+
+  it("removes only the variants that used a deleted value", () => {
+    const blueSmall = variantRow(104, "أزرق / صغير", [12, 21]);
+    const payload = buildOptionsPayload([
+      { id: 1, name: "اللون", values: "أحمر", rows: [{ id: 11, value: "أحمر" }, { id: 12, value: "أزرق" }] },
+      { id: 2, name: "الحجم", values: "صغير، كبير", rows: [{ id: 21, value: "صغير" }, { id: 22, value: "كبير" }] },
+    ]);
+    expect(variantsRemovedByOptions([RED_SMALL, blueSmall], payload)).toEqual([blueSmall]);
+  });
+
+  it("treats a dropped axis as destructive rather than merging combinations", () => {
+    const payload = buildOptionsPayload([
+      { id: 1, name: "اللون", values: "أحمر، أزرق", rows: [{ id: 11, value: "أحمر" }, { id: 12, value: "أزرق" }] },
+    ]);
+    expect(variantsRemovedByOptions([RED_SMALL], payload)).toEqual([RED_SMALL]);
+  });
+});
+
+describe("saving options from the product editor", () => {
+  const renderEditor = () => {
+    authStorage.save("valid-token", ADMIN);
+    const calls = stubApi({
+      "/api/v1/auth/me": ADMIN,
+      "/api/v1/admin/products/7": adminProduct,
+      "PUT /api/v1/admin/products/7/options": OPTIONS,
+      "/api/v1/admin/categories": page([]),
+      "/api/v1/admin/products": page([]),
+    });
+    render(
+      <MemoryRouter initialEntries={["/admin/products/7"]}>
+        <Routes>
+          <Route path="/admin/products/:productId" element={<ProductEditorPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    return calls;
+  };
+
+  const retypeColours = async (text) => {
+    const fields = await screen.findAllByPlaceholderText("القيم مفصولة بفاصلة");
+    await userEvent.clear(fields[0]);
+    await userEvent.type(fields[0], text);
+  };
+
+  it("saves straight away when no variant is lost", async () => {
+    const calls = renderEditor();
+    await retypeColours("قرمزي، أزرق");
+    await userEvent.click(screen.getByRole("button", { name: "حفظ الخيارات" }));
+
+    const put = await waitFor(() => {
+      const call = calls.find((row) => row.method === "PUT");
+      expect(call).toBeTruthy();
+      return call;
+    });
+    expect(JSON.parse(put.body)[0].values[0]).toEqual({ id: 11, value: "قرمزي", sort_order: 0 });
+    expect(screen.queryByText(/غير متوافقة/)).toBeNull();
+  });
+
+  it("asks for confirmation, with the count, before a save that drops variants", async () => {
+    const calls = renderEditor();
+    await retypeColours("أزرق");
+    await userEvent.click(screen.getByRole("button", { name: "حفظ الخيارات" }));
+
+    expect(await screen.findByText(/حذف 1 نسخة غير متوافقة/)).toBeTruthy();
+    expect(calls.find((row) => row.method === "PUT")).toBeFalsy();
+
+    await userEvent.click(screen.getByRole("button", { name: "حفظ وحذف النسخ" }));
+    await waitFor(() => expect(calls.find((row) => row.method === "PUT")).toBeTruthy());
+  });
+
+  it("keeps the variants when the confirmation is cancelled", async () => {
+    const calls = renderEditor();
+    await retypeColours("أزرق");
+    await userEvent.click(screen.getByRole("button", { name: "حفظ الخيارات" }));
+    await userEvent.click(await screen.findByRole("button", { name: "إلغاء" }));
+
+    expect(calls.find((row) => row.method === "PUT")).toBeFalsy();
+    expect(screen.getByText("أحمر / صغير")).toBeTruthy();
   });
 });

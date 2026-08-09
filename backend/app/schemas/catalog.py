@@ -78,6 +78,9 @@ class ProductSpecificationOut(ProductSpecificationIn):
 
 
 class ProductOptionValueIn(APIModel):
+    # `id` identifies an existing row so a rename keeps the same value id, and the
+    # variants pointing at it survive. Omit it for a brand-new value.
+    id: int | None = None
     value: str = Field(min_length=1, max_length=150)
     sort_order: int = 0
 
@@ -87,6 +90,7 @@ class ProductOptionValueOut(ProductOptionValueIn):
 
 
 class ProductOptionIn(APIModel):
+    id: int | None = None
     name: str = Field(min_length=1, max_length=100)
     sort_order: int = 0
     values: list[ProductOptionValueIn] = Field(default_factory=list)

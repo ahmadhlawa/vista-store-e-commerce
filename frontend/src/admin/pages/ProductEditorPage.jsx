@@ -4,7 +4,10 @@ import sx from "../../sx.js";
 import { adminApi } from "../../api/adminApi.js";
 import { MediaPickerDialog } from "../MediaPicker.jsx";
 import ProductImageGallery from "../ProductImageGallery.jsx";
-import ProductVariantsEditor from "../ProductVariantsEditor.jsx";
+import ProductVariantsEditor, {
+  buildOptionsPayload,
+  variantsRemovedByOptions,
+} from "../ProductVariantsEditor.jsx";
 import {
   Button,
   ConfirmDialog,
@@ -67,6 +70,7 @@ export default function ProductEditorPage() {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(null);
+  const [optionsConfirm, setOptionsConfirm] = useState(null);
 
   const [imageUrl, setImageUrl] = useState("");
   const [pickingImage, setPickingImage] = useState(false);
@@ -92,8 +96,10 @@ export default function ProductEditorPage() {
       setSpecs(row.specifications.map((spec) => ({ name: spec.name, value: spec.value })));
       setOptions(
         row.options.map((option) => ({
+          id: option.id,
           name: option.name,
           values: option.values.map((value) => value.value).join("، "),
+          rows: option.values.map((value) => ({ id: value.id, value: value.value })),
         })),
       );
     } catch (error) {
@@ -169,6 +175,18 @@ export default function ProductEditorPage() {
   };
 
   const run = (action, successMessage) => runOrThrow(action, successMessage).catch(() => {});
+
+  const commitOptions = (payload) =>
+    run(() => adminApi.replaceOptions(productId, payload), "تم حفظ الخيارات.");
+
+  // Only ask when the change actually destroys variants; a compatible edit saves
+  // straight through.
+  const saveOptions = () => {
+    const payload = buildOptionsPayload(options);
+    const removed = variantsRemovedByOptions(product?.variants || [], payload);
+    if (!removed.length) return commitOptions(payload);
+    return setOptionsConfirm({ payload, count: removed.length });
+  };
 
   if (loading) return <Spinner />;
 
@@ -314,7 +332,7 @@ export default function ProductEditorPage() {
             title="الخيارات"
             actions={<Button variant="secondary" onClick={() => setOptions((rows) => [...rows, { name: "", values: "" }])}>إضافة خيار</Button>}
           >
-            <p style={sx`margin:0;font-size:12.5px;color:#9C958A`}>حفظ الخيارات يحذف النسخ (variants) الحالية لأنها مبنية عليها.</p>
+            <p style={sx`margin:0;font-size:12.5px;color:#9C958A`}>حفظ الخيارات يبقي النسخ (variants) المتوافقة كما هي، ويحذف فقط غير المتوافقة بعد تأكيدك.</p>
             {options.map((option, index) => (
               <div key={index} style={sx`display:flex;gap:10px;flex-wrap:wrap`}>
                 <input value={option.name} onChange={(e) => setOptions((rows) => rows.map((row, i) => (i === index ? { ...row, name: e.target.value } : row)))} placeholder="اسم الخيار — مثال: الحجم" style={{ ...input, ...sx`flex:1;min-width:150px` }} />
@@ -322,26 +340,7 @@ export default function ProductEditorPage() {
                 <Button variant="danger" onClick={() => setOptions((rows) => rows.filter((_, i) => i !== index))}>حذف</Button>
               </div>
             ))}
-            <Button
-              onClick={() => run(
-                () => adminApi.replaceOptions(
-                  productId,
-                  options
-                    .filter((option) => option.name.trim())
-                    .map((option) => ({
-                      name: option.name.trim(),
-                      values: option.values
-                        .split(/[،,]/)
-                        .map((value) => value.trim())
-                        .filter(Boolean)
-                        .map((value) => ({ value })),
-                    })),
-                ),
-                "تم حفظ الخيارات.",
-              )}
-            >
-              حفظ الخيارات
-            </Button>
+            <Button onClick={saveOptions}>حفظ الخيارات</Button>
           </Section>
 
           <Section title="النسخ (المقاسات والألوان)">
@@ -409,6 +408,20 @@ export default function ProductEditorPage() {
             <Button variant="danger" onClick={() => setConfirming(true)}>حذف المنتج</Button>
           </div>
         </>
+      )}
+
+      {optionsConfirm && (
+        <ConfirmDialog
+          title="تأكيد حفظ الخيارات"
+          confirmLabel="حفظ وحذف النسخ"
+          message={`سيؤدي هذا التعديل إلى حذف ${optionsConfirm.count} نسخة غير متوافقة. ستبقى بقية النسخ كما هي.`}
+          onConfirm={() => {
+            const { payload } = optionsConfirm;
+            setOptionsConfirm(null);
+            commitOptions(payload);
+          }}
+          onCancel={() => setOptionsConfirm(null)}
+        />
       )}
 
       {confirming && (

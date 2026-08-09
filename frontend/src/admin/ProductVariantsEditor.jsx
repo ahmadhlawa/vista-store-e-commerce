@@ -34,6 +34,67 @@ export function combinations(options) {
   );
 }
 
+/**
+ * Turn the edited option rows into the API payload, carrying row ids through so
+ * the backend treats a rename as an update instead of delete + insert.
+ *
+ * Values keep their id when the text is unchanged; the leftovers are paired in
+ * order, which is how a rename keeps the same value row (and its variants).
+ */
+export function buildOptionsPayload(options) {
+  return (options || [])
+    .filter((option) => (option.name || "").trim())
+    .map((option, index) => {
+      const texts = (option.values || "")
+        .split(/[،,]/)
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const pool = [...(option.rows || [])];
+      const take = (text) => {
+        const exact = pool.findIndex((row) => row.value === text);
+        if (exact >= 0) return pool.splice(exact, 1)[0];
+        return null;
+      };
+      const matched = texts.map(take);
+      matched.forEach((row, i) => {
+        if (!row && pool.length) matched[i] = pool.shift();
+      });
+      return {
+        ...(option.id ? { id: option.id } : {}),
+        name: option.name.trim(),
+        sort_order: index,
+        values: texts.map((value, valueIndex) => ({
+          ...(matched[valueIndex]?.id ? { id: matched[valueIndex].id } : {}),
+          value,
+          sort_order: valueIndex,
+        })),
+      };
+    });
+}
+
+/**
+ * Variants the backend would drop for this payload: same rule as the API — a
+ * variant survives only while it still holds exactly one value per axis.
+ */
+export function variantsRemovedByOptions(variants, payload) {
+  const axisOf = new Map();
+  const axisKeys = new Set();
+  (payload || []).forEach((option, index) => {
+    const key = option.id ?? `new:${index}`;
+    axisKeys.add(key);
+    (option.values || []).forEach((value) => {
+      if (value.id) axisOf.set(value.id, key);
+    });
+  });
+  return (variants || []).filter((variant) => {
+    const ids = variant.option_value_ids || [];
+    if (!ids.length) return false;
+    if (ids.some((id) => !axisOf.has(id))) return true;
+    const axes = new Set(ids.map((id) => axisOf.get(id)));
+    return axes.size !== axisKeys.size;
+  });
+}
+
 const num = (value) => (value === "" || value === null || value === undefined ? null : Number(value));
 
 const row = sx`display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid #EFEBE4;border-radius:10px;padding:10px 12px`;

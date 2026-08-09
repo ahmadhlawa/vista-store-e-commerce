@@ -403,3 +403,197 @@ def test_list_projection_carries_a_secondary_image(
     assert client.get(f"/api/v1/products/{product.slug}").json()["secondary_image_url"] == (
         "/media/contents.png"
     )
+
+
+def _two_axis_product(client: TestClient, db: Session, admin_token: str, slug: str):
+    """A product with اللون × الحجم and one variant per combination."""
+    product = make_product(db, slug=slug, name="منتج للنسخ")
+    options = client.put(
+        f"/api/v1/admin/products/{product.id}/options",
+        headers=auth(admin_token),
+        json=[
+            {"name": "اللون", "values": [{"value": "أحمر"}, {"value": "أزرق"}]},
+            {"name": "الحجم", "values": [{"value": "صغير"}, {"value": "كبير"}]},
+        ],
+    ).json()
+    variants = {}
+    for colour in options[0]["values"]:
+        for size in options[1]["values"]:
+            key = (colour["value"], size["value"])
+            variants[key] = client.post(
+                f"/api/v1/admin/products/{product.id}/variants",
+                headers=auth(admin_token),
+                json={
+                    "title": f"{colour['value']} / {size['value']}",
+                    "sku": f"{slug}-{len(variants)}",
+                    "stock_quantity": 3 + len(variants),
+                    "price_override": 120,
+                    "option_value_ids": [colour["id"], size["id"]],
+                },
+            ).json()
+    return product, options, variants
+
+
+def _variants(client: TestClient, admin_token: str, product_id: int) -> dict[int, dict]:
+    rows = client.get(
+        f"/api/v1/admin/products/{product_id}/variants", headers=auth(admin_token)
+    ).json()
+    return {row["id"]: row for row in rows}
+
+
+def test_renaming_an_axis_or_a_value_keeps_every_variant(
+    client: TestClient, db: Session, admin_token: str
+) -> None:
+    product, options, variants = _two_axis_product(client, db, admin_token, "rename-keeps")
+    before = _variants(client, admin_token, product.id)
+
+    saved = client.put(
+        f"/api/v1/admin/products/{product.id}/options",
+        headers=auth(admin_token),
+        json=[
+            {
+                "id": options[0]["id"],
+                "name": "الدرجة اللونية",  # axis renamed
+                "values": [
+                    {"id": options[0]["values"][0]["id"], "value": "قرمزي"},  # value renamed
+                    {"id": options[0]["values"][1]["id"], "value": "أزرق"},
+                ],
+            },
+            {
+                "id": options[1]["id"],
+                "name": "الحجم",
+                "values": [{"id": value["id"], "value": value["value"]} for value in options[1]["values"]],
+            },
+        ],
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()[0]["name"] == "الدرجة اللونية"
+    assert saved.json()[0]["values"][0]["id"] == options[0]["values"][0]["id"]
+
+    after = _variants(client, admin_token, product.id)
+    assert after == before  # ids, sku, stock, price, is_active and links untouched
+    assert len(after) == len(variants)
+
+
+def test_adding_a_value_keeps_variants_and_the_generator_fills_only_the_gap(
+    client: TestClient, db: Session, admin_token: str
+) -> None:
+    product, options, _ = _two_axis_product(client, db, admin_token, "add-value")
+    before = _variants(client, admin_token, product.id)
+
+    saved = client.put(
+        f"/api/v1/admin/products/{product.id}/options",
+        headers=auth(admin_token),
+        json=[
+            {
+                "id": options[0]["id"],
+                "name": "اللون",
+                "values": [
+                    *[{"id": value["id"], "value": value["value"]} for value in options[0]["values"]],
+                    {"value": "أخضر"},
+                ],
+            },
+            {
+                "id": options[1]["id"],
+                "name": "الحجم",
+                "values": [{"id": value["id"], "value": value["value"]} for value in options[1]["values"]],
+            },
+        ],
+    ).json()
+
+    after = _variants(client, admin_token, product.id)
+    assert after == before  # no variant lost, none created for the new value
+
+    # The generator adds only the missing combinations of the new value.
+    green = saved[0]["values"][2]["id"]
+    for size in saved[1]["values"]:
+        created = client.post(
+            f"/api/v1/admin/products/{product.id}/variants",
+            headers=auth(admin_token),
+            json={"title": "أخضر", "option_value_ids": [green, size["id"]]},
+        )
+        assert created.status_code == 201, created.text
+    assert len(_variants(client, admin_token, product.id)) == len(before) + 2
+
+
+def test_deleting_a_value_removes_only_the_variants_that_used_it(
+    client: TestClient, db: Session, admin_token: str
+) -> None:
+    product, options, variants = _two_axis_product(client, db, admin_token, "drop-value")
+    dropped = options[0]["values"][1]["id"]  # أزرق
+    survivors = {
+        variant["id"]: variant
+        for key, variant in variants.items()
+        if key[0] != "أزرق"
+    }
+
+    client.put(
+        f"/api/v1/admin/products/{product.id}/options",
+        headers=auth(admin_token),
+        json=[
+            {
+                "id": options[0]["id"],
+                "name": "اللون",
+                "values": [{"id": options[0]["values"][0]["id"], "value": "أحمر"}],
+            },
+            {
+                "id": options[1]["id"],
+                "name": "الحجم",
+                "values": [{"id": value["id"], "value": value["value"]} for value in options[1]["values"]],
+            },
+        ],
+    )
+
+    after = _variants(client, admin_token, product.id)
+    assert set(after) == set(survivors)
+    for variant_id, kept in after.items():
+        was = survivors[variant_id]
+        assert (kept["sku"], kept["stock_quantity"], kept["price_override"], kept["is_active"]) == (
+            was["sku"],
+            was["stock_quantity"],
+            was["price_override"],
+            was["is_active"],
+        )
+    assert dropped not in {vid for row in after.values() for vid in row["option_value_ids"]}
+
+
+def test_removing_a_whole_axis_drops_the_variants_instead_of_merging_them(
+    client: TestClient, db: Session, admin_token: str
+) -> None:
+    product, options, _ = _two_axis_product(client, db, admin_token, "drop-axis")
+    client.put(
+        f"/api/v1/admin/products/{product.id}/options",
+        headers=auth(admin_token),
+        json=[
+            {
+                "id": options[0]["id"],
+                "name": "اللون",
+                "values": [{"id": value["id"], "value": value["value"]} for value in options[0]["values"]],
+            }
+        ],
+    )
+    assert _variants(client, admin_token, product.id) == {}
+
+
+def test_a_rejected_option_update_leaves_options_and_variants_untouched(
+    client: TestClient, db: Session, admin_token: str
+) -> None:
+    product, options, _ = _two_axis_product(client, db, admin_token, "rollback")
+    before = _variants(client, admin_token, product.id)
+
+    failed = client.put(
+        f"/api/v1/admin/products/{product.id}/options",
+        headers=auth(admin_token),
+        json=[
+            {"id": options[0]["id"], "name": "لون جديد", "values": []},
+            {"id": 999999, "name": "محور وهمي", "values": []},
+        ],
+    )
+    assert failed.status_code == 400
+    assert failed.json()["error"]["code"] == "option_not_found"
+
+    kept = client.get(
+        f"/api/v1/admin/products/{product.id}/options", headers=auth(admin_token)
+    ).json()
+    assert [option["name"] for option in kept] == ["اللون", "الحجم"]
+    assert _variants(client, admin_token, product.id) == before
