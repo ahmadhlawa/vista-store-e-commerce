@@ -24,6 +24,10 @@ const NAV = [
   { to: "/admin/audit", label: "سجل التغييرات", superOnly: true },
 ];
 
+// Deliberately styled apart from the management routes above: this one leaves
+// the admin area instead of navigating inside it.
+const storeLinkStyle = sx`display:flex;align-items:center;gap:8px;padding:11px 14px;border-radius:10px;font-size:14px;font-weight:700;color:#1F4E4A;background:#F1EFE9;text-decoration:none`;
+
 export default function AdminLayout() {
   const { admin, isSuperAdmin, signOut } = useAdminAuth();
   const navigate = useNavigate();
@@ -60,6 +64,17 @@ export default function AdminLayout() {
               {item.label}
             </NavLink>
           ))}
+          <div style={sx`margin:8px 4px;border-top:1px solid #E4E0D9`} />
+          <a
+            href="/"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setMenuOpen(false)}
+            style={storeLinkStyle}
+          >
+            <span aria-hidden="true">🛍</span>
+            العودة إلى الموقع
+          </a>
         </nav>
         <main style={sx`min-width:0`}>
           <Outlet />

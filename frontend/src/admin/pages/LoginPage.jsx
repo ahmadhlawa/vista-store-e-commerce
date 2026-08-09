@@ -49,6 +49,15 @@ export default function LoginPage() {
         <Button type="submit" onClick={submit} disabled={busy} style={sx`width:100%;height:48px`}>
           {busy ? "جارٍ التحقق…" : "دخول"}
         </Button>
+        <a
+          href="/"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={sx`align-self:center;display:flex;align-items:center;gap:6px;font-size:13.5px;font-weight:700;color:#1F4E4A;text-decoration:none`}
+        >
+          <span aria-hidden="true">🛍</span>
+          العودة إلى الموقع
+        </a>
       </form>
     </div>
   );
